@@ -24,6 +24,8 @@ export function FilterBar() {
   const toggleTag = useGraphStore((s) => s.toggleTag)
   const clearFilters = useGraphStore((s) => s.clearFilters)
   const count = useGraphStore((s) => s.count)
+  const view = useGraphStore((s) => s.view)
+  const setView = useGraphStore((s) => s.setView)
 
   const visible = useVisibleSet()
   const shown = visible === null ? count : visible.size
@@ -33,6 +35,22 @@ export function FilterBar() {
     <div className="filter-bar">
       <SearchBox />
 
+      <div className="view-toggle">
+        <button
+          className={view === 'map' ? 'active' : ''}
+          onClick={() => setView('map')}
+        >
+          3D Map
+        </button>
+        <button
+          className={view === 'list' ? 'active' : ''}
+          onClick={() => setView('list')}
+        >
+          List
+        </button>
+      </div>
+
+      {view === 'map' && (
       <div className="modes">
         {MODES.map(([mode, label]) => (
           <button
@@ -44,6 +62,7 @@ export function FilterBar() {
           </button>
         ))}
       </div>
+      )}
 
       <div className="tags">
         {vocabulary.map((slug, id) => (

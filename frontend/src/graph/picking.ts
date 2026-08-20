@@ -16,15 +16,57 @@ import { BASE_POINT_SIZE } from './pointStyle'
 import pickFragment from './shaders/pick.frag.glsl?raw'
 import pickVertex from './shaders/pick.vert.glsl?raw'
 
+/**
+ * Width of the neighbourhood sampled under the cursor, in device pixels.
+ *
+ * Odd so it has a true centre. Nine gives roughly a four-pixel margin in every
+ * direction, which is forgiving enough for a small node without letting a
+ * click reach past a neighbouring one.
+ */
+export const PICK_WINDOW = 9
+
+/**
+ * The node nearest the centre of a pick window, or null if it hit nothing.
+ *
+ * Nearest rather than first, so that when the cursor sits between two nodes
+ * the one it is actually closest to wins — scanning in row order would bias
+ * every ambiguous click toward whichever happened to be higher on screen.
+ */
+export function nearestHit(pixels: Uint8Array, window = PICK_WINDOW): number | null {
+  const centre = (window - 1) / 2
+  let best: number | null = null
+  let bestDistance = Infinity
+
+  for (let row = 0; row < window; row++) {
+    for (let column = 0; column < window; column++) {
+      const offset = (row * window + column) * 4
+      const encoded =
+        pixels[offset]! + (pixels[offset + 1]! << 8) + (pixels[offset + 2]! << 16)
+      // 0 is the cleared background; indices are stored offset by one.
+      if (encoded === 0) continue
+
+      const dx = column - centre
+      const dy = row - centre
+      const distance = dx * dx + dy * dy
+      if (distance < bestDistance) {
+        bestDistance = distance
+        best = encoded - 1
+      }
+    }
+  }
+  return best
+}
+
+
 export class GpuPicker {
   private target: THREE.WebGLRenderTarget
   private scene: THREE.Scene
   private points: THREE.Points | null = null
   private material: THREE.ShaderMaterial
-  private buffer = new Uint8Array(4)
+  private buffer = new Uint8Array(PICK_WINDOW * PICK_WINDOW * 4)
 
   constructor() {
-    this.target = new THREE.WebGLRenderTarget(1, 1, {
+    this.target = new THREE.WebGLRenderTarget(PICK_WINDOW, PICK_WINDOW, {
       minFilter: THREE.NearestFilter,
       magFilter: THREE.NearestFilter,
       format: THREE.RGBAFormat,
@@ -73,12 +115,18 @@ export class GpuPicker {
   ): number | null {
     if (!this.points) return null
 
+    // A window rather than a single pixel. Reading one pixel means the cursor
+    // has to land inside a node's drawn disc exactly, which at typical zoom is
+    // a few pixels across — accurate, and miserable to use. Rendering a small
+    // neighbourhood and taking the nearest hit gives a forgiving target
+    // without enlarging the nodes themselves or distorting what is on screen.
     const dpr = renderer.getPixelRatio()
+    const half = (PICK_WINDOW - 1) / 2
     const pickCamera = camera.clone()
     pickCamera.setViewOffset(
       width * dpr, height * dpr,
-      Math.floor(x * dpr), Math.floor(y * dpr),
-      1, 1,
+      Math.floor(x * dpr) - half, Math.floor(y * dpr) - half,
+      PICK_WINDOW, PICK_WINDOW,
     )
 
     const previousTarget = renderer.getRenderTarget()
@@ -89,16 +137,15 @@ export class GpuPicker {
     renderer.setClearColor(0x000000, 1)
     renderer.clear()
     renderer.render(this.scene, pickCamera)
-    renderer.readRenderTargetPixels(this.target, 0, 0, 1, 1, this.buffer)
+    renderer.readRenderTargetPixels(
+      this.target, 0, 0, PICK_WINDOW, PICK_WINDOW, this.buffer,
+    )
 
     renderer.setRenderTarget(previousTarget)
     renderer.setClearColor(previousClear, previousAlpha)
     pickCamera.clearViewOffset()
 
-    const [r, g, b] = this.buffer
-    const encoded = r! + (g! << 8) + (b! << 16)
-    // 0 is the cleared background; indices are stored offset by one.
-    return encoded === 0 ? null : encoded - 1
+    return nearestHit(this.buffer)
   }
 
   dispose(): void {

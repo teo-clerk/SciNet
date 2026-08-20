@@ -14,6 +14,8 @@ export interface GraphNode {
   tags: number[]
   /** Page count — the only per-paper magnitude available; drives node size. */
   pages: number | null
+  /** HDBSCAN membership strength, 0..1. Null when unclustered. */
+  confidence: number | null
   /** Placed by transform() against a stored fit rather than by a full refit. */
   provisional: boolean
   /** How far the paper sits from the fitted manifold; ~1 is typical. */

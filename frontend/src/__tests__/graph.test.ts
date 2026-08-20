@@ -34,6 +34,7 @@ function payload(positions: number[], nodeCount: number): GraphPayload {
       cluster: 1,
       tags: [0],
       pages: 10 + i,
+      confidence: 0.5,
       provisional: i === 1,
       drift: i === 1 ? 2.4 : 0.1,
     })),

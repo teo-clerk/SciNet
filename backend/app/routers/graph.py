@@ -67,6 +67,7 @@ def get_graph(
             Projection.cluster_id,
             Projection.is_transformed,
             Projection.off_manifold,
+            Projection.cluster_probability,
             PaperMeta.title,
             PaperMeta.year,
             Paper.page_count.label("pages"),
@@ -143,6 +144,13 @@ def get_graph(
                 "tags": by_paper.get(r.paper_id, []),
                 # Surfaced so the UI can mark provisionally-placed papers.
                 "pages": r.pages,
+                # HDBSCAN membership strength, so the list can show how firmly
+                # a paper belongs where it was put.
+                "confidence": (
+                    round(r.cluster_probability, 3)
+                    if r.cluster_probability is not None
+                    else None
+                ),
                 "provisional": bool(r.is_transformed),
                 "drift": round(r.off_manifold or 0.0, 2),
             }

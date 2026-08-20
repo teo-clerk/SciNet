@@ -13,7 +13,10 @@
 export const BASE_POINT_SIZE = 5.0
 
 /** Radius of a node's solid centre, as a fraction of the sprite. */
-export const CORE_RADIUS = 0.34
+// The solid centre occupies the inner 30% of the sprite; everything beyond
+// it is aura. Small enough to read as a point rather than a disc, large
+// enough to stay visible when the camera pulls back.
+export const CORE_RADIUS = 0.3
 
 /** Per-node additive contribution; the picture is built by accumulation. */
 // High enough that a lone node is solid, low enough that thirty overlapping

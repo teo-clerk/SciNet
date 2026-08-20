@@ -191,3 +191,50 @@ body {
   background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;
 }
 .bar .fill { display: block; height: 100%; background: var(--accent); }
+
+/* --- view toggle --- */
+.view-toggle { display: flex; gap: 2px; }
+.view-toggle button {
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+  color: var(--dim); border-radius: 5px; padding: 4px 11px;
+  font: inherit; cursor: pointer; white-space: nowrap;
+}
+.view-toggle button:hover { color: var(--fg); }
+.view-toggle button.active {
+  background: var(--accent); color: #06121f; border-color: var(--accent);
+}
+
+/* --- list view --- */
+.list-view { height: 100%; overflow: auto; padding: 0 0 40px; }
+.list-view.empty { display: flex; align-items: center; justify-content: center; }
+.list-view table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.list-view thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--panel); border-bottom: 1px solid var(--border);
+  text-align: left; padding: 9px 12px; font-weight: 600; color: var(--dim);
+  cursor: pointer; user-select: none; white-space: nowrap;
+}
+.list-view thead th:hover { color: var(--fg); }
+.list-view thead th.sorted { color: var(--accent); }
+.list-view thead .arrow { margin-left: 5px; font-size: 9px; }
+.list-view tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; }
+.list-view tbody tr:hover { background: rgba(255,255,255,0.04); }
+.list-view tbody tr.selected { background: rgba(92,184,255,0.14); }
+.list-view td { padding: 8px 12px; vertical-align: top; }
+.list-view .title-cell { max-width: 46ch; line-height: 1.4; }
+.list-view .title-cell .chip { margin-left: 7px; }
+.list-view .numeric { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.list-view .confidence { display: inline-flex; align-items: center; gap: 6px; }
+.list-view .tags-column { max-width: 22ch; }
+.list-view .tag-chip {
+  border: none; cursor: pointer; margin: 0 3px 3px 0;
+  background: rgba(255,255,255,0.07); color: var(--fg); font: inherit; font-size: 10px;
+}
+.list-view .tag-chip.active { background: var(--accent); color: #06121f; }
+.list-view .actions-cell { white-space: nowrap; text-align: right; }
+.list-view .actions-cell button {
+  background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+  color: var(--fg); border-radius: 4px; padding: 3px 9px;
+  font: inherit; font-size: 11px; cursor: pointer; margin-left: 5px;
+}
+.list-view .actions-cell button:hover { border-color: var(--accent); color: var(--accent); }

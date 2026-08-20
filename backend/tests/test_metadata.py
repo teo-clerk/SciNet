@@ -411,3 +411,85 @@ def test_a_title_merely_mentioning_a_publisher_is_kept():
     """The guard anchors at the start; it must not eat real titles."""
     title = "Benchmarking Nature-Inspired Optimisation Algorithms"
     assert guess_title(f"{title}\n\nAuthors") == title
+
+
+# --- page furniture that the list view made visible ----------------------
+
+REAL_TITLE = "A Study of Spontaneous Yawning in Sea Lions"
+
+
+@pytest.mark.parametrize(
+    "furniture",
+    [
+        "> REPLACE THIS LINE WITH YOUR PAPER IDENTIFICATION NUMBER <",
+        "Insert title here",
+        "Consciousness and Cognition 14 (2005) 169-187",
+        "Journal of Theoretical Biology 241 (2006) 438-441",
+        "Downloaded from rstb.royalsocietypublishing.org on April 5, 2010",
+        "NIH Public Access Author Manuscript",
+        "This content downloaded from 192.168.0.1",
+        "All rights reserved",
+    ],
+)
+def test_page_furniture_is_never_taken_as_a_title(furniture):
+    """Every one of these was a paper's title in the real library."""
+    assert guess_title(f"{furniture}\n{REAL_TITLE}\n\nAuthors") == REAL_TITLE
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "A Study of University Admissions Policy Across Europe",
+        "Institutional Trust and Democratic Backsliding in Eastern Europe",
+        "Department Store Economics and Consumer Behaviour in the 1920s",
+        "Bodily maps of emotions",
+    ],
+)
+def test_real_titles_are_not_mistaken_for_furniture(title):
+    """The guards are aggressive; this is what stops them eating real papers."""
+    assert guess_title(f"{title}\n\nAuthors") == title
+
+
+def test_a_leading_bullet_or_page_number_is_stripped():
+    assert guess_title("- 1 The post-reproductive ovary shifts function") == (
+        "The post-reproductive ovary shifts function"
+    )
+
+
+def test_affiliation_stems_match_their_variants():
+    """A trailing word boundary defeated stem matching: "universit" could not
+    match "Universite", so foreign affiliations passed straight through."""
+    from app.services.metadata.extract import AFFILIATION_RE
+
+    for variant in ("University", "Universite", "Universiteit", "Institution"):
+        assert AFFILIATION_RE.search(variant), variant
+
+
+def test_a_junk_embedded_title_falls_back_to_the_heuristic(pdf_fixtures):
+    """The PDF's own Title field is authoritative only when it is honest.
+
+    Real files carry "Dissertation Thesis", a journal running header, or a
+    template's leftovers in that field, and trusting it blindly puts those on
+    the map as paper names.
+    """
+    import pymupdf
+
+    path = pdf_fixtures["with_identifiers.pdf"]
+    doc = pymupdf.open(path)
+    doc.set_metadata(
+        {**(doc.metadata or {}), "title": "NIH Public Access Author Manuscript"}
+    )
+    junk = path.parent / "junk-title.pdf"
+    doc.save(junk)
+    doc.close()
+
+    meta = extract_from_pdf(junk, parsed_text="# The Real Title Of This Paper\n\nBody.")
+    assert meta.title == "The Real Title Of This Paper"
+
+
+def test_an_honest_embedded_title_is_still_preferred(pdf_fixtures):
+    meta = extract_from_pdf(
+        pdf_fixtures["with_identifiers.pdf"],
+        parsed_text="# A Worse Heuristic Guess\n\nBody.",
+    )
+    assert meta.title == "Deep Sets for Molecular Property Prediction"

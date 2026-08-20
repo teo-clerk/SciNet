@@ -46,9 +46,31 @@ FURNITURE_RE = re.compile(
     # Journals print their own address across the top of every page, and it is
     # frequently the first substantial line the parser sees.
     r"|www\.|nature\.com|sciencedirect|springer|wiley|elsevier|ieee\b"
-    r"|scientific\s*reports$|vol(?:ume)?\.?\s*\d|issn|isbn)",
+    r"|scientific\s*reports$|vol(?:ume)?\.?\s*\d|issn|isbn"
+    # Repository and download banners stamped onto the first page.
+    r"|downloaded\s+from|nih\s+public\s+access|author\s+manuscript"
+    r"|available\s+online|see\s+discussions|this\s+content\s+downloaded"
+    r"|licen[cs]ed?\s+under|all\s+rights\s+reserved"
+    # Unfilled manuscript templates. These reach the sidebar as a paper's
+    # title and are unmistakably not one.
+    r"|replace\s+this|double-?click\s+here|click\s+here\s+to|<\s*title\s*>"
+    r"|insert\s+(?:title|your)|type\s+your|\[?title\s+here)",
     re.IGNORECASE,
 )
+
+# "Journal of Theoretical Biology 241 (2006) 438-441" — a citation line for the
+# paper, printed above it, not the paper's name.
+CITATION_HEADER_RE = re.compile(
+    r"\d+\s*\(\s*(?:19|20)\d{2}\s*\)\s*\d+\s*[-–]\s*\d+\s*$"
+)
+
+# There was a rule here rejecting lines that begin with an institution name.
+# It was removed: every formulation of it also ate real titles — "Laboratory
+# Automation for High-Throughput Screening", "Department Store Economics",
+# "Institutional Trust and Democratic Backsliding" — and losing a real title is
+# a worse outcome than occasionally showing an affiliation. The two affected
+# papers are better served by the embedded-metadata check below.
+
 MIN_TITLE_LENGTH = 12
 MAX_TITLE_LENGTH = 300
 
@@ -106,6 +128,13 @@ def split_authors(raw: str) -> list[str]:
     return names
 
 
+# "- 1 The post-reproductive ovary..." — a list bullet and page number the
+# parser carried over from the page margin.
+# A bullet, a page number, or a blockquote marker carried over from the page
+# margin. Stripped before the furniture patterns are tested, or a template
+# placeholder behind a ">" slips through as a title.
+LEADING_MARKER_RE = re.compile(r"^[>\-–—*•|]+\s*\d*\s*")
+
 EMPHASIS_RE = re.compile(r"(\*{1,3}|_{1,3})(.+?)\1")
 
 
@@ -133,11 +162,14 @@ def guess_title(text: str) -> str | None:
         # Tolerate Markdown: the rescued text arrives with heading markers and
         # emphasis around the title, both of which end up rendered literally on
         # the map ("**Ultraviolet Spectra of Local Galaxies").
-        candidate = strip_markdown(line)
+        candidate = LEADING_MARKER_RE.sub("", strip_markdown(line)).strip()
         if len(candidate) < MIN_TITLE_LENGTH or len(candidate) > MAX_TITLE_LENGTH:
             continue
         if FURNITURE_RE.match(candidate):
             continue
+        if CITATION_HEADER_RE.search(candidate):
+            continue
+
         if candidate.lower().startswith("abstract"):
             break
         return candidate
@@ -184,9 +216,11 @@ def extract_abstract(markdown: str) -> str | None:
 
 
 # Front matter that sits between the title and the abstract in preprints.
+# Stems, not whole words: "universit" has to match "University", "Universite"
+# and "Universiteit". A trailing \b would defeat all but the first.
 AFFILIATION_RE = re.compile(
-    r"\b(universit|department|institut|laborator|academy|college|faculty|"
-    r"school of|centre for|center for|observator|@|e-?mail)\b",
+    r"\b(?:universit|department|institut|laborator|academy|college|faculty|"
+    r"school\s+of|centre\s+for|center\s+for|observator|@|e-?mail)",
     re.IGNORECASE,
 )
 # Where the body starts, when nothing is labelled "abstract".
@@ -281,8 +315,18 @@ def extract_from_pdf(
 
     meta = ExtractedMeta()
 
-    embedded_title = (embedded.get("title") or "").strip()
-    if len(embedded_title) >= MIN_TITLE_LENGTH:
+    # The PDF's own Title field is the best source when it is filled in
+    # honestly, and worthless when it is not: real files in a real library
+    # carry "Dissertation Thesis", "CLASE No. 1 PARTE I", a journal's running
+    # header, or a LaTeX template's leftovers. Checked against the same
+    # furniture patterns as any other candidate before being trusted.
+    embedded_title = strip_markdown(embedded.get("title") or "")
+    embedded_usable = (
+        len(embedded_title) >= MIN_TITLE_LENGTH
+        and not FURNITURE_RE.match(embedded_title)
+        and not CITATION_HEADER_RE.search(embedded_title)
+    )
+    if embedded_usable:
         meta.title = embedded_title
         meta.field_sources["title"] = MetaSource.PDF_EMBEDDED
     elif (guessed := guess_title(head_text)) is not None:

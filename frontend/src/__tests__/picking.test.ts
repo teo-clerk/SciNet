@@ -11,6 +11,7 @@
  */
 import { describe, expect, test } from 'bun:test'
 
+import { nearestHit, PICK_WINDOW } from '../graph/picking'
 import { BASE_POINT_SIZE, CORE_RADIUS } from '../graph/pointStyle'
 
 const CLICK_SLOP_PX = 5
@@ -135,5 +136,76 @@ describe('pick alignment', () => {
     // 0 would be no core at all; 1 would leave no room for the aura.
     expect(CORE_RADIUS).toBeGreaterThan(0.1)
     expect(CORE_RADIUS).toBeLessThan(0.8)
+  })
+})
+
+
+describe('pick tolerance', () => {
+  /** A pick window with a node encoded at one position. */
+  function windowWith(hits: Array<[number, number, number]>, size = PICK_WINDOW) {
+    const pixels = new Uint8Array(size * size * 4)
+    for (const [col, row, index] of hits) {
+      const encoded = index + 1
+      const o = (row * size + col) * 4
+      pixels[o] = encoded & 0xff
+      pixels[o + 1] = (encoded >> 8) & 0xff
+      pixels[o + 2] = (encoded >> 16) & 0xff
+      pixels[o + 3] = 255
+    }
+    return pixels
+  }
+
+  test('the window is odd so it has a true centre', () => {
+    expect(PICK_WINDOW % 2).toBe(1)
+  })
+
+  test('the window is forgiving enough for a small node', () => {
+    // A single pixel means the cursor must land inside the drawn disc exactly.
+    expect(PICK_WINDOW).toBeGreaterThanOrEqual(5)
+  })
+
+  test('an empty window hits nothing', () => {
+    expect(nearestHit(windowWith([]))).toBeNull()
+  })
+
+  test('a node dead centre is picked', () => {
+    const c = (PICK_WINDOW - 1) / 2
+    expect(nearestHit(windowWith([[c, c, 42]]))).toBe(42)
+  })
+
+  test('a node near the edge of the window is still picked', () => {
+    // This is the whole point: the cursor missed the node but landed close.
+    expect(nearestHit(windowWith([[0, 0, 7]]))).toBe(7)
+  })
+
+  test('the nearest node wins when two are in range', () => {
+    const c = (PICK_WINDOW - 1) / 2
+    const pixels = windowWith([
+      [0, 0, 11],       // far corner
+      [c, c - 1, 22],   // one pixel from centre
+    ])
+    expect(nearestHit(pixels)).toBe(22)
+  })
+
+  test('nearest beats first in scan order', () => {
+    // Row-order scanning would bias every ambiguous click toward whichever
+    // node happened to sit higher on screen.
+    const c = (PICK_WINDOW - 1) / 2
+    const pixels = windowWith([
+      [c, 0, 99],   // top row, far
+      [c, c, 100],  // centre
+    ])
+    expect(nearestHit(pixels)).toBe(100)
+  })
+
+  test('node index zero is distinguishable from empty space', () => {
+    // Indices are stored offset by one precisely so 0 can mean "background".
+    const c = (PICK_WINDOW - 1) / 2
+    expect(nearestHit(windowWith([[c, c, 0]]))).toBe(0)
+  })
+
+  test('a high index round-trips through the window', () => {
+    const c = (PICK_WINDOW - 1) / 2
+    expect(nearestHit(windowWith([[c, c, 70000]]))).toBe(70000)
   })
 })

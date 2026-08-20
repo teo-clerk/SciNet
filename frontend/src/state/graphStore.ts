@@ -16,6 +16,8 @@ import type { DecodedGraph, GraphCluster, GraphNode } from '@/api/graph'
 import type { SearchMode } from '@/lib/search'
 
 export type ColorMode = 'cluster' | 'year' | 'provisional'
+export type ViewMode = 'map' | 'list'
+export type SortKey = 'title' | 'year' | 'cluster' | 'confidence'
 
 export interface GraphBuffers {
   positions: Float32Array
@@ -43,6 +45,9 @@ interface GraphState {
   clusterCentroids: Map<number, [number, number, number]>
 
   colorMode: ColorMode
+  view: ViewMode
+  sortKey: SortKey
+  sortAscending: boolean
   hoveredIndex: number | null
   selectedIndex: number | null
   query: string
@@ -59,6 +64,8 @@ interface GraphState {
   setError: (message: string) => void
   setGraph: (graph: DecodedGraph) => void
   setColorMode: (mode: ColorMode) => void
+  setView: (view: ViewMode) => void
+  setSort: (key: SortKey) => void
   setHovered: (index: number | null) => void
   setSelected: (index: number | null) => void
   setQuery: (query: string) => void
@@ -136,6 +143,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   skeleton: null,
   clusterCentroids: new Map(),
   colorMode: 'cluster',
+  view: 'map',
+  sortKey: 'title',
+  sortAscending: true,
   hoveredIndex: null,
   selectedIndex: null,
   query: '',
@@ -169,6 +179,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     }),
 
   setColorMode: (colorMode) => set({ colorMode }),
+  setView: (view) => set({ view }),
+  setSort: (key) =>
+    set((state) =>
+      // Clicking the active column reverses it; a different column starts
+      // ascending, which is what a reader expects from a table.
+      state.sortKey === key
+        ? { sortAscending: !state.sortAscending }
+        : { sortKey: key, sortAscending: true },
+    ),
   setHovered: (hoveredIndex) => {
     if (get().hoveredIndex !== hoveredIndex) set({ hoveredIndex })
   },

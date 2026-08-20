@@ -4,12 +4,14 @@ import { fetchGraph } from '@/api/graph'
 import { Scene } from '@/graph/Scene'
 import { DetailPanel } from '@/panels/DetailPanel'
 import { FilterBar } from '@/panels/FilterBar'
+import { ListView } from '@/panels/ListView'
 import { JobsDrawer } from '@/panels/JobsDrawer'
 import { StatusBar } from '@/panels/StatusBar'
 import { useGraphStore } from '@/state/graphStore'
 
 export default function App() {
   const status = useGraphStore((s) => s.status)
+  const view = useGraphStore((s) => s.view)
   const error = useGraphStore((s) => s.error)
   const setGraph = useGraphStore((s) => s.setGraph)
   const setLoading = useGraphStore((s) => s.setLoading)
@@ -28,7 +30,11 @@ export default function App() {
       {status === 'ready' && <FilterBar />}
       <main className="canvas-host">
         {status === 'ready' ? (
-          <Scene />
+          view === 'map' ? (
+            <Scene />
+          ) : (
+            <ListView />
+          )
         ) : (
           <div className="placeholder">
             {status === 'error' ? (

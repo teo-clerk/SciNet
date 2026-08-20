@@ -29,10 +29,10 @@ function visibleSet(
 }
 
 const NODES: GraphNode[] = [
-  { id: 1, title: 'Exoplanet Transit Spectroscopy', year: 2020, cluster: 0, tags: [0], pages: 12, provisional: false, drift: 0 },
-  { id: 2, title: 'Galaxy Formation Simulations', year: 2021, cluster: 0, tags: [0, 1], pages: 8, provisional: false, drift: 0 },
-  { id: 3, title: 'Robotic Grasp Planning', year: 2022, cluster: 1, tags: [1], pages: 30, provisional: true, drift: 2 },
-  { id: 4, title: null, year: null, cluster: null, tags: [], pages: null, provisional: false, drift: 0 },
+  { id: 1, title: 'Exoplanet Transit Spectroscopy', year: 2020, cluster: 0, tags: [0], pages: 12, confidence: 0.9, provisional: false, drift: 0 },
+  { id: 2, title: 'Galaxy Formation Simulations', year: 2021, cluster: 0, tags: [0, 1], pages: 8, confidence: 0.4, provisional: false, drift: 0 },
+  { id: 3, title: 'Robotic Grasp Planning', year: 2022, cluster: 1, tags: [1], pages: 30, confidence: 0.7, provisional: true, drift: 2 },
+  { id: 4, title: null, year: null, cluster: null, tags: [], pages: null, confidence: null, provisional: false, drift: 0 },
 ]
 
 describe('visibleSet', () => {

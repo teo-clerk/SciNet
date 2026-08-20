@@ -149,6 +149,7 @@ def test_payload_omits_heavy_fields(env):
         "cluster",
         "tags",
         "pages",
+        "confidence",
         "provisional",
         "drift",
     }

@@ -112,6 +112,10 @@ export function TitleLabels() {
             ]}
           >
             <Text
+              // A label sits directly above its node and is wider than it.
+              // Left pickable, it swallows clicks aimed at the paper beneath —
+              // and the larger the label, the worse the node is to hit.
+              raycast={() => null}
               fontSize={emphasised ? 0.62 : 0.4}
               color={emphasised ? '#ffffff' : '#93a0bd'}
               anchorX="center"
@@ -147,6 +151,9 @@ export function ClusterLabels() {
         return (
           <Billboard key={cluster.id} position={[centre[0], centre[1] + 2.2, centre[2]]}>
             <Text
+              // Cluster names are the largest text on screen and float over
+              // the densest regions; they must not be clickable.
+              raycast={() => null}
               fontSize={1.15}
               color="#e8edf9"
               anchorX="center"
