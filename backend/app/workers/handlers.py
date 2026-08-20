@@ -107,7 +107,16 @@ def handle_metadata(session: Session, job: Job, settings: Settings) -> None:
     if paper is None:
         raise ValueError(f"paper {job.paper_id} no longer exists")
 
-    extracted = extract_from_pdf(paper.pdf_path)
+    # Prefer whatever the parse stage actually kept: for an escalated paper the
+    # raw text layer is the thing that failed.
+    markdown_doc = session.get(MarkdownDoc, paper.id)
+    parsed_text = None
+    if markdown_doc is not None:
+        md_path = Path(markdown_doc.md_path)
+        if md_path.exists():
+            parsed_text = md_path.read_text(encoding="utf-8")
+
+    extracted = extract_from_pdf(paper.pdf_path, parsed_text=parsed_text)
 
     meta = session.get(PaperMeta, paper.id) or PaperMeta(paper_id=paper.id)
     meta.title = extracted.title

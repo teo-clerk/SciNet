@@ -98,7 +98,8 @@ def guess_title(text: str) -> str | None:
     better source can override it later.
     """
     for line in text.splitlines():
-        candidate = line.strip()
+        # Tolerate Markdown: the rescued text arrives with heading markers.
+        candidate = line.strip().lstrip("#").strip()
         if len(candidate) < MIN_TITLE_LENGTH or len(candidate) > MAX_TITLE_LENGTH:
             continue
         if FURNITURE_RE.match(candidate):
@@ -116,11 +117,27 @@ def extract_year(text: str, head_chars: int = HEAD_CHARS) -> int | None:
     return max(years) if years else None
 
 
-def extract_from_pdf(path: Path | str) -> ExtractedMeta:
-    """Read everything obtainable without a model."""
+def extract_from_pdf(
+    path: Path | str, *, parsed_text: str | None = None
+) -> ExtractedMeta:
+    """Read everything obtainable without a model.
+
+    ``parsed_text`` is the Markdown the parse stage actually kept. When a paper
+    escalated to tier 1 or 2 it did so *because* its embedded text layer was
+    unusable, so deriving a title from that same layer reproduces the very
+    garbage the escalation was meant to escape — run-together words from a CID
+    font, or mojibake from a double-encoded stream. The rescued text is used
+    for the shape heuristics when it is available; the raw page is still read
+    for the PDF's own metadata dictionary, which is unaffected by any of this.
+    """
     with pymupdf.open(path) as doc:
         embedded = dict(doc.metadata or {})
-        head_text = doc[0].get_text() if doc.page_count else ""
+        raw_head = doc[0].get_text() if doc.page_count else ""
+
+    head_text = parsed_text[: HEAD_CHARS * 2] if parsed_text else raw_head
+    # Identifiers are searched in both: a DOI can survive in one and not the
+    # other, and a wrong one is worse than none, so only exact matches count.
+    identifier_text = f"{head_text}\n{raw_head}"
 
     meta = ExtractedMeta()
 
@@ -137,15 +154,15 @@ def extract_from_pdf(path: Path | str) -> ExtractedMeta:
             meta.authors = names
             meta.field_sources["authors"] = MetaSource.PDF_EMBEDDED
 
-    if (doi := extract_doi(head_text)) is not None:
+    if (doi := extract_doi(identifier_text)) is not None:
         meta.doi = doi
         meta.field_sources["doi"] = MetaSource.REGEX
 
-    if (arxiv := extract_arxiv_id(head_text)) is not None:
+    if (arxiv := extract_arxiv_id(identifier_text)) is not None:
         meta.arxiv_id = arxiv
         meta.field_sources["arxiv_id"] = MetaSource.REGEX
 
-    if (year := extract_year(head_text)) is not None:
+    if (year := extract_year(identifier_text)) is not None:
         meta.year = year
         meta.field_sources["year"] = MetaSource.REGEX
 

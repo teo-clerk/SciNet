@@ -135,3 +135,39 @@ def test_extraction_survives_a_pdf_with_no_text(pdf_fixtures):
     meta = extract_from_pdf(pdf_fixtures["scanned_no_text_layer.pdf"])
     assert meta.doi is None
     assert meta.title is None
+
+
+# --- escalated papers -----------------------------------------------------
+
+def test_rescued_text_is_preferred_over_a_broken_text_layer(pdf_fixtures):
+    """A paper escalates *because* its text layer is unusable.
+
+    Deriving a title from that same layer reproduces the garbage the
+    escalation existed to escape.
+    """
+    rescued = "# Learning Scientific Document Embeddings\n\nWe present a method."
+    meta = extract_from_pdf(pdf_fixtures["cid_no_whitespace.pdf"], parsed_text=rescued)
+    assert meta.title == "Learning Scientific Document Embeddings"
+
+
+def test_a_broken_text_layer_alone_yields_run_together_junk(pdf_fixtures):
+    """The behaviour the fix above avoids, pinned so it cannot come back."""
+    meta = extract_from_pdf(pdf_fixtures["cid_no_whitespace.pdf"])
+    assert meta.title is not None
+    assert " " not in meta.title, "this fixture has no spaces; that is the point"
+
+
+def test_markdown_heading_markers_are_stripped_from_titles():
+    from app.services.metadata.extract import guess_title
+
+    assert guess_title("## A Real Paper Title\n\nBody text.") == "A Real Paper Title"
+
+
+def test_identifiers_are_found_in_either_source(pdf_fixtures):
+    """A DOI can survive in the raw layer even when the prose does not."""
+    meta = extract_from_pdf(
+        pdf_fixtures["with_identifiers.pdf"], parsed_text="# Clean Title\n\nBody."
+    )
+    assert meta.doi == "10.1145/3292500.3330701"
+    assert meta.arxiv_id == "2401.01234v2"
+    assert meta.title == "Deep Sets for Molecular Property Prediction"

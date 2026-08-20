@@ -48,16 +48,23 @@ def enqueue(
     """
     kind = JobKind(kind)
 
+    # Collapse onto an outstanding equivalent job. For per-paper work that
+    # means the same paper; for corpus-wide work (projection) it means *any*
+    # outstanding job of that kind, because a second full-corpus pass computes
+    # exactly the same thing. Without this, a 500-paper backfill enqueues 500
+    # projections and runs a full pass after every single embedding.
+    conditions = [
+        Job.kind == kind,
+        Job.state.in_([JobState.QUEUED, JobState.RUNNING]),
+    ]
     if paper_id is not None:
-        existing = session.scalar(
-            select(Job).where(
-                Job.kind == kind,
-                Job.paper_id == paper_id,
-                Job.state.in_([JobState.QUEUED, JobState.RUNNING]),
-            )
-        )
-        if existing is not None:
-            return existing
+        conditions.append(Job.paper_id == paper_id)
+    else:
+        conditions.append(Job.paper_id.is_(None))
+
+    existing = session.scalar(select(Job).where(*conditions))
+    if existing is not None:
+        return existing
 
     job = Job(
         kind=kind,

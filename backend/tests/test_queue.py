@@ -205,3 +205,39 @@ def test_every_kind_has_a_declared_priority(sf, kind):
         job = enqueue(s, kind, paper_id=1)
         s.commit()
         assert job.priority > 0
+
+
+def test_corpus_wide_jobs_collapse_onto_one(sf):
+    """A projection pass computes the same thing regardless of who asked.
+
+    Without this, a 500-paper backfill enqueues 500 full-corpus projections —
+    one after every embedding — instead of one.
+    """
+    with sf() as s:
+        for _ in range(50):
+            enqueue(s, JobKind.PROJECT, paper_id=None)
+        s.commit()
+        assert s.query(Job).filter(Job.kind == JobKind.PROJECT).count() == 1
+
+
+def test_a_corpus_job_can_be_requeued_once_the_previous_one_finished(sf):
+    """Collapsing must not prevent the *next* pass from being scheduled."""
+    with sf() as s:
+        enqueue(s, JobKind.PROJECT, paper_id=None)
+        s.commit()
+    with sf() as s:
+        complete(s, claim_next(s, kinds=[JobKind.PROJECT]))
+        s.commit()
+    with sf() as s:
+        enqueue(s, JobKind.PROJECT, paper_id=None)
+        s.commit()
+        assert s.query(Job).filter(Job.kind == JobKind.PROJECT).count() == 2
+
+
+def test_per_paper_jobs_still_dedupe_per_paper(sf):
+    with sf() as s:
+        enqueue(s, JobKind.EMBED, paper_id=1)
+        enqueue(s, JobKind.EMBED, paper_id=1)
+        enqueue(s, JobKind.EMBED, paper_id=2)
+        s.commit()
+        assert s.query(Job).filter(Job.kind == JobKind.EMBED).count() == 2
