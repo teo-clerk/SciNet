@@ -28,8 +28,29 @@ def resolve_within(candidate: Path | str, root: Path) -> Path:
     return path_real
 
 
+PDF_MAGIC = b"%PDF-"
+
+
 def is_pdf(path: Path) -> bool:
-    return path.suffix.lower() == ".pdf"
+    """Is this a PDF?
+
+    Checked by content, falling back to the extension when the file cannot be
+    read. Papers downloaded from arXiv routinely arrive named after their
+    identifier with no extension at all — `2504.15673` is a perfectly good PDF
+    — and an extension-only test drops them from the library without saying
+    anything, which is worst in exactly the small collections where one missing
+    paper is a noticeable hole.
+    """
+    try:
+        with open(path, "rb") as handle:
+            if handle.read(len(PDF_MAGIC)) == PDF_MAGIC:
+                return True
+    except OSError:
+        # Unreadable or vanished: fall back to the name rather than guessing.
+        return path.suffix.lower() == ".pdf"
+    # Readable and not a PDF. A .pdf extension on a non-PDF is a lie, and
+    # trusting it costs a wasted parse job and a permanent piece of noise.
+    return False
 
 
 def markdown_path_for(paper_id: int, markdown_dir: Path) -> Path:

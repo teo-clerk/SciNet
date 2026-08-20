@@ -82,7 +82,7 @@ class Settings(BaseSettings):
     # ---- pipeline ----
     pipeline_version: int = 1
     tier0_workers: int = 4
-    umap_min_papers: int = Field(default=200, ge=10)
+    umap_min_papers: int = Field(default=20, ge=10)
 
     @field_validator(
         "data_dir",

@@ -38,9 +38,14 @@ class ProjectionParams:
     #: single-threaded, which at a few thousand rows is a fair trade for a
     #: layout the user can rely on.
     random_state: int = 42
-    #: Below this many rows UMAP produces unstable, meaningless structure, so
-    #: PCA is used instead: deterministic, instant, nothing to persist.
-    min_umap_rows: int = 200
+    #: Below this many rows there is barely a map to make, and PCA is
+    #: deterministic and instant. The threshold used to be 200 on the
+    #: assumption that UMAP is unstable on small corpora — measured against
+    #: libraries whose true grouping is known, that was wrong in the direction
+    #: that matters: at 63 papers PCA scored a silhouette of 0.08 on the
+    #: rendered coordinates (fields overlapping into mush) against UMAP's 0.38,
+    #: and UMAP won at every size down to twenty papers.
+    min_umap_rows: int = 20
     #: Neighbours consulted when scoring how far a new point sits from the
     #: fitted manifold.
     drift_neighbors: int = 15
@@ -104,9 +109,12 @@ class ProjectionModel:
             self.method = "umap"
             import umap
 
-            # n_neighbors must stay below the row count or UMAP silently
-            # degenerates on small corpora.
-            neighbors = min(self.params.n_neighbors, max(2, rows - 1))
+            # Scaled to the corpus, then clamped below the row count. A fixed
+            # 15 is a quarter of a sixty-paper library, and smoothing over a
+            # quarter of the collection averages away the local structure the
+            # map is made of.
+            scaled = max(5, min(self.params.n_neighbors, round(rows / 8)))
+            neighbors = min(scaled, max(2, rows - 1))
             reducer = umap.UMAP(
                 n_components=self.params.n_components,
                 n_neighbors=neighbors,

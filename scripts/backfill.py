@@ -32,7 +32,14 @@ logger = logging.getLogger("backfill")
 
 
 def discover(root: Path) -> list[Path]:
-    return sorted(p for p in root.rglob("*.pdf") if p.is_file())
+    """Every PDF under root, by content rather than by extension.
+
+    Papers saved from arXiv often carry the bare identifier as a filename with
+    no extension; globbing for *.pdf skips them silently.
+    """
+    from app.core.paths import is_pdf
+
+    return sorted(p for p in root.rglob("*") if p.is_file() and is_pdf(p))
 
 
 def register_all(paths: list[Path]) -> dict[str, int]:

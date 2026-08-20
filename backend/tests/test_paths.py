@@ -84,12 +84,29 @@ def test_nonexistent_path_inside_root_is_allowed(tmp_path):
     )
 
 
-@pytest.mark.parametrize(
-    ("name", "expected"),
-    [("a.pdf", True), ("a.PDF", True), ("a.Pdf", True), ("a.txt", False), ("a", False)],
-)
-def test_is_pdf(tmp_path, name, expected):
-    assert is_pdf(tmp_path / name) is expected
+PDF_BYTES = b"%PDF-1.7\ncontent"
+
+
+@pytest.mark.parametrize("name", ["a.pdf", "a.PDF", "a.Pdf", "2504.15673", "noext"])
+def test_a_real_pdf_is_recognised_whatever_it_is_called(tmp_path, name):
+    """arXiv downloads often carry the bare identifier with no extension."""
+    path = tmp_path / name
+    path.write_bytes(PDF_BYTES)
+    assert is_pdf(path)
+
+
+@pytest.mark.parametrize("name", ["a.txt", "notes.md", "a.pdf"])
+def test_a_non_pdf_is_rejected_even_when_named_pdf(tmp_path, name):
+    """A .pdf extension on a non-PDF costs a wasted parse and permanent noise."""
+    path = tmp_path / name
+    path.write_bytes(b"this is plainly not a pdf")
+    assert not is_pdf(path)
+
+
+def test_an_unreadable_path_falls_back_to_the_extension(tmp_path):
+    """Better to guess from the name than to crash a library scan."""
+    assert is_pdf(tmp_path / "gone.pdf")
+    assert not is_pdf(tmp_path / "gone.txt")
 
 
 def test_markdown_path_shards_by_thousand(tmp_path):
