@@ -9,9 +9,45 @@ turn enrichment on.
 
 ## Status
 
-**M1 — ingestion pipeline.** PDFs are watched, deduplicated, parsed to Markdown
-through a three-tier escalation, and described with extracted metadata. The
-embedding, projection and tagging stages land in M2; the 3D map in M3.
+**M2 — embeddings, projection and tagging.** PDFs are watched, deduplicated,
+parsed through a three-tier escalation, embedded, positioned in 3D, clustered
+and tagged. The map persists and updates incrementally. The interactive 3D
+frontend lands in M3.
+
+## How the map stays fast
+
+Once computed, the map is *kept*. Nothing is recomputed on open:
+
+| what | where |
+|---|---|
+| document vectors | `data/vectors/doc_vectors.f32` (growable memmap) |
+| fitted reducer + its fit matrix | `data/models/projections/run_NNNNN.*` |
+| coordinates, clusters, tags | SQLite |
+
+Opening the app issues one `GET /api/graph`, which returns a 304 when the map
+has not changed. Positions travel as a raw `Float32Array` — 48 KB for 4,000
+nodes, against roughly 20 MB of equivalent JSON.
+
+Dropping new PDFs into the library does **not** rebuild anything. Each is
+embedded and placed with `reducer.transform()` against the stored fit, in
+milliseconds, and marked *provisional* so the UI can show it was positioned
+without a refit. A full refit happens only when either:
+
+- more than 20% of the corpus was placed incrementally, or
+- 25 or more papers sit measurably off the fitted manifold (you started reading
+  a new field).
+
+When a refit does happen it is **Procrustes-aligned** onto the previous layout
+before anyone sees it. UMAP's orientation is arbitrary — two fits of nearly the
+same data come out rotated, reflected and rescaled — so without alignment every
+refit teleports every node and destroys the spatial memory you have built of
+your own library. Alignment reduces mean node movement by more than tenfold, so
+the map *settles* instead of scrambling.
+
+The swap is atomic: a refit is computed into a new `projection_runs` row and
+becomes visible only when `is_active` moves. A crashed refit leaves the old map
+untouched, and the previous run stays on disk for rollback or for A/B-ing two
+embedding models.
 
 ## Requirements
 

@@ -59,6 +59,25 @@ frontend/src/
   exception is the render hot path, where in-place typed-array writes are the point.
 - Tests live in `backend/tests/`, fixtures in `backend/tests/fixtures/`.
 
+## M2 invariants
+
+- **The map persists.** Vectors in a memmap, reducer + fit matrix on disk,
+  coordinates in SQLite. Opening the app never refits.
+- **Inserts never move existing nodes.** New papers go through `transform()`
+  and are flagged `is_transformed`; a test asserts prior coordinates are
+  byte-identical after an insert.
+- **Every refit is Procrustes-aligned** onto the previous run before it becomes
+  visible, and the swap is a single `is_active` flip.
+- **Distances are computed in embedding space, never on x/y/z.** UMAP distorts
+  global distance deliberately; `/api/graph/similar` and any threshold filter
+  must use the 1024-D vectors.
+- **Cluster on the 10-D UMAP**, not the 3-D display coordinates.
+- **The tag vocabulary is closed.** Proposals merge by label-embedding
+  similarity or wait in `pending_review`; they never join silently.
+- **Free the card between stages.** `free_all_models()` releases all three
+  runtimes (torch cache, spawned llama-server, private Ollama). Tier 1's server
+  is a *child process* — clearing the Python cache frees almost nothing.
+
 ## Measured numbers (not estimates)
 
 - tier-0 probe: **~2 ms/page**; tier-0 Markdown conversion: **~225 ms/page**.
@@ -69,6 +88,12 @@ frontend/src/
 - Browser WebGL runs on the **Intel Arc iGPU**, not the RTX 4060, under hybrid
   graphics. Good: the UI never competes with the worker for VRAM.
 - 4,000 nodes render at a p95 frame of ~17 ms (vsync-locked, no drops).
+- Embeddings: Qwen3-Embedding-0.6B, 1024-dim, **1154 MiB peak GPU**. Sanity
+  check on cosine similarity: related 0.883 > unrelated 0.540 > very unrelated
+  0.424.
+- Measured resident footprints: `granite3.2-vision:2b` 3.52 GiB,
+  `qwen3:8b` 5.54 GiB, both fully GPU-resident. Rejected:
+  `qwen2.5vl:7b` 13.3 GiB and `qwen2.5vl:3b` 10.05 GiB — both CPU-only.
 
 ## Commands
 
