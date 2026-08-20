@@ -37,8 +37,18 @@ class ModelStatus:
 
 
 def _hf_present(reference: str) -> bool:
-    marker = hf_dir() / "hub" / f"models--{reference.replace('/', '--')}"
-    return marker.exists()
+    """Is this model already in the project's cache?
+
+    Checked in two places because two libraries write to two layouts.
+    huggingface_hub keeps its cache under ``HF_HOME/hub``, while
+    sentence-transformers is handed ``SENTENCE_TRANSFORMERS_HOME`` directly and
+    writes ``models--*`` at its root. A model fetched through one path is
+    invisible to a check that only knows the other — which reported an
+    installed model as missing.
+    """
+    directory = f"models--{reference.replace('/', '--')}"
+    root = hf_dir()
+    return (root / "hub" / directory).exists() or (root / directory).exists()
 
 
 def check_models(

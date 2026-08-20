@@ -248,3 +248,32 @@ def test_full_text_works_while_the_model_is_still_warming(client, monkeypatch):
     res = client.get("/api/search/fulltext?q=primordial")
     assert res.status_code == 200
     assert res.json()["hits"]
+
+
+# --- query formatting is model-specific ----------------------------------
+
+
+def test_instruction_tuned_models_get_their_prefix():
+    """Qwen3 expects a task instruction on queries but not on documents."""
+    from app.services.embed.encoder import query_instruction
+
+    assert query_instruction("Qwen/Qwen3-Embedding-0.6B").startswith("Instruct:")
+    assert "query: " in query_instruction("intfloat/e5-large-v2")
+
+
+def test_specter_family_models_get_no_prefix():
+    """SciNCL and SPECTER were trained on bare `title[SEP]abstract`.
+
+    A prefix they never saw is just forty tokens of noise on every query.
+    """
+    from app.services.embed.encoder import query_instruction
+
+    assert query_instruction("malteos/scincl") == ""
+    assert query_instruction("allenai/specter2_base") == ""
+
+
+def test_an_unknown_model_gets_no_prefix():
+    """Guessing wrong degrades retrieval silently; doing nothing does not."""
+    from app.services.embed.encoder import query_instruction
+
+    assert query_instruction("some/unheard-of-model") == ""

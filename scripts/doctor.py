@@ -28,7 +28,10 @@ def detected_vram_mib() -> int | None:
     try:
         out = subprocess.run(
             ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=10, check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
         )
         return int(out.stdout.strip().splitlines()[0])
     except Exception:  # noqa: BLE001
@@ -40,9 +43,7 @@ def main() -> int:
 
     vram = detected_vram_mib()
     print(
-        f"GPU VRAM      : {vram} MiB"
-        if vram
-        else "GPU VRAM      : no NVIDIA GPU found"
+        f"GPU VRAM      : {vram} MiB" if vram else "GPU VRAM      : no NVIDIA GPU found"
     )
     print(f"library       : {settings.library_dir}")
     print(f"database      : {settings.db_path}")

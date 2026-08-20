@@ -81,9 +81,9 @@ def bench_tier(tier: int, pdfs: list[Path]) -> None:
         pages = max(result.page_count, 1)
         ms = elapsed / pages * 1000
         report = assess(
-            __import__(
-                "app.services.parse.quality", fromlist=["TextProbe"]
-            ).TextProbe(text=result.markdown, page_count=pages, font_count=1)
+            __import__("app.services.parse.quality", fromlist=["TextProbe"]).TextProbe(
+                text=result.markdown, page_count=pages, font_count=1
+            )
         )
         note = "" if warm else "  (includes model load)"
         print(

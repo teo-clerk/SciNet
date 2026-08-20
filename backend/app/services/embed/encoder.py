@@ -25,9 +25,30 @@ logger = logging.getLogger(__name__)
 #: the worker for the card. See encode_query.
 QUERY_DEVICE = "cpu"
 
-QUERY_INSTRUCTION = (
-    "Instruct: Given a search query, retrieve relevant scientific papers\nQuery: "
-)
+#: Instruction-tuned embedders expect a task prefix on queries but not on
+#: documents. Models outside that family were never trained on one and treat it
+#: as literal text, so applying it blindly makes every query start with the same
+#: forty tokens of noise. Keyed on the model rather than assumed.
+QUERY_INSTRUCTIONS: dict[str, str] = {
+    "qwen": (
+        "Instruct: Given a search query, retrieve relevant scientific papers\nQuery: "
+    ),
+    "e5": "query: ",
+    "bge": "Represent this sentence for searching relevant passages: ",
+}
+
+
+def query_instruction(model_id: str) -> str:
+    """The prefix this model expects on a query, or none."""
+    reference = model_id.lower()
+    for marker, prefix in QUERY_INSTRUCTIONS.items():
+        if marker in reference:
+            return prefix
+    # SPECTER-family models (scincl, specter2) take bare text: they were
+    # trained on `title[SEP]abstract` with no instruction format at all.
+    return ""
+
+
 DEFAULT_BATCH_SIZE = 16
 
 
@@ -106,8 +127,9 @@ def encode_query(
     """
     settings = settings or get_settings()
     model = _model(settings.embed_model, device or QUERY_DEVICE)
+    prefix = query_instruction(settings.embed_model)
     vector = model.encode(
-        [QUERY_INSTRUCTION + text],
+        [prefix + text],
         convert_to_numpy=True,
         normalize_embeddings=True,
         show_progress_bar=False,

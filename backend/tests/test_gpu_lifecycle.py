@@ -120,3 +120,23 @@ def test_vision_role_is_a_measured_fitting_model():
     vision = next(e for e in REGISTRY if e.role is Role.VISION)
     assert vision.vram_mib is not None, "tier 2's footprint must be measured"
     assert vision.fits_vram is True
+
+
+# --- model presence detection --------------------------------------------
+
+
+def test_a_model_is_found_in_either_cache_layout(tmp_path, monkeypatch):
+    """huggingface_hub writes to HF_HOME/hub; sentence-transformers to its root.
+
+    A check that knows only one reported an installed model as missing.
+    """
+    from app.core import preflight
+
+    monkeypatch.setattr(preflight, "hf_dir", lambda: tmp_path)
+
+    (tmp_path / "hub" / "models--org--via-hub").mkdir(parents=True)
+    (tmp_path / "models--org--via-st").mkdir(parents=True)
+
+    assert preflight._hf_present("org/via-hub")
+    assert preflight._hf_present("org/via-st")
+    assert not preflight._hf_present("org/absent")

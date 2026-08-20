@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 
 from sqlalchemy import delete, select
@@ -44,9 +45,21 @@ from app.workers.queue import enqueue
 logger = logging.getLogger(__name__)
 
 
+def store_slug(model_id: str) -> str:
+    """A filesystem-safe name for a model's vector store."""
+    return re.sub(r"[^a-z0-9]+", "-", model_id.lower()).strip("-")
+
+
 def open_store(settings: Settings) -> VectorStore:
+    """The vector store for the configured embedding model.
+
+    Keyed by model rather than a single shared file. Vectors from two models
+    are not comparable, so they cannot share a store — and giving each its own
+    means swapping models is reversible: the previous vectors stay on disk and
+    switching back costs nothing instead of a full re-embed.
+    """
     return VectorStore(
-        settings.vectors_dir / "doc_vectors",
+        settings.vectors_dir / f"doc_vectors__{store_slug(settings.embed_model)}",
         dim=settings.embed_dim,
         model_id=settings.embed_model,
     )

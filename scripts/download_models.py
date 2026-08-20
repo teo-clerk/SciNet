@@ -79,6 +79,7 @@ def ensure_ollama(entry: ModelEntry, server: PrivateOllama, check_only: bool) ->
 
     print(f"  [pull]    {entry.reference} -> {ollama_dir()}")
     last = ""
+
     def progress(line: str) -> None:
         nonlocal last
         if line and line != last:
@@ -98,8 +99,9 @@ def ensure_huggingface(entry: ModelEntry, check_only: bool) -> bool:
         print(f"  [skip]    {entry.reference}: huggingface_hub not installed")
         return False
 
-    marker = cache / "hub" / f"models--{entry.reference.replace('/', '--')}"
-    if marker.exists():
+    # Two layouts, because two libraries write here — see preflight._hf_present.
+    directory = f"models--{entry.reference.replace('/', '--')}"
+    if (cache / "hub" / directory).exists() or (cache / directory).exists():
         print(f"  [ok]      {entry.reference} already in {cache.name}/")
         return True
     if check_only:
@@ -154,8 +156,12 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="report only")
     parser.add_argument("--measure", action="store_true", help="measure resident VRAM")
     parser.add_argument("--role", choices=[r.value for r in Role], help="one role only")
-    parser.add_argument("--extra", action="append", default=[],
-                        help="also pull this ollama model (repeatable)")
+    parser.add_argument(
+        "--extra",
+        action="append",
+        default=[],
+        help="also pull this ollama model (repeatable)",
+    )
     args = parser.parse_args()
 
     settings = get_settings()
@@ -220,8 +226,13 @@ def main() -> int:
         targets += args.extra
         for reference in targets:
             stub = ModelEntry(
-                role=Role.VISION, runtime=Runtime.OLLAMA, reference=reference,
-                quantization="", disk_mib=0, vram_mib=None, purpose="",
+                role=Role.VISION,
+                runtime=Runtime.OLLAMA,
+                reference=reference,
+                quantization="",
+                disk_mib=0,
+                vram_mib=None,
+                purpose="",
             )
             measured = measure(stub, server)
             if measured:

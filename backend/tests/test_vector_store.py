@@ -186,3 +186,40 @@ def test_removing_a_paper_hides_it(store):
     assert store.count == 1
     _, ids = store.matrix()
     assert ids == [2]
+
+
+# --- one store per model --------------------------------------------------
+
+
+def test_each_model_gets_its_own_store():
+    """Vectors from two models are not comparable, so they cannot share a file."""
+    from app.workers.embed_handlers import store_slug
+
+    assert store_slug("Qwen/Qwen3-Embedding-0.6B") != store_slug("malteos/scincl")
+
+
+def test_store_slugs_are_filesystem_safe():
+    from app.workers.embed_handlers import store_slug
+
+    for model in (
+        "Qwen/Qwen3-Embedding-0.6B",
+        "malteos/scincl",
+        "allenai/specter2_base",
+    ):
+        slug = store_slug(model)
+        assert "/" not in slug and " " not in slug
+        assert slug and not slug.startswith("-") and not slug.endswith("-")
+
+
+def test_switching_models_and_back_keeps_both_sets(tmp_path):
+    """Swapping the embedder should be reversible, not a one-way re-embed."""
+    a = VectorStore(tmp_path / "doc_vectors__model-a", dim=8, model_id="model-a")
+    a.add(1, vec(1))
+    a.flush()
+
+    b = VectorStore(tmp_path / "doc_vectors__model-b", dim=8, model_id="model-b")
+    b.add(1, vec(2))
+    b.flush()
+
+    reopened = VectorStore(tmp_path / "doc_vectors__model-a", dim=8, model_id="model-a")
+    np.testing.assert_array_equal(reopened.get(1), vec(1))

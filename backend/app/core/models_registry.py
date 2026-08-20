@@ -156,12 +156,38 @@ REGISTRY: tuple[ModelEntry, ...] = (
     ModelEntry(
         role=Role.EMBED,
         runtime=Runtime.HUGGINGFACE,
-        reference="Qwen/Qwen3-Embedding-0.6B",
-        quantization="fp16 safetensors",
-        disk_mib=1200,
-        vram_mib=1408,  # measured: 1154 MiB peak, rounded up for larger batches
-        purpose="Document and chunk vectors; 1024-dim, drives the map and search.",
-        alternatives=("BAAI/bge-m3", "allenai/specter2_base"),
+        reference="malteos/scincl",
+        quantization="fp32 safetensors",
+        disk_mib=420,
+        vram_mib=768,
+        purpose="Document and chunk vectors; 768-dim, drives the map and search.",
+        notes=(
+            "Chosen by measurement against a corpus whose true partition is "
+            "known (300 arXiv papers filed under 10 fields). SciNCL is a "
+            "SciBERT trained with neighbourhood contrastive learning on the "
+            "citation graph — papers that cite each other are pulled together — "
+            "which is exactly the similarity a map of a paper library needs.\n"
+            "\n"
+            "Measured, same corpus and clustering, ARI / homogeneity / "
+            "completeness / noise:\n"
+            "  malteos/scincl        0.672 / 0.762 / 0.825 / 0\n"
+            "  allenai/specter2_base 0.582 / 0.767 / 0.709 / 14\n"
+            "  Qwen3-Embedding-0.6B  0.561 / 0.700 / 0.773 / 9\n"
+            "\n"
+            "SPECTER2's marginally higher homogeneity is the over-fragmentation "
+            "trap: it split 10 fields into 13 clusters and discarded 14 papers, "
+            "and purity is trivially bought that way. Completeness catches it.\n"
+            "\n"
+            "Note the 512-token limit. Document text is title + abstract + "
+            "summary + headings, median ~455 tokens, so most papers fit and the "
+            "rest truncate into exactly the title-and-abstract prefix this "
+            "model family was trained on."
+        ),
+        alternatives=(
+            "allenai/specter2_base",
+            "Qwen/Qwen3-Embedding-0.6B",
+            "BAAI/bge-m3",
+        ),
     ),
     ModelEntry(
         role=Role.TAG,

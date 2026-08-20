@@ -102,18 +102,24 @@ def main() -> int:
     escalating = len(pages_fail)
     all_pages = sum(pages_pass) + sum(pages_fail)
 
-    print(f"\nprobed {total} file(s) in {elapsed:.1f}s "
-          f"({elapsed / total * 1000:.0f} ms each)")
+    print(
+        f"\nprobed {total} file(s) in {elapsed:.1f}s "
+        f"({elapsed / total * 1000:.0f} ms each)"
+    )
     if unreadable:
         print(f"unreadable: {len(unreadable)}")
         for line in unreadable[:10]:
             print(f"  {line}")
 
     print("\ntier distribution")
-    print(f"  tier 0 (text layer) : {passed:>5}  {100 * passed / total:5.1f}%"
-          f"   {sum(pages_pass):>6} pages")
-    print(f"  escalating          : {escalating:>5}  {100 * escalating / total:5.1f}%"
-          f"   {sum(pages_fail):>6} pages")
+    print(
+        f"  tier 0 (text layer) : {passed:>5}  {100 * passed / total:5.1f}%"
+        f"   {sum(pages_pass):>6} pages"
+    )
+    print(
+        f"  escalating          : {escalating:>5}  {100 * escalating / total:5.1f}%"
+        f"   {sum(pages_fail):>6} pages"
+    )
     if all_pages:
         median_pages = statistics.median(pages_pass + pages_fail)
         print(f"  median pages/paper  : {median_pages:.0f}")
@@ -133,8 +139,12 @@ def main() -> int:
     print(f"  with tier 1 (~2 s/pg)    : {with_t1:6.2f} h total")
     print(f"  without tier 1 (~8.9s/pg): {without_t1:6.2f} h total")
     saved = without_t1 - with_t1
-    print(f"  tier 1 saves             : {saved:6.2f} h "
-          f"({100 * saved / without_t1:.0f}% of the run)" if without_t1 else "")
+    print(
+        f"  tier 1 saves             : {saved:6.2f} h "
+        f"({100 * saved / without_t1:.0f}% of the run)"
+        if without_t1
+        else ""
+    )
     print("\n  (single-threaded; tier 0 parallelises across CPU workers)")
 
     if args.verbose and failures:

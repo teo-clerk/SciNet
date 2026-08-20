@@ -70,8 +70,8 @@ class Settings(BaseSettings):
 
     llm_model: str = "qwen3:8b"
     vlm_model: str = "granite3.2-vision:2b"
-    embed_model: str = "Qwen/Qwen3-Embedding-0.6B"
-    embed_dim: int = 1024
+    embed_model: str = "malteos/scincl"
+    embed_dim: int = 768
     llm_num_ctx: int = 8192
     device: str = "cuda"
 
