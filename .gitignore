@@ -1,0 +1,36 @@
+# data — never committed
+data/library/
+data/markdown/
+data/vectors/
+data/models/
+data/logs/
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# node
+node_modules/
+dist/
+.vite/
+
+# env
+.env
+.env.local
+
+# os
+.DS_Store
+
+# generated test fixtures — rebuilt by tests/fixtures/generate.py
+backend/tests/fixtures/generated/
+backend/tests/fixtures/real/
+
+# build caches
+*.tsbuildinfo

@@ -1,0 +1,39 @@
+:root {
+  --bg: #070912;
+  --fg: #d6dbe8;
+  --dim: #6b7590;
+  --ok: #6ee7a8;
+  --warn: #ffb454;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  overflow: hidden;
+}
+
+.app { display: flex; flex-direction: column; height: 100%; }
+
+.canvas-host { flex: 1; min-height: 0; }
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 14px;
+  background: rgba(12, 15, 28, 0.9);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  user-select: none;
+}
+
+.status-bar .brand { font-weight: 700; letter-spacing: 0.08em; }
+.status-bar .spacer { flex: 1; }
+.status-bar .ok { color: var(--ok); }
+.status-bar .warn { color: var(--warn); }
+.status-bar .dim { color: var(--dim); }

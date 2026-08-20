@@ -1,0 +1,173 @@
+# SciNet
+
+A local, privacy-first map of your scientific paper library.
+
+SciNet watches a folder of PDFs, parses them to Markdown with local models,
+embeds and tags them with local LLMs, and renders the whole corpus as an
+interactive 3D semantic map. Nothing leaves the machine unless you explicitly
+turn enrichment on.
+
+## Status
+
+**M1 — ingestion pipeline.** PDFs are watched, deduplicated, parsed to Markdown
+through a three-tier escalation, and described with extracted metadata. The
+embedding, projection and tagging stages land in M2; the 3D map in M3.
+
+## Requirements
+
+- Python **3.12** (pinned — `umap-learn` is not tested above it)
+- Node 20+ / bun
+- The [Ollama](https://ollama.com) **binary** (SciNet runs its own instance;
+  it does not use your system-wide models)
+- NVIDIA GPU recommended (8 GB is enough; models load one at a time)
+- ~11 GB of disk for models
+
+## Models
+
+SciNet ships its own models. It does **not** use whatever happens to be
+installed in your system-wide Ollama — a global model may be absent, a
+different quantization, or silently updated, and none of that should decide
+whether this project works.
+
+Everything lives under `data/models/` (configurable via `SCINET_MODELS_DIR`):
+
+```
+data/models/
+  ollama/   private model store; served by SciNet's own Ollama on port 11500
+  hf/       HF_HOME for torch/transformers weights (Marker, embeddings)
+```
+
+Provision them once:
+
+```bash
+cd backend
+uv run python ../scripts/download_models.py            # download what is missing
+uv run python ../scripts/download_models.py --measure  # download, then measure VRAM
+uv run python ../scripts/download_models.py --check    # report only
+```
+
+### Why footprints are measured, not estimated
+
+Download size does not predict resident footprint, and being wrong is
+expensive:
+
+| model | disk | measured resident | on GPU |
+|---|---|---|---|
+| `qwen2.5vl:7b` | 5.56 GiB | **13.3 GiB** | 0% → 181 s/page |
+| `qwen2.5vl:3b` | 2.98 GiB | **10.05 GiB** | 0% |
+| `granite3.2-vision:2b` | 2.27 GiB | **3.52 GiB** | 100% → 8.9 s/page |
+
+Ollama does not refuse to load an oversized model. It silently serves it from
+system RAM, roughly twenty times slower, and the first symptom is a backfill
+that looks hung. Note the 3B: a 2.98 GiB download with a 10 GiB footprint —
+the Qwen2.5-VL dynamic-resolution vision tower carries a ~3.4x activation
+budget, so neither parameter count nor download size predicts anything.
+
+So `app/core/models_registry.py` records a *measured* `vram_mib` per model, an
+unmeasured model is treated as **unproven** rather than assumed to fit, and
+`scripts/doctor.py` reports the situation before you start a long job.
+Full detail in [docs/MODELS.md](docs/MODELS.md).
+
+### Before a long run
+
+```bash
+cd backend
+uv run python ../scripts/doctor.py             # will anything run on CPU?
+uv run python ../scripts/survey_corpus.py ~/Papers   # how much will escalate?
+uv run python ../scripts/bench_parse.py --tiers 0,1  # what does a page cost?
+```
+
+`survey_corpus.py` probes the text layer of every PDF at ~6 ms each without
+touching the GPU, and reports what fraction would escalate past tier 0 and why.
+That turns "is tier 1 worth it for my library?" into a number.
+
+## Setup
+
+```bash
+cp .env.example .env          # review the paths and the privacy switch
+
+cd backend
+uv sync --group dev           # core stack
+uv run alembic upgrade head   # create data/scinet.db
+
+cd ../frontend
+bun install
+```
+
+The heavy GPU stack (torch, sentence-transformers, marker-pdf) is a separate
+extra so the first install stays small:
+
+```bash
+cd backend && uv sync --extra gpu --group dev
+```
+
+## Running
+
+Three processes:
+
+```bash
+# terminal 1 — API (127.0.0.1 only)
+cd backend && uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+
+# terminal 2 — worker (parsing, and later embedding and tagging)
+cd backend && uv run python -m app.workers.runner
+
+# terminal 3 — UI
+cd frontend && bun run dev
+```
+
+Open <http://localhost:5173>.
+
+## Importing a library
+
+Drop PDFs into `data/library/` and the watcher picks them up. To import an
+existing collection in bulk:
+
+```bash
+cd backend && uv run python ../scripts/backfill.py ~/Papers
+```
+
+Backfill is resumable: registration is idempotent on the content hash and the
+job queue is durable, so interrupting it and re-running picks up where it left
+off.
+
+## How parsing decides what to spend
+
+Probing a PDF's text layer costs ~2 ms/page. Converting it to Markdown costs
+~225 ms/page (measured, single-threaded, on an Intel Ultra 9 185H). The gate in
+`services/parse/quality.py` uses the cheap probe to decide the tier, so the
+expensive conversion only runs on output that will actually be kept.
+
+| Tier | Engine | Cost | Handles |
+|---|---|---|---|
+| 0 | PyMuPDF text layer | ~225 ms/page, CPU | most publisher and arXiv PDFs |
+| 1 | Marker + Surya | ~1-3 s/page, GPU | broken layouts, scans |
+| 2 | `qwen2.5vl:7b` | ~10 s/page, GPU | what neither of the above can read |
+
+Tier 1 needs `uv sync --extra gpu`. Without it the router falls through to
+tier 2 rather than stranding the paper.
+
+## Privacy
+
+All parsing, embedding, and tagging run locally, always. `SCINET_ENRICHMENT_ENABLED`
+is the single switch that permits outbound calls to Crossref / OpenAlex / arXiv
+for bibliographic cleanup. It defaults to `false`, and every call made while it
+is on is recorded in the `egress_log` table:
+
+```bash
+sqlite3 data/scinet.db "SELECT ts, service, url FROM egress_log ORDER BY ts DESC LIMIT 20"
+```
+
+## Health checks
+
+```bash
+sqlite3 data/scinet.db "SELECT status, count(*) FROM papers GROUP BY status"
+sqlite3 data/scinet.db "SELECT kind, state, count(*) FROM jobs GROUP BY 1,2"
+```
+
+## Architecture
+
+Two processes, one SQLite file. The worker is the sole writer of paper data;
+the API reads and enqueues. See `docs/` and the design plan for the full
+rationale, including why the job queue is not Celery and why the map uses UMAP
+coordinates rather than a force-directed layout.
