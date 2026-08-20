@@ -127,10 +127,9 @@ def handle_metadata(session: Session, job: Job, settings: Settings) -> None:
     if outcome is Registration.DUPLICATE_WORK:
         BROKER.publish("paper.duplicate", paper_id=paper.id, work_key=paper.work_key)
 
-    # M1 ends here: embedding and tagging arrive in M2. Marking the paper ready
-    # keeps it visible in the UI rather than stranded in an intermediate state.
-    paper.status = PaperStatus.READY
+    paper.status = PaperStatus.PARSED
     session.add(paper)
+    enqueue(session, JobKind.EMBED, paper_id=paper.id)
 
     if settings.enrichment_enabled and (extracted.doi or extracted.arxiv_id):
         enqueue(session, JobKind.ENRICH, paper_id=paper.id)
@@ -154,8 +153,17 @@ def handle_enrich(session: Session, job: Job, settings: Settings) -> None:
         BROKER.publish("enrich.done", paper_id=paper.id)
 
 
+from app.workers.embed_handlers import (  # noqa: E402
+    handle_embed,
+    handle_project,
+    handle_tag,
+)
+
 HANDLERS = {
     JobKind.PARSE: handle_parse,
     JobKind.METADATA: handle_metadata,
+    JobKind.EMBED: handle_embed,
+    JobKind.PROJECT: handle_project,
+    JobKind.TAG: handle_tag,
     JobKind.ENRICH: handle_enrich,
 }

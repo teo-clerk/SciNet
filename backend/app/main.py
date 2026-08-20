@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.routers import events, jobs, papers, system
+from app.routers import events, graph, jobs, papers, system
 
 
 @asynccontextmanager
@@ -38,7 +38,7 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["*"],
     )
-    for module in (system, papers, jobs, events):
+    for module in (system, papers, graph, jobs, events):
         app.include_router(module.router)
     return app
 

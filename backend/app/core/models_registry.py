@@ -159,7 +159,7 @@ REGISTRY: tuple[ModelEntry, ...] = (
         reference="Qwen/Qwen3-Embedding-0.6B",
         quantization="fp16 safetensors",
         disk_mib=1200,
-        vram_mib=None,
+        vram_mib=1408,  # measured: 1154 MiB peak, rounded up for larger batches
         purpose="Document and chunk vectors; 1024-dim, drives the map and search.",
         alternatives=("BAAI/bge-m3", "allenai/specter2_base"),
     ),
@@ -169,7 +169,7 @@ REGISTRY: tuple[ModelEntry, ...] = (
         reference="qwen3:8b",
         quantization="GGUF Q4_K_M",
         disk_mib=5325,
-        vram_mib=None,
+        vram_mib=5673,  # measured: 5.54 GiB, 100% resident on GPU
         purpose="Summaries, controlled-vocabulary tags, and cluster names.",
         notes="Runs alone: nothing else may be resident while tagging.",
         alternatives=("qwen3:4b", "gemma3:4b"),

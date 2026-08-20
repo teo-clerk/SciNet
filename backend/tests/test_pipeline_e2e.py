@@ -99,9 +99,27 @@ def test_metadata_stage_extracts_identifiers(sf, settings, library):
         paper = s.get(Paper, paper_id)
         assert meta.doi == "10.1145/3292500.3330701"
         assert meta.arxiv_id == "2401.01234v2"
-        assert paper.status == PaperStatus.READY
+        # Metadata no longer ends the pipeline: embedding follows it.
+        assert paper.status == PaperStatus.PARSED
         # The work key must have been upgraded from the content hash.
         assert paper.work_key == "doi:10.1145/3292500.3330701"
+
+
+def test_metadata_hands_off_to_embedding(sf, settings, library):
+    """The stage boundary that carries a paper into M2."""
+    with sf() as s:
+        paper_id = register_pdf(s, library["with_identifiers.pdf"]).paper.id
+        s.commit()
+    run_stage(sf, JobKind.PARSE, settings, handle_parse)
+    run_stage(sf, JobKind.METADATA, settings, handle_metadata)
+
+    with sf() as s:
+        queued = (
+            s.query(Job)
+            .filter(Job.kind == JobKind.EMBED, Job.paper_id == paper_id)
+            .count()
+        )
+        assert queued == 1
 
 
 def test_parse_enqueues_metadata(sf, settings, library):
