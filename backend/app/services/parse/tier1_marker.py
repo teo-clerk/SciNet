@@ -81,6 +81,8 @@ def unload() -> None:
 
 
 def available() -> bool:
+    if not get_settings().tier1_enabled:
+        return False
     try:
         import marker  # noqa: F401
     except ImportError:
@@ -101,12 +103,18 @@ def _convert(path: str) -> str:
 
 
 def parse(path: Path | str) -> ParseResult:
+    settings = get_settings()
+    if not settings.tier1_enabled:
+        raise ParserUnavailable(
+            "tier 1 is disabled (SCINET_TIER1_ENABLED=false); "
+            "escalating papers go straight to tier 2"
+        )
+
     try:
         import marker.output  # noqa: F401
     except ImportError as exc:
         raise ParserUnavailable("marker-pdf is not installed") from exc
 
-    settings = get_settings()
     budget = settings.tier1_timeout_seconds * settings.tier1_calls_per_document
 
     # SURYA_INFERENCE_TIMEOUT_SECONDS bounds a single inference call, but Marker
@@ -118,15 +126,22 @@ def parse(path: Path | str) -> ParseResult:
     # The worker thread is left running rather than killed — Python cannot
     # interrupt a blocking C call — but it is a daemon, and the router treats
     # the timeout as "fall through", so the paper still gets read by tier 2.
-    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="tier1") as pool:
+    # Deliberately NOT a `with` block. ThreadPoolExecutor.__exit__ calls
+    # shutdown(wait=True), which blocks until the worker thread finishes — the
+    # very thread this timeout exists to walk away from. Using the context
+    # manager here makes the timeout a no-op that merely changes which
+    # exception is raised, hours later.
+    pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tier1")
+    try:
         future = pool.submit(_convert, str(path))
         try:
             markdown = future.result(timeout=budget)
         except FuturesTimeout as exc:
-            pool.shutdown(wait=False, cancel_futures=True)
             raise Tier1Timeout(
                 f"tier 1 exceeded its {budget:.0f}s budget on {Path(path).name}"
             ) from exc
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
     import pymupdf
 

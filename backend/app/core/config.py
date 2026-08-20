@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     #: Leave empty for the isolated default.
     ollama_url_override: str = ""
 
+    #: Tier 1 (Marker + Surya) is off by default. Measured on a 300-paper
+    #: corpus it saved 3.6 minutes in total — 99.7% of real papers have a
+    #: usable text layer and never reach it — while a single escalating paper
+    #: cost over six minutes of retry storms and left llama-server processes
+    #: holding VRAM. The router falls through to tier 2 cleanly when it is off.
+    #: Turn it on for a scan-heavy library, where the economics reverse.
+    tier1_enabled: bool = False
+
     #: Per-call ceiling for tier 1. A degenerate page can otherwise occupy the
     #: GPU for many minutes; one fixture was measured at 546 s for a single
     #: page. Exceeding this raises, and the router falls through to tier 2.
