@@ -78,6 +78,20 @@ frontend/src/
   runtimes (torch cache, spawned llama-server, private Ollama). Tier 1's server
   is a *child process* — clearing the Python cache frees almost nothing.
 
+## Process boundaries
+
+- **The worker owns the GPU; the API must not touch it.** The single residency
+  slot is per-process, so the API has no visibility into it. Semantic search
+  embeds queries on the **CPU** for exactly this reason — it returned
+  `CUDA out of memory` to the search box otherwise.
+- **The embedding model warms on a background thread at API startup.** Loading
+  it takes ~26 s; startup answers in ~0.6 s. Until it is ready, semantic search
+  returns 503 with `{"state": "warming"}` and the UI waits and retries. That is
+  a distinct answer from `failed` and from an empty result.
+- **Surya spawns servers the default manager does not own** (`surya.ocr_error`
+  among them). `free_all_models()` scans `/proc` for them; one was found alive
+  hours after its worker exited, holding 800 MiB.
+
 ## Measured numbers (not estimates)
 
 - tier-0 probe: **~2 ms/page**; tier-0 Markdown conversion: **~225 ms/page**.
@@ -87,7 +101,14 @@ frontend/src/
   meaning of the quality gate.
 - Browser WebGL runs on the **Intel Arc iGPU**, not the RTX 4060, under hybrid
   graphics. Good: the UI never competes with the worker for VRAM.
-- 4,000 nodes render at a p95 frame of ~17 ms (vsync-locked, no drops).
+- 4,000 nodes render at a p95 frame of ~17 ms (vsync-locked, no drops); the
+  real 293-node corpus measures p95 17.3 ms at 1600x808.
+- **GPU picking is a synchronous readback and costs a frame.** With it live
+  during an orbit: p95 25.7 ms / 50 fps. Suppressed while the camera moves:
+  17.3 ms / 60 fps. Picking resumes ~90 ms after the camera settles.
+- Real corpus tier split: **99.7% tier 0**, one paper escalating. Tier 1 saves
+  3.6 minutes over 300 papers and is off by default (`SCINET_TIER1_ENABLED`).
+- Semantic query: **26 s cold** (warmed in the background), **0.25 s warm**.
 - Embeddings: Qwen3-Embedding-0.6B, 1024-dim, **1154 MiB peak GPU**. Sanity
   check on cosine similarity: related 0.883 > unrelated 0.540 > very unrelated
   0.424.

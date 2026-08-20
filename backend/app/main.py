@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
+from app.core.warmup import WARMER
 from app.routers import events, graph, jobs, papers, search, system
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,10 @@ def _warn_if_exposed() -> None:
 async def lifespan(_app: FastAPI):
     get_settings().ensure_dirs()
     _warn_if_exposed()
+    # Dispatched, not awaited. The embedding model takes ~25s to load and the
+    # map does not need it at all, so startup returns immediately and the load
+    # finishes on a background thread. Search reports "warming" until it lands.
+    WARMER.start()
     yield
 
 

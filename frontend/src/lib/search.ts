@@ -55,6 +55,22 @@ export function searchTitles(query: string): number[] {
   return index.search(query).map((r) => r.id as number)
 }
 
+/**
+ * The search engine is still loading its model.
+ *
+ * Distinct from a failure: the right response is to wait and retry, not to
+ * tell the reader the feature is broken.
+ */
+export class EngineWarming extends Error {
+  constructor(
+    readonly elapsedSeconds: number,
+    readonly estimatedRemaining: number | null,
+  ) {
+    super('the search engine is still starting up')
+    this.name = 'EngineWarming'
+  }
+}
+
 export async function searchServer(
   mode: 'fulltext' | 'semantic',
   query: string,
@@ -64,12 +80,25 @@ export async function searchServer(
     `/api/search/${mode}?q=${encodeURIComponent(query)}&limit=60`,
     { signal },
   )
+
   if (!res.ok) {
-    // 503 means the embedding model is not loaded; that is worth saying rather
-    // than showing an empty result the user will read as "nothing matched".
-    const detail = await res.json().catch(() => null)
-    throw new Error(detail?.detail ?? `search failed (${res.status})`)
+    const body = await res.json().catch(() => null)
+    const detail = body?.detail
+    // An empty result would read as "nothing matched", which is a different
+    // and false statement, so every failure mode says what it actually is.
+    if (detail && typeof detail === 'object' && detail.state === 'warming') {
+      throw new EngineWarming(
+        detail.elapsed_seconds ?? 0,
+        detail.estimated_remaining ?? null,
+      )
+    }
+    const message =
+      typeof detail === 'string'
+        ? detail
+        : (detail?.message ?? `search failed (${res.status})`)
+    throw new Error(message)
   }
+
   const body = (await res.json()) as { hits: ServerHit[] }
   return body.hits
 }

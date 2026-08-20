@@ -169,13 +169,82 @@ def test_a_one_character_query_is_rejected(client):
 # --- semantic -------------------------------------------------------------
 
 
-def test_semantic_reports_an_unavailable_model_rather_than_lying(client, monkeypatch):
-    """An empty result would read as 'nothing matched'. It is not the same."""
+def test_a_model_that_fails_at_query_time_is_reported(client, monkeypatch):
+    """An empty result would read as 'nothing matched'. It is not the same.
 
-    def unavailable(*a, **k):
-        raise RuntimeError("model not downloaded")
+    Distinct from the warming case below: here the model reported itself ready
+    and then failed on use, which is a fault rather than a wait.
+    """
+    from app.core.warmup import WarmupState, WarmupStatus
+    from app.routers import search as search_module
 
-    monkeypatch.setattr("app.services.embed.encoder.encode_query", unavailable)
+    monkeypatch.setattr(
+        type(search_module.WARMER), "is_ready", property(lambda s: True)
+    )
+    monkeypatch.setattr(
+        search_module.WARMER, "status", lambda: WarmupStatus(WarmupState.READY, 26.0)
+    )
+
+    def broken(*a, **k):
+        raise RuntimeError("weights unreadable")
+
+    monkeypatch.setattr("app.services.embed.encoder.encode_query", broken)
     res = client.get("/api/search/semantic?q=galaxies")
     assert res.status_code == 503
-    assert "unavailable" in res.json()["detail"]
+    detail = res.json()["detail"]
+    assert detail["state"] == "failed"
+    assert "weights unreadable" in detail["message"]
+
+
+# --- warmup states through the endpoint ----------------------------------
+
+
+def test_a_query_while_warming_says_so(client, monkeypatch):
+    """'Still starting' is not 'unavailable' and not 'no results'."""
+    from app.core.warmup import WarmupState, WarmupStatus
+    from app.routers import search as search_module
+
+    warmer = search_module.WARMER
+    monkeypatch.setattr(type(warmer), "is_ready", property(lambda self: False))
+    monkeypatch.setattr(
+        warmer, "status", lambda: WarmupStatus(WarmupState.WARMING, 4.0, None, 22.0)
+    )
+    monkeypatch.setattr(warmer, "start", lambda: None)
+
+    res = client.get("/api/search/semantic?q=galaxies")
+    assert res.status_code == 503
+    detail = res.json()["detail"]
+    assert detail["state"] == "warming"
+    assert detail["estimated_remaining"] == 22.0
+
+
+def test_a_failed_warmup_is_distinguishable_from_warming(client, monkeypatch):
+    """The frontend must not offer to wait for something that will not arrive."""
+    from app.core.warmup import WarmupState, WarmupStatus
+    from app.routers import search as search_module
+
+    monkeypatch.setattr(
+        search_module.WARMER,
+        "status",
+        lambda: WarmupStatus(WarmupState.FAILED, 3.0, "weights missing"),
+    )
+    res = client.get("/api/search/semantic?q=galaxies")
+    assert res.status_code == 503
+    detail = res.json()["detail"]
+    assert detail["state"] == "failed"
+    assert "weights missing" in detail["message"]
+
+
+def test_full_text_works_while_the_model_is_still_warming(client, monkeypatch):
+    """FTS5 needs no model; a warming embedder must not disable it."""
+    from app.core.warmup import WarmupState, WarmupStatus
+    from app.routers import search as search_module
+
+    monkeypatch.setattr(
+        search_module.WARMER,
+        "status",
+        lambda: WarmupStatus(WarmupState.WARMING, 2.0, None, 24.0),
+    )
+    res = client.get("/api/search/fulltext?q=primordial")
+    assert res.status_code == 200
+    assert res.json()["hits"]

@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
+from app.core.warmup import WARMER, WarmupState
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
@@ -132,10 +133,41 @@ def search_semantic(
     from app.services.embed import encoder
     from app.workers.embed_handlers import open_store
 
+    # Three states worth telling apart. "Still loading" is not "unavailable",
+    # and neither is "no results" — a search box showing an empty list while the
+    # engine starts has told the reader something false.
+    status = WARMER.status()
+    if status.state is WarmupState.FAILED:
+        raise HTTPException(
+            503,
+            {
+                "state": "failed",
+                "message": f"the embedding model could not be loaded: {status.error}",
+            },
+        )
+    if not WARMER.is_ready:
+        WARMER.start()  # no-op if already warming; recovers a missed dispatch
+        raise HTTPException(
+            503,
+            {
+                "state": "warming",
+                "message": "the search engine is still starting up",
+                "elapsed_seconds": round(status.elapsed_seconds, 1),
+                "estimated_remaining": (
+                    round(status.estimated_remaining, 1)
+                    if status.estimated_remaining is not None
+                    else None
+                ),
+            },
+        )
+
     try:
         vector = encoder.encode_query(q, settings=settings)
     except Exception as exc:  # noqa: BLE001 - model absent or not yet downloaded
-        raise HTTPException(503, f"the embedding model is unavailable: {exc}") from exc
+        raise HTTPException(
+            503,
+            {"state": "failed", "message": f"the embedding model failed: {exc}"},
+        ) from exc
 
     store = open_store(settings)
     if store.count == 0:

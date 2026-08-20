@@ -10,7 +10,13 @@
  */
 import { useCallback, useEffect, useRef } from 'react'
 
-import { buildTitleIndex, searchServer, searchTitles, type SearchMode } from '@/lib/search'
+import {
+  buildTitleIndex,
+  EngineWarming,
+  searchServer,
+  searchTitles,
+  type SearchMode,
+} from '@/lib/search'
 import { useGraphStore } from '@/state/graphStore'
 
 const MODES: Array<[SearchMode, string, string]> = [
@@ -21,6 +27,9 @@ const MODES: Array<[SearchMode, string, string]> = [
 
 // Long enough that a burst of typing is one request, short enough to feel live.
 const DEBOUNCE_MS = 260
+// How long to wait before asking again while the model loads. Short enough
+// that the search runs itself the moment the engine is ready.
+const RETRY_MS = 1500
 
 export function SearchBox() {
   const query = useGraphStore((s) => s.query)
@@ -34,9 +43,12 @@ export function SearchBox() {
   const setError = useGraphStore((s) => s.setSearchError)
   const pending = useGraphStore((s) => s.searchPending)
   const error = useGraphStore((s) => s.searchError)
+  const warming = useGraphStore((s) => s.searchWarming)
+  const setWarming = useGraphStore((s) => s.setSearchWarming)
 
   const inFlight = useRef<AbortController | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (runId !== null && nodes.length) buildTitleIndex(nodes, runId)
@@ -52,6 +64,8 @@ export function SearchBox() {
         setPending(false)
         return
       }
+
+      setWarming(null)
 
       if (searchMode === 'title') {
         // Local and synchronous — no request to cancel, no spinner to show.
@@ -71,11 +85,22 @@ export function SearchBox() {
         })
         .catch((e: unknown) => {
           if (controller.signal.aborted) return
+          if (e instanceof EngineWarming) {
+            // Not a failure — the model is loading. Show that, and retry it
+            // rather than making the reader type the query again.
+            setWarming({ remaining: e.estimatedRemaining })
+            retryTimer.current = setTimeout(
+              () => run(text, searchMode),
+              RETRY_MS,
+            )
+            setPending(true)
+            return
+          }
           setError(e instanceof Error ? e.message : String(e))
           setPending(false)
         })
     },
-    [setResults, setPending, setError],
+    [setResults, setPending, setError, setWarming],
   )
 
   useEffect(() => {
@@ -89,7 +114,13 @@ export function SearchBox() {
     }
   }, [query, mode, run])
 
-  useEffect(() => () => inFlight.current?.abort(), [])
+  useEffect(
+    () => () => {
+      inFlight.current?.abort()
+      if (retryTimer.current) clearTimeout(retryTimer.current)
+    },
+    [],
+  )
 
   return (
     <div className="search-box">
@@ -116,6 +147,15 @@ export function SearchBox() {
           </button>
         ))}
       </div>
+      {warming && (
+        <span className="search-warming">
+          <span className="spinner" />
+          Warming up the search engine
+          {warming.remaining !== null && warming.remaining > 1
+            ? ` — about ${Math.ceil(warming.remaining)}s`
+            : '…'}
+        </span>
+      )}
       {error && <span className="search-error">{error}</span>}
     </div>
   )

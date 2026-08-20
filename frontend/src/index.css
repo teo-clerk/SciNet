@@ -160,3 +160,8 @@ body {
 @keyframes spin { to { transform: rotate(360deg); } }
 .search-modes { display: flex; gap: 2px; }
 .search-error { color: var(--warn); font-size: 11px; max-width: 260px; }
+.search-warming {
+  display: flex; align-items: center; gap: 7px;
+  color: var(--warn); font-size: 11.5px; white-space: nowrap;
+}
+.search-warming .spinner { position: static; border-top-color: var(--warn); }

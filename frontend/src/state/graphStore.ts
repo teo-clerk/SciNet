@@ -51,6 +51,8 @@ interface GraphState {
   searchResults: Set<number> | null
   searchPending: boolean
   searchError: string | null
+  /** Model still loading — a wait, not a fault. */
+  searchWarming: { remaining: number | null } | null
   activeTags: Set<number>
 
   setLoading: () => void
@@ -64,6 +66,7 @@ interface GraphState {
   setSearchResults: (ids: Set<number> | null) => void
   setSearchPending: (pending: boolean) => void
   setSearchError: (message: string | null) => void
+  setSearchWarming: (state: { remaining: number | null } | null) => void
   toggleTag: (tagId: number) => void
   clearFilters: () => void
 }
@@ -140,6 +143,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   searchResults: null,
   searchPending: false,
   searchError: null,
+  searchWarming: null,
   activeTags: new Set(),
 
   setLoading: () => set({ status: 'loading', error: null }),
@@ -174,7 +178,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     set({ searchMode, searchResults: null, searchError: null }),
   setSearchResults: (searchResults) => set({ searchResults }),
   setSearchPending: (searchPending) => set({ searchPending }),
-  setSearchError: (searchError) => set({ searchError, searchResults: null }),
+  setSearchError: (searchError) =>
+    set({ searchError, searchResults: null, searchWarming: null }),
+  setSearchWarming: (searchWarming) => set({ searchWarming, searchError: null }),
   toggleTag: (tagId) =>
     set((state) => {
       const next = new Set(state.activeTags)

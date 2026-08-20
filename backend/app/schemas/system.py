@@ -43,4 +43,7 @@ class SystemInfo(BaseModel):
     enrichment_enabled: bool
     paper_count: int
     ready_count: int
+    #: cold | warming | ready | failed — whether semantic search can answer yet.
+    search_warmup: str = "cold"
+    search_warmup_remaining: float | None = None
     models: list[ModelHealth] = []

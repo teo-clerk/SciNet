@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.core.preflight import check_models
+from app.core.warmup import WARMER
 from app.models import Paper, PaperStatus
 from app.schemas.system import (
     HealthResponse,
@@ -36,6 +37,7 @@ def system_info(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> SystemInfo:
+    warmup = WARMER.status()
     total = db.scalar(select(func.count()).select_from(Paper)) or 0
     ready = (
         db.scalar(
@@ -60,6 +62,8 @@ def system_info(
         enrichment_enabled=settings.enrichment_enabled,
         paper_count=total,
         ready_count=ready,
+        search_warmup=warmup.state.value,
+        search_warmup_remaining=warmup.estimated_remaining,
         models=[
             ModelHealth(
                 role=m.entry.role.value,
