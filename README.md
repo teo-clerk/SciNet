@@ -24,7 +24,8 @@ Measured on 300 arXiv papers across 10 fields:
 | whole-corpus ingest | ~50 min, tagging-dominated |
 | map render, 293 nodes | 60 fps, p95 17.3 ms |
 | semantic query | 0.25 s warm |
-| clustering vs known fields | ARI 0.561, 9 regions |
+| clustering vs known fields | ARI 0.697, 10 regions, 1 unclustered |
+| abstract coverage | 287 of 293 |
 
 ## How the map stays fast
 

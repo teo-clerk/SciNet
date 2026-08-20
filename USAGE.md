@@ -22,6 +22,22 @@ cd ../frontend
 bun install
 ```
 
+> **On Windows**, run the same commands in PowerShell. Two differences:
+> `cp` is `copy`, and paths use backslashes. Everything else — `uv`, `bun`,
+> `ollama` — works identically.
+>
+> ```powershell
+> copy .env.example .env
+> cd backend
+> uv sync --group dev
+> uv run alembic upgrade head
+> cd ..\frontend
+> bun install
+> ```
+>
+> See [§7](#7-windows-notes) for the couple of places behaviour genuinely
+> differs.
+
 Then fetch the models — about 11 GB, into `data/models/`:
 
 ```bash
@@ -215,3 +231,67 @@ twenty times slower.
 
 **Everything is slow while importing.** Expected — the worker is using the whole
 machine. It is safe to stop it and restart later.
+
+
+---
+
+## 7. Windows notes
+
+SciNet runs on Windows without changes. Use PowerShell and the same commands;
+these are the only places behaviour actually differs.
+
+### Running it
+
+```powershell
+# 1 — API
+cd backend; uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# 2 — worker
+cd backend; uv run python -m app.workers.runner
+
+# 3 — interface
+cd frontend; bun run dev
+```
+
+PowerShell separates commands with `;` rather than `&&`. Environment variables
+for a single run are set differently too:
+
+```powershell
+$env:SCINET_ENRICHMENT_ENABLED = "true"; uv run python -m app.workers.runner
+```
+
+### Opening a PDF
+
+Works as-is. The "Open PDF" button picks the right command per platform —
+`start` on Windows, `open` on macOS, `xdg-open` on Linux — and hands the file
+to whatever your system uses for PDFs. The path guard around it is
+platform-independent and applies everywhere.
+
+### Paths
+
+Set them with forward slashes in `.env` — Python accepts them on Windows and it
+avoids escaping backslashes:
+
+```
+SCINET_LIBRARY_DIR=C:/Users/you/Documents/Papers
+```
+
+An absolute path outside the project is fine; the library does not have to live
+under `data/`.
+
+### GPU
+
+CUDA works the same way. `scripts/doctor.py` reports what it finds, and the
+same warning applies: a model too large for the card is served from system RAM
+silently, about twenty times slower.
+
+Without an NVIDIA GPU everything still runs — tier-0 parsing and the embedding
+model are CPU paths already. Tagging with `qwen3:8b` on CPU is slow enough that
+you may want `SCINET_LLM_MODEL=qwen3:4b`, or to leave tagging to finish
+overnight. The map itself does not need it.
+
+### Line endings
+
+The repository has no `.gitattributes`, so Git may convert line endings on
+checkout. Nothing in SciNet parses its own source at runtime, so this is
+harmless — but if you edit `.env` in Notepad, save it as UTF-8 without a BOM.

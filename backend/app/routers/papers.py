@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -96,6 +97,21 @@ def list_papers(
     return PaperPage(
         items=[_summary(p) for p in papers], total=total, offset=offset, limit=limit
     )
+
+
+def _open_command(path: Path) -> list[str]:
+    """The platform's "open this file with whatever handles it" command.
+
+    Kept as an argument vector on every branch. Windows needs `cmd /c start`
+    because there is no standalone opener binary, and its first argument is a
+    window title that must be present but empty — omitting it makes `start`
+    treat the path as the title and open nothing.
+    """
+    if sys.platform == "win32":
+        return ["cmd", "/c", "start", "", str(path)]
+    if sys.platform == "darwin":
+        return ["open", str(path)]
+    return ["xdg-open", str(path)]
 
 
 def _safe_destination(filename: str, library: Path) -> Path:
@@ -334,14 +350,16 @@ def open_in_system_viewer(
 
     try:
         # No shell, and an argument vector rather than a string, so a filename
-        # containing shell metacharacters is inert.
+        # containing shell metacharacters is inert on every platform.
         subprocess.Popen(
-            ["xdg-open", str(path)],
+            _open_command(path),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
     except FileNotFoundError as exc:
-        raise HTTPException(501, "xdg-open is not available on this system") from exc
+        raise HTTPException(
+            501, f"no system PDF viewer available on {sys.platform}"
+        ) from exc
 
     return {"status": "opened", "path": str(path)}

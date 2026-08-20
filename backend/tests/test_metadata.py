@@ -274,3 +274,101 @@ def test_extraction_records_the_abstract_source(pdf_fixtures):
     )
     assert meta.abstract is not None
     assert meta.field_sources["abstract"] == MetaSource.HEURISTIC
+
+
+# --- abstracts with no heading -------------------------------------------
+
+PREPRINT_MD = """MAD-TH-08-16
+
+# **Towards a warped inflationary brane scanning**
+
+Heng-Yu Chen<sup>*</sup>
+
+_Department of Physics, University of Wisconsin-Madison, Madison, WI 53706_
+
+We present a detailed systematics for comparing warped brane inflation with the
+observations, incorporating the effects of both moduli stabilization and
+ultraviolet bulk physics. We explicitly construct an example of the inflaton
+potential governing the motion of a mobile D3 brane.
+
+# 1 Introduction
+
+The idea of brane inflation has been studied extensively in recent years.
+"""
+
+
+def test_an_unlabelled_abstract_is_recovered():
+    """Most physics preprints never write the word "Abstract"."""
+    from app.services.metadata.extract import extract_abstract_unlabelled
+
+    abstract = extract_abstract_unlabelled(PREPRINT_MD)
+    assert abstract is not None
+    assert abstract.startswith("We present a detailed systematics")
+    assert "brane inflation has been studied" not in abstract, "ran into the body"
+
+
+def test_the_title_is_not_mistaken_for_an_abstract():
+    from app.services.metadata.extract import extract_abstract_unlabelled
+
+    assert "warped inflationary brane scanning" not in (
+        extract_abstract_unlabelled(PREPRINT_MD) or ""
+    )
+
+
+def test_affiliations_are_not_mistaken_for_an_abstract():
+    """They sit exactly where an abstract would and can be long."""
+    from app.services.metadata.extract import extract_abstract_unlabelled
+
+    markdown = (
+        "# A Title\n\n"
+        "Department of Physics, University of Wisconsin-Madison, Madison, "
+        "WI 53706-1390, USA, and Instituut-Lorentz for Theoretical Physics, "
+        "Universiteit Leiden, 2333 CA Leiden, The Netherlands. Correspondence "
+        "to author@example.edu for further information.\n\n"
+        "# 1 Introduction\n\nBody."
+    )
+    assert extract_abstract_unlabelled(markdown) is None
+
+
+def test_an_author_list_is_not_mistaken_for_an_abstract():
+    from app.services.metadata.extract import extract_abstract_unlabelled
+
+    markdown = (
+        "# A Title\n\n"
+        "Ada Lovelace, Alan Turing, Grace Hopper, John Von Neumann, Claude "
+        "Shannon, Donald Knuth, Barbara Liskov, Edsger Dijkstra, Alonzo "
+        "Church, Emmy Noether, Kurt Godel, David Hilbert.\n\n"
+        "# Introduction\n\nBody."
+    )
+    assert extract_abstract_unlabelled(markdown) is None
+
+
+def test_a_labelled_abstract_is_preferred_over_the_fallback(pdf_fixtures):
+    """The heading is the reliable signal; the fallback is for when it is absent."""
+    markdown = (
+        "# Title\n\nSome opening prose that runs on for a while and could "
+        "plausibly be mistaken for an abstract by a structural heuristic.\n\n"
+        "# Abstract\n\n" + ("The genuine abstract text. " * 8) + "\n\n"
+        "# 1 Introduction\n\nBody."
+    )
+    meta = extract_from_pdf(pdf_fixtures["with_identifiers.pdf"], parsed_text=markdown)
+    assert meta.abstract.startswith("The genuine abstract text")
+
+
+def test_a_paper_with_no_abstract_at_all_yields_none():
+    from app.services.metadata.extract import extract_abstract_unlabelled
+
+    assert (
+        extract_abstract_unlabelled("# Title\n\n# 1 Introduction\n\nStraight in.")
+        is None
+    )
+
+
+def test_the_fallback_stops_at_the_body():
+    """Without a stop it would return the introduction instead."""
+    from app.services.metadata.extract import extract_abstract_unlabelled
+
+    markdown = "# Title\n\n# Introduction\n\n" + (
+        "This is body prose that should never be returned. " * 8
+    )
+    assert extract_abstract_unlabelled(markdown) is None

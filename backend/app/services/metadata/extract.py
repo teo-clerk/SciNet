@@ -167,6 +167,73 @@ def extract_abstract(markdown: str) -> str | None:
     return cleaned[:MAX_ABSTRACT_CHARS]
 
 
+# Front matter that sits between the title and the abstract in preprints.
+AFFILIATION_RE = re.compile(
+    r"\b(universit|department|institut|laborator|academy|college|faculty|"
+    r"school of|centre for|center for|observator|@|e-?mail)\b",
+    re.IGNORECASE,
+)
+# Where the body starts, when nothing is labelled "abstract".
+BODY_START_RE = re.compile(
+    r"^#{0,6}\s*\**\s*(?:[IVX0-9]+[.\s]+)?(?:introduction|background|"
+    r"motivation|overview|preliminaries)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+SENTENCE_END_RE = re.compile(r"[.!?](?:\s|$)")
+MIN_ABSTRACT_SENTENCES = 2
+MAX_LEADING_PARAGRAPHS = 12
+
+
+def _looks_like_prose(paragraph: str) -> bool:
+    """Is this a paragraph of writing, or front matter?
+
+    Author lists, affiliations, report numbers and page markers all sit above
+    an unlabelled abstract, and each has a shape: short, heavy with proper
+    nouns, or naming an institution. Prose has sentences.
+    """
+    text = " ".join(paragraph.split())
+    if len(text) < MIN_ABSTRACT_CHARS:
+        return False
+    if AFFILIATION_RE.search(text):
+        return False
+    if len(SENTENCE_END_RE.findall(text)) < MIN_ABSTRACT_SENTENCES:
+        return False
+
+    words = [w for w in text.split() if w]
+    if not words:
+        return False
+    # An author list is mostly capitalised tokens; running prose is not.
+    capitalised = sum(1 for w in words if w[:1].isupper())
+    return capitalised / len(words) < 0.4
+
+
+def extract_abstract_unlabelled(markdown: str) -> str | None:
+    """Find an abstract that carries no heading.
+
+    Many preprints — physics ones especially — open with title, authors,
+    affiliation and then the abstract as a bare paragraph, with the first
+    heading appearing only at "Introduction". Requiring the word "Abstract"
+    missed 127 of 293 papers in a real corpus, and those papers were then
+    placed on the map using only their title and a generated summary.
+    """
+    if not markdown:
+        return None
+
+    # Everything before the body proper. Without a stop the search would run
+    # into the introduction and return that instead.
+    body = BODY_START_RE.search(markdown)
+    head = markdown[: body.start()] if body else markdown[:8000]
+
+    for paragraph in head.split("\n\n")[:MAX_LEADING_PARAGRAPHS]:
+        candidate = paragraph.strip()
+        # Headings are the title, not the abstract; blockquotes are addresses.
+        if candidate.startswith("#") or candidate.startswith(">"):
+            continue
+        if _looks_like_prose(candidate):
+            return " ".join(candidate.split())[:MAX_ABSTRACT_CHARS]
+    return None
+
+
 def extract_year(text: str, head_chars: int = HEAD_CHARS) -> int | None:
     years = [int(y) for y in re.findall(r"\b(19[89]\d|20[0-4]\d)\b", text[:head_chars])]
     # Latest plausible year on the front matter is the publication year far more
@@ -223,8 +290,14 @@ def extract_from_pdf(
         meta.year = year
         meta.field_sources["year"] = MetaSource.REGEX
 
-    if parsed_text and (abstract := extract_abstract(parsed_text)) is not None:
-        meta.abstract = abstract
-        meta.field_sources["abstract"] = MetaSource.HEURISTIC
+    if parsed_text:
+        # Prefer a labelled abstract; fall back to the shape of the front
+        # matter when the paper never uses the word.
+        abstract = extract_abstract(parsed_text) or extract_abstract_unlabelled(
+            parsed_text
+        )
+        if abstract is not None:
+            meta.abstract = abstract
+            meta.field_sources["abstract"] = MetaSource.HEURISTIC
 
     return meta

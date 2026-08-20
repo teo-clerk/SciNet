@@ -178,3 +178,50 @@ def test_streaming_a_pdf_enforces_the_same_guard(env):
     paper_id = add_paper(factory, str(outside))
 
     assert client.get(f"/api/papers/{paper_id}/pdf").status_code == 400
+
+
+# --- platform ------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("platform", "expected_head"),
+    [
+        ("linux", ["xdg-open"]),
+        ("darwin", ["open"]),
+        ("win32", ["cmd", "/c", "start", ""]),
+    ],
+)
+def test_the_open_command_matches_the_platform(monkeypatch, platform, expected_head):
+    """A friend on Windows should get a working button, not a 501."""
+    from pathlib import Path as _Path
+
+    from app.routers import papers
+
+    monkeypatch.setattr(papers.sys, "platform", platform)
+    command = papers._open_command(_Path("/tmp/paper.pdf"))
+
+    assert command[: len(expected_head)] == expected_head
+    assert command[-1] == "/tmp/paper.pdf"
+
+
+def test_windows_start_keeps_its_empty_title_argument(monkeypatch):
+    """Without it, `start` reads the path as a window title and opens nothing."""
+    from pathlib import Path as _Path
+
+    from app.routers import papers
+
+    monkeypatch.setattr(papers.sys, "platform", "win32")
+    assert papers._open_command(_Path("C:/papers/x.pdf"))[3] == ""
+
+
+def test_every_platform_uses_an_argument_vector(monkeypatch):
+    """A string would be parsed by a shell; a filename is untrusted input."""
+    from pathlib import Path as _Path
+
+    from app.routers import papers
+
+    for platform in ("linux", "darwin", "win32"):
+        monkeypatch.setattr(papers.sys, "platform", platform)
+        command = papers._open_command(_Path("/tmp/a; rm -rf ~.pdf"))
+        assert isinstance(command, list)
+        assert command[-1] == "/tmp/a; rm -rf ~.pdf"
