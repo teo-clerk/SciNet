@@ -49,8 +49,26 @@ def _converter():
 
 
 def unload() -> None:
-    """Release VRAM so the next stage's model can fit. Wired to the GPU slot."""
+    """Release VRAM so the next stage's model can fit.
+
+    Surya 2 runs inference in a *separate* llama-server process, so clearing
+    the Python-side cache frees almost nothing — the several GiB that matter
+    belong to that child. It has to be stopped explicitly, or it sits on the
+    card while the next stage tries to load a 5.5 GiB model onto the same
+    8 GiB device.
+    """
     _converter.cache_clear()
+
+    try:
+        from surya.inference import get_default_manager
+
+        manager = get_default_manager()
+        if manager is not None:
+            manager.stop()
+            logger.info("stopped the surya inference server")
+    except Exception as exc:  # noqa: BLE001 - never block the next stage
+        logger.debug("could not stop the surya server cleanly: %s", exc)
+
     try:
         import torch
 

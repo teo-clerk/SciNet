@@ -116,3 +116,43 @@ class GpuSlot:
 
 
 GPU = GpuSlot()
+
+
+def free_all_models() -> None:
+    """Unload every model this process may have put on the card.
+
+    Called between pipeline stages. The GpuSlot tracks *intent*; this is what
+    makes the card actually empty, because the models live in three different
+    places — an in-process torch cache, a spawned llama-server, and the private
+    Ollama instance — and only their own modules know how to release them.
+
+    Skipping it is not a slow path, it is an out-of-memory error: tier 1's
+    server holds ~3.2 GiB and the tagging model wants 5.5 GiB on an 8 GiB card.
+    """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+
+    try:
+        from app.services.parse import tier1_marker
+
+        tier1_marker.unload()
+    except Exception:  # noqa: BLE001
+        logger.debug("tier 1 unload skipped", exc_info=True)
+
+    try:
+        from app.core.model_store import PRIVATE_OLLAMA
+
+        for reference in (settings.vlm_model, settings.llm_model):
+            PRIVATE_OLLAMA.unload(reference)
+    except Exception:  # noqa: BLE001
+        logger.debug("ollama unload skipped", exc_info=True)
+
+    try:
+        from app.services.embed import encoder
+
+        encoder.unload()
+    except Exception:  # noqa: BLE001
+        logger.debug("encoder unload skipped", exc_info=True)
+
+    GPU.release()

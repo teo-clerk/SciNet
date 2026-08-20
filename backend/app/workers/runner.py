@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.db import session_scope
 from app.core.events import BROKER
-from app.core.gpu import GPU
+from app.core.gpu import free_all_models
 from app.core.model_store import configure_environment
 from app.models import PRIORITY, JobKind, PaperStatus
 from app.workers.handlers import HANDLERS
@@ -68,7 +68,7 @@ class Worker:
             if self.drain_one_pass() == 0:
                 time.sleep(IDLE_SLEEP_SECONDS)
 
-        GPU.release()
+        free_all_models()
         logger.info("worker stopped")
 
     def drain_one_pass(self) -> int:
@@ -79,9 +79,10 @@ class Worker:
                 break
             drained = self.drain_stage(kind)
             if drained:
-                # The stage's model is no longer needed; free the card before
-                # the next stage tries to load its own.
-                GPU.release()
+                # The stage's model is no longer needed; empty the card before
+                # the next stage tries to load its own. Three different runtimes
+                # may be holding memory, so this is not a no-op.
+                free_all_models()
                 done += drained
         return done
 
