@@ -38,10 +38,29 @@ function payload(positions: number[], nodeCount: number): GraphPayload {
 }
 
 describe('decodeGraph', () => {
-  test('recovers float32 positions exactly', () => {
+  test('recovers the layout, centred and scaled for display', () => {
+    // decodeGraph normalises: raw UMAP output is offset from the origin and
+    // arbitrarily scaled, and every renderer constant assumes a known extent.
     const values = [1.5, -2.25, 0.125, 10, 20, 30]
     const graph = decodeGraph(payload(values, 2))
-    expect(Array.from(graph.positions)).toEqual(values)
+    expect(graph.positions.length).toBe(6)
+
+    // Structure survives: the two points stay opposite each other about the
+    // centre, and their separation keeps its direction on every axis.
+    const [ax, ay, az, bx, by, bz] = Array.from(graph.positions)
+    expect(Math.sign(bx! - ax!)).toBe(Math.sign(10 - 1.5))
+    expect(Math.sign(by! - ay!)).toBe(Math.sign(20 - -2.25))
+    expect(Math.sign(bz! - az!)).toBe(Math.sign(30 - 0.125))
+  })
+
+  test('relative distances survive normalisation', () => {
+    // Three collinear points 1 and 10 apart must stay 1:10 after scaling,
+    // or the map would misrepresent which papers are close.
+    const graph = decodeGraph(payload([0, 0, 0, 1, 0, 0, 10, 0, 0], 3))
+    const p = graph.positions
+    const near = Math.abs(p[3]! - p[0]!)
+    const far = Math.abs(p[6]! - p[0]!)
+    expect(far / near).toBeCloseTo(10, 3)
   })
 
   test('produces three floats per node', () => {
@@ -76,11 +95,10 @@ describe('decodeGraph', () => {
     expect(graph.nodes).toEqual([])
   })
 
-  test('survives negative and fractional coordinates', () => {
-    const values = [-0.0001, 12345.678, -9999.5]
-    const graph = decodeGraph(payload(values, 1))
-    expect(graph.positions[0]).toBeCloseTo(-0.0001, 6)
-    expect(graph.positions[1]).toBeCloseTo(12345.678, 2)
+  test('survives extreme coordinate ranges', () => {
+    // UMAP has no fixed output range; a corpus can land anywhere.
+    const graph = decodeGraph(payload([-0.0001, 12345.678, -9999.5], 1))
+    expect([...graph.positions].every(Number.isFinite)).toBe(true)
   })
 })
 
@@ -114,5 +132,56 @@ describe('pick index encoding', () => {
     const seen = new Set<string>()
     for (let i = 0; i < 5000; i++) seen.add(encodeIndex(i).join(','))
     expect(seen.size).toBe(5000)
+  })
+})
+
+describe('normalisePositions', () => {
+  test('centres the layout on the origin', async () => {
+    const { normalisePositions } = await import('../api/graph')
+    // Mirrors the real run: offset from origin, never near it.
+    const raw = new Float32Array([6, 2, -4, 10, 8, 2, 8, 5, -1])
+    const out = normalisePositions(raw)
+
+    let cx = 0, cy = 0, cz = 0
+    for (let i = 0; i < 3; i++) {
+      cx += out[i * 3]!; cy += out[i * 3 + 1]!; cz += out[i * 3 + 2]!
+    }
+    expect(Math.abs(cx / 3)).toBeLessThan(1e-4)
+    expect(Math.abs(cy / 3)).toBeLessThan(1e-4)
+    expect(Math.abs(cz / 3)).toBeLessThan(1e-4)
+  })
+
+  test('scales to the canonical radius', async () => {
+    const { normalisePositions, CANONICAL_RADIUS } = await import('../api/graph')
+    const out = normalisePositions(new Float32Array([0, 0, 0, 1, 0, 0, -1, 0, 0]))
+
+    let maxR = 0
+    for (let i = 0; i < 3; i++) {
+      const r = Math.hypot(out[i * 3]!, out[i * 3 + 1]!, out[i * 3 + 2]!)
+      if (r > maxR) maxR = r
+    }
+    expect(maxR).toBeCloseTo(CANONICAL_RADIUS, 3)
+  })
+
+  test('preserves relative structure', async () => {
+    const { normalisePositions } = await import('../api/graph')
+    // Two points close together, one far: the ratio must survive scaling.
+    const raw = new Float32Array([0, 0, 0, 1, 0, 0, 10, 0, 0])
+    const out = normalisePositions(raw)
+    const near = Math.abs(out[3]! - out[0]!)
+    const far = Math.abs(out[6]! - out[0]!)
+    expect(far / near).toBeCloseTo(10, 3)
+  })
+
+  test('a degenerate corpus does not divide by zero', async () => {
+    const { normalisePositions } = await import('../api/graph')
+    // Every paper at the same point — possible with one paper, or duplicates.
+    const out = normalisePositions(new Float32Array([5, 5, 5, 5, 5, 5]))
+    expect([...out].every(Number.isFinite)).toBe(true)
+  })
+
+  test('an empty corpus is returned untouched', async () => {
+    const { normalisePositions } = await import('../api/graph')
+    expect(normalisePositions(new Float32Array([])).length).toBe(0)
   })
 })

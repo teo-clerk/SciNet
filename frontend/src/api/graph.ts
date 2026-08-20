@@ -53,14 +53,70 @@ function base64ToFloat32(encoded: string): Float32Array {
   return new Float32Array(bytes.buffer, 0, bytes.length / 4)
 }
 
+/** Radius the map is normalised to, so camera, fog and point sizes stay tuned. */
+export const CANONICAL_RADIUS = 40
+/** Share of papers that must fall inside CANONICAL_RADIUS. */
+const BULK_PERCENTILE = 0.9
+
+/**
+ * Centre the layout on the origin and scale it to a known size.
+ *
+ * UMAP emits whatever range it likes — a real 293-paper run came out spanning
+ * x[6.1, 9.8], y[1.9, 8.1], nowhere near the origin the camera points at, and
+ * small enough to be a speck at the default distance. Every tuned constant in
+ * the renderer (camera distance, fog near/far, point size, label offsets)
+ * assumes a corpus of roughly known extent, so the normalisation happens once
+ * here rather than being compensated for in five places.
+ *
+ * This is display-only. The stored coordinates stay exactly as fitted, because
+ * Procrustes alignment across refits depends on them.
+ */
+export function normalisePositions(positions: Float32Array): Float32Array {
+  const n = positions.length / 3
+  if (n === 0) return positions
+
+  let cx = 0, cy = 0, cz = 0
+  for (let i = 0; i < n; i++) {
+    cx += positions[i * 3]!
+    cy += positions[i * 3 + 1]!
+    cz += positions[i * 3 + 2]!
+  }
+  cx /= n; cy /= n; cz /= n
+
+  // Scale by a high percentile rather than the maximum. UMAP routinely strands
+  // a few papers far from the bulk, and normalising by the furthest one shrinks
+  // the whole corpus into a speck to make room for three outliers. The tail is
+  // allowed to fall outside the canonical radius; the camera still frames what
+  // the viewer came to look at.
+  const radii = new Float64Array(n)
+  for (let i = 0; i < n; i++) {
+    const dx = positions[i * 3]! - cx
+    const dy = positions[i * 3 + 1]! - cy
+    const dz = positions[i * 3 + 2]! - cz
+    radii[i] = Math.sqrt(dx * dx + dy * dy + dz * dz)
+  }
+  const sorted = Float64Array.from(radii).sort()
+  const reference = sorted[Math.min(n - 1, Math.floor(n * BULK_PERCENTILE))] ?? 0
+  const scale = reference > 1e-6 ? CANONICAL_RADIUS / reference : 1
+
+  const out = new Float32Array(positions.length)
+  for (let i = 0; i < n; i++) {
+    out[i * 3] = (positions[i * 3]! - cx) * scale
+    out[i * 3 + 1] = (positions[i * 3 + 1]! - cy) * scale
+    out[i * 3 + 2] = (positions[i * 3 + 2]! - cz) * scale
+  }
+  return out
+}
+
 export function decodeGraph(payload: GraphPayload): DecodedGraph {
-  const positions = base64ToFloat32(payload.positions_f32)
-  if (positions.length !== payload.count * 3) {
+  const raw = base64ToFloat32(payload.positions_f32)
+  if (raw.length !== payload.count * 3) {
     throw new Error(
-      `graph payload is inconsistent: ${positions.length / 3} positions for ` +
+      `graph payload is inconsistent: ${raw.length / 3} positions for ` +
         `${payload.count} nodes`,
     )
   }
+  const positions = normalisePositions(raw)
   return {
     runId: payload.run_id,
     method: payload.method,

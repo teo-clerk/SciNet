@@ -58,7 +58,16 @@ body {
 }
 .filter-bar button:hover { color: var(--fg); }
 .filter-bar button.active { background: var(--accent); color: #06121f; border-color: var(--accent); }
-.filter-bar .tags { display: flex; gap: 4px; flex-wrap: wrap; max-width: 46vw; overflow: hidden; }
+/* 51 tags wrapped freely consumed a third of the screen. Cap it and scroll. */
+.filter-bar .tags {
+  display: flex; gap: 4px; flex-wrap: wrap;
+  max-width: 46vw; max-height: 52px; overflow-y: auto;
+  padding-right: 4px;
+}
+.filter-bar .tags::-webkit-scrollbar { width: 6px; }
+.filter-bar .tags::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.14); border-radius: 3px;
+}
 .filter-bar .tag { font-size: 11px; padding: 3px 7px; }
 .filter-bar .count.active { color: var(--accent); }
 

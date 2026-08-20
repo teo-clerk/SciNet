@@ -14,7 +14,16 @@ import * as THREE from 'three'
 
 import { useGraphStore } from '@/state/graphStore'
 
-const MAX_TITLE_LABELS = 40
+const MAX_TITLE_LABELS = 24
+/**
+ * Titles appear only once the camera is close enough for them to be readable.
+ *
+ * Pulled back over the whole corpus they are unreadable overlapping mush that
+ * hides the clusters, and each one is a draw call — the render gate measured a
+ * p95 of 29.5 ms with them always on, against a 16.7 ms budget. Cluster names
+ * carry the overview; titles are for when you have arrived somewhere.
+ */
+const TITLE_VISIBLE_DISTANCE = 55
 const RECOMPUTE_INTERVAL_MS = 180
 const MAX_LABEL_CHARS = 46
 
@@ -45,6 +54,15 @@ export function TitleLabels() {
 
     // A point in front of the camera, not the camera itself: labels should
     // follow where the viewer is looking, not cling to the near plane.
+    // Nothing is readable from across the corpus, so do not pay for it.
+    if (camera.position.length() > TITLE_VISIBLE_DISTANCE) {
+      if (shown.current.length) {
+        shown.current = []
+        setVisible([])
+      }
+      return
+    }
+
     camera.getWorldDirection(focus)
     focus.multiplyScalar(30).add(camera.position)
 
