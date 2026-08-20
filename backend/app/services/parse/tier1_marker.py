@@ -15,6 +15,8 @@ it sits behind the same ``Parser`` protocol as everything else, so Docling
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
 from functools import lru_cache
 from pathlib import Path
 
@@ -86,14 +88,45 @@ def available() -> bool:
     return True
 
 
+class Tier1Timeout(TimeoutError):
+    """Tier 1 exceeded its wall-clock budget for one document."""
+
+
+def _convert(path: str) -> str:
+    from marker.output import text_from_rendered
+
+    rendered = _converter()(path)
+    markdown, _metadata, _images = text_from_rendered(rendered)
+    return markdown
+
+
 def parse(path: Path | str) -> ParseResult:
     try:
-        from marker.output import text_from_rendered
+        import marker.output  # noqa: F401
     except ImportError as exc:
         raise ParserUnavailable("marker-pdf is not installed") from exc
 
-    rendered = _converter()(str(path))
-    markdown, _metadata, _images = text_from_rendered(rendered)
+    settings = get_settings()
+    budget = settings.tier1_timeout_seconds * settings.tier1_calls_per_document
+
+    # SURYA_INFERENCE_TIMEOUT_SECONDS bounds a single inference call, but Marker
+    # issues several per document (layout, recognition, tables), so per-call
+    # limits do not bound the document. A degenerate page can therefore still
+    # occupy the GPU for many minutes under a 90 s per-call limit. This is the
+    # bound that actually holds.
+    #
+    # The worker thread is left running rather than killed — Python cannot
+    # interrupt a blocking C call — but it is a daemon, and the router treats
+    # the timeout as "fall through", so the paper still gets read by tier 2.
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="tier1") as pool:
+        future = pool.submit(_convert, str(path))
+        try:
+            markdown = future.result(timeout=budget)
+        except FuturesTimeout as exc:
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise Tier1Timeout(
+                f"tier 1 exceeded its {budget:.0f}s budget on {Path(path).name}"
+            ) from exc
 
     import pymupdf
 

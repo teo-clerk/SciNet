@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     #: page. Exceeding this raises, and the router falls through to tier 2.
     tier1_timeout_seconds: int = 90
     tier1_max_layout_tokens: int = 3072
+    #: Marker issues several inference calls per document (layout, recognition,
+    #: tables), so the per-call limit above does not bound a document. The
+    #: wall-clock budget for one document is this many times that limit.
+    tier1_calls_per_document: int = 3
 
     #: Vulkan device for tier 1's llama.cpp server. Empty means "let llama.cpp
     #: choose", which on hybrid-graphics machines picks the integrated GPU.

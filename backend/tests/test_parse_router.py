@@ -240,3 +240,29 @@ def test_outcome_reports_why_it_escalated(tmp_path):
     )
     assert "insufficient_text" in outcome.escalation_reasons
     assert outcome.report.passed, "the kept output is fine; only tier 0 was not"
+
+
+# --- tier 1 wall-clock budget --------------------------------------------
+
+def test_a_tier1_timeout_falls_through_to_tier2(tmp_path):
+    """A per-call limit does not bound a document; this is what does."""
+    from app.services.parse.tier1_marker import Tier1Timeout
+
+    calls = []
+
+    def slow(_p):
+        calls.append(1)
+        raise Tier1Timeout("exceeded its 270s budget")
+
+    outcome = parse_with_escalation(
+        tmp_path / "p.pdf",
+        tier0=lambda p: result(0),
+        tier1=slow,
+        tier2=lambda p: result(2, "rescued by tier 2"),
+        probe=probe_of,
+        assess=bad,
+        assess_markdown=lambda md, pages: good(),
+    )
+    assert outcome.result.tier == 2, "a stalled tier 1 must not lose the paper"
+    assert any("tier1_error" in n for n in outcome.notes)
+    assert calls == [1]
