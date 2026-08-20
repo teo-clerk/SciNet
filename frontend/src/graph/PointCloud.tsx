@@ -88,9 +88,19 @@ export function PointCloud() {
     const sizes = g.getAttribute('aSize') as THREE.BufferAttribute
     const sizeArr = sizes.array as Float32Array
 
-    const years = nodes.map((n) => n.year).filter((y): y is number => y !== null)
-    const minYear = years.length ? Math.min(...years) : 0
-    const maxYear = years.length ? Math.max(...years) : 1
+    // A loop rather than Math.min(...years): spreading an array past ~65k
+    // elements exceeds the argument limit and throws.
+    let minYear = Number.POSITIVE_INFINITY
+    let maxYear = Number.NEGATIVE_INFINITY
+    for (const node of nodes) {
+      if (node.year === null) continue
+      if (node.year < minYear) minYear = node.year
+      if (node.year > maxYear) maxYear = node.year
+    }
+    if (!Number.isFinite(minYear)) {
+      minYear = 0
+      maxYear = 1
+    }
 
     nodes.forEach((node, i) => {
       let rgb: [number, number, number]

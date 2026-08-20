@@ -35,6 +35,7 @@ export function TitleLabels() {
   const { camera } = useThree()
   const [visible, setVisible] = useState<number[]>([])
   const lastRun = useRef(0)
+  const shown = useRef<number[]>([])
   const focus = useMemo(() => new THREE.Vector3(), [])
 
   useFrame(() => {
@@ -57,10 +58,22 @@ export function TitleLabels() {
     }
     scored.sort((a, b) => a[1] - b[1])
 
-    const chosen = new Set(scored.slice(0, MAX_TITLE_LABELS).map(([i]) => i))
-    if (hoveredIndex !== null) chosen.add(hoveredIndex)
-    if (selectedIndex !== null) chosen.add(selectedIndex)
-    setVisible([...chosen])
+    const chosen = scored.slice(0, MAX_TITLE_LABELS).map(([i]) => i)
+    if (hoveredIndex !== null && !chosen.includes(hoveredIndex)) chosen.push(hoveredIndex)
+    if (selectedIndex !== null && !chosen.includes(selectedIndex)) chosen.push(selectedIndex)
+    chosen.sort((a, b) => a - b)
+
+    // Committing an identical set would re-render every troika Text five times
+    // a second for nothing, which is exactly the cost this component exists to
+    // avoid. Only publish a genuine change.
+    const previous = shown.current
+    if (
+      previous.length !== chosen.length ||
+      chosen.some((index, i) => previous[i] !== index)
+    ) {
+      shown.current = chosen
+      setVisible(chosen)
+    }
   })
 
   if (!buffers) return null

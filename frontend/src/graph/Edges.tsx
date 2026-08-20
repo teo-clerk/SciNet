@@ -9,7 +9,7 @@
  * They are deliberately *not* the nearest nodes on screen: UMAP distorts global
  * distance, so the two answers differ, and only the embedding one is true.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 
 import { fetchNeighbours, type Neighbour } from '@/api/graph'
@@ -40,6 +40,18 @@ export function Edges() {
     }
   }, [selectedIndex, nodes])
 
+  const previous = useRef<THREE.BufferGeometry | null>(null)
+
+  // Each selection builds a fresh geometry; without this the old ones leak
+  // their GPU buffers for the lifetime of the session.
+  useEffect(
+    () => () => {
+      previous.current?.dispose()
+      previous.current = null
+    },
+    [],
+  )
+
   const geometry = useMemo(() => {
     if (selectedIndex === null || !buffers || neighbours.length === 0) return null
 
@@ -63,8 +75,10 @@ export function Edges() {
     }
     if (points.length === 0) return null
 
+    previous.current?.dispose()
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.Float32BufferAttribute(points, 3))
+    previous.current = g
     return g
   }, [selectedIndex, neighbours, buffers, nodes])
 
