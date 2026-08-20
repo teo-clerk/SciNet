@@ -36,6 +36,24 @@ NAME_SCHEMA = {
 }
 
 
+def sample_titles(titles: list[str], limit: int = SAMPLE_TITLES) -> list[str]:
+    """Take titles spread evenly across the cluster, not the first few.
+
+    Papers are numbered in registration order, which in a library organised on
+    disk means alphabetical — so the first N members of a cluster are very
+    likely to share a filename prefix and therefore a topic. Naming an
+    88-paper region from its first twelve titles produced
+    "Astrophysics and Cosmology" for a cluster that was two thirds climate and
+    earth science: the model described exactly what it was shown, and what it
+    was shown was one corner.
+    """
+    usable = [t for t in titles if t and t.strip()]
+    if len(usable) <= limit:
+        return usable
+    step = len(usable) / limit
+    return [usable[int(i * step)] for i in range(limit)]
+
+
 def build_prompt(terms: list[str], titles: list[str]) -> str:
     return "\n".join(
         [
@@ -45,7 +63,7 @@ def build_prompt(terms: list[str], titles: list[str]) -> str:
             "Most distinctive words: " + (", ".join(terms[:12]) or "(none)"),
             "",
             "Sample titles:",
-            *[f"- {t}" for t in titles[:SAMPLE_TITLES] if t],
+            *[f"- {t}" for t in sample_titles(titles)],
             "",
             f"Reply with a topic name of at most {MAX_NAME_WORDS} words, in "
             "title case, that a researcher would recognise as a field or "
@@ -90,7 +108,12 @@ def name_cluster(
         if owned:
             http.close()
 
-    return clean_name(parsed.get("name"))
+    name = clean_name(parsed.get("name"))
+    if name and parsed.get("confident") is False:
+        # The model was asked to flag a region it could not characterise. Taking
+        # it at its word beats printing a confident label over a mixed cluster.
+        logger.info("cluster name %r reported as low confidence", name)
+    return name
 
 
 def clean_name(raw: object) -> str | None:

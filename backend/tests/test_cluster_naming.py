@@ -118,3 +118,51 @@ def test_a_good_answer_is_returned(monkeypatch):
     assert name_cluster(["exoplanet"], ["A Title"], client=Client()) == (
         "Exoplanet Atmospheres"
     )
+
+
+# --- representative sampling ----------------------------------------------
+
+def test_titles_are_sampled_across_the_cluster_not_from_the_front():
+    """The bug this guards against mislabelled a real 88-paper region.
+
+    Papers are numbered in registration order, which on disk means
+    alphabetical, so a cluster's first members share a filename prefix and
+    therefore a topic. Naming from the head produced "Astrophysics and
+    Cosmology" for a cluster that was two thirds climate and earth science.
+    """
+    from app.services.project.naming import sample_titles
+
+    titles = [f"Astro {i}" for i in range(30)] + [f"Climate {i}" for i in range(30)]
+    chosen = sample_titles(titles, limit=12)
+
+    assert any(t.startswith("Climate") for t in chosen), (
+        "sampling never reached the second half of the cluster"
+    )
+    assert any(t.startswith("Astro") for t in chosen)
+
+
+def test_sampling_returns_everything_for_a_small_cluster():
+    from app.services.project.naming import sample_titles
+
+    titles = ["a", "b", "c"]
+    assert sample_titles(titles, limit=12) == titles
+
+
+def test_sampling_drops_blank_titles():
+    from app.services.project.naming import sample_titles
+
+    assert sample_titles(["", "   ", "Real Title"], limit=12) == ["Real Title"]
+
+
+def test_sampling_is_bounded():
+    from app.services.project.naming import sample_titles
+
+    assert len(sample_titles([f"t{i}" for i in range(500)], limit=12)) == 12
+
+
+def test_sampling_covers_the_whole_range():
+    from app.services.project.naming import sample_titles
+
+    chosen = sample_titles([str(i) for i in range(100)], limit=10)
+    assert int(chosen[0]) < 10, "should start near the beginning"
+    assert int(chosen[-1]) > 80, "should reach the end"

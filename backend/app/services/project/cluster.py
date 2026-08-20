@@ -19,8 +19,26 @@ logger = logging.getLogger(__name__)
 
 CLUSTER_UMAP_COMPONENTS = 10
 MIN_CLUSTER_SIZE = 8
+#: A cluster should be a recognisable region of the library, not a handful of
+#: papers, so the floor scales with the corpus — capped, because past a few
+#: thousand papers the useful number of regions stops growing with the count.
+MAX_MIN_CLUSTER_SIZE = 25
+ROWS_PER_CLUSTER_FLOOR = 25
 MIN_ROWS_TO_CLUSTER = 30
 NOISE_LABEL = -1
+
+#: Excess-of-mass, HDBSCAN's default. "leaf" scored better on one real corpus
+#: (ARI 0.681 against 0.561) and was briefly adopted for it — but tested across
+#: corpus sizes it degrades badly on clean data, from ARI 0.670 at 75 rows to
+#: 0.237 at 300, while eom stays exact at every size. The apparent win was
+#: overfitting to a single library.
+#:
+#: What eom does do is merge genuinely adjacent fields: on that corpus it put
+#: astrophysics, climate science and earth science in one region. That is a
+#: defensible reading of the semantics rather than an error — those fields
+#: share most of their vocabulary — and the actual defect it exposed was in
+#: naming, which described the region from an unrepresentative sample of it.
+CLUSTER_SELECTION_METHOD = "eom"
 
 
 @dataclass
@@ -66,11 +84,18 @@ def cluster_embeddings(
     )
     dense = reducer.fit_transform(matrix)
 
+    floor = max(
+        min_cluster_size, min(MAX_MIN_CLUSTER_SIZE, rows // ROWS_PER_CLUSTER_FLOOR)
+    )
     clusterer = hdbscan.HDBSCAN(
-        min_cluster_size=max(2, min(min_cluster_size, rows // 4)),
+        min_cluster_size=max(2, min(floor, rows // 4)),
+        # min_samples=1 keeps the mutual-reachability smoothing minimal. Raising
+        # it was measured to be strictly worse here: with eom it collapsed the
+        # corpus to four clusters, and with leaf it discarded up to a quarter of
+        # the library as noise.
         min_samples=1,
         metric="euclidean",
-        cluster_selection_method="eom",
+        cluster_selection_method=CLUSTER_SELECTION_METHOD,
     )
     labels = clusterer.fit_predict(dense)
 
