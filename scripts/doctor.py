@@ -39,10 +39,15 @@ def main() -> int:
     settings = get_settings()
 
     vram = detected_vram_mib()
-    print(f"GPU VRAM      : {vram} MiB" if vram else "GPU VRAM      : no NVIDIA GPU found")
+    print(
+        f"GPU VRAM      : {vram} MiB"
+        if vram
+        else "GPU VRAM      : no NVIDIA GPU found"
+    )
     print(f"library       : {settings.library_dir}")
     print(f"database      : {settings.db_path}")
-    print(f"enrichment    : {'ON' if settings.enrichment_enabled else 'off (local only)'}")
+    egress = "ON" if settings.enrichment_enabled else "off (local only)"
+    print(f"enrichment    : {egress}")
     print()
 
     statuses = check_models(settings, total_vram_mib=vram or 0)

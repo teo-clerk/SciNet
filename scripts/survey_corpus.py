@@ -37,7 +37,9 @@ TIER2_MS_PER_PAGE = 8900
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("root", nargs="?", type=Path, default=get_settings().library_dir)
+    parser.add_argument(
+        "root", nargs="?", type=Path, default=get_settings().library_dir
+    )
     parser.add_argument("--sample", type=int, help="probe a random subset")
     parser.add_argument("--verbose", action="store_true", help="list every escalation")
     parser.add_argument("--seed", type=int, default=17)
@@ -119,7 +121,8 @@ def main() -> int:
     if reasons:
         print("\nwhy papers escalate")
         for reason, count in reasons.most_common():
-            print(f"  {reason:<26} {count:>5}  ({100 * count / escalating:.1f}% of them)")
+            share = 100 * count / escalating
+            print(f"  {reason:<26} {count:>5}  ({share:.1f}% of them)")
 
     print("\nprojected ingestion cost for this corpus")
     t0_h = sum(pages_pass) * TIER0_MS_PER_PAGE / 1000 / 3600

@@ -101,8 +101,10 @@ frontend/src/
 cd backend && uv run pytest                     # tests
 cd backend && uv run python -m app.workers.runner   # worker
 cd backend && uv run python ../scripts/backfill.py  # bulk import
+cd frontend && bun test                          # frontend unit tests
 bun scripts/verify_render.mjs http://localhost:5173  # 3D render gate
-cd backend && uv run ruff check . && uv run ruff format --check .
+cd backend && uv run python ../scripts/eval_clustering.py  # cluster quality
+cd backend && uv run ruff check . ../scripts && uv run ruff format --check . ../scripts
 cd backend && uv run alembic revision --autogenerate -m "..."
 cd backend && uv run alembic upgrade head
 cd frontend && bun run typecheck

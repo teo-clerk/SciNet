@@ -7,7 +7,7 @@ from there, so a checkout carries its models with it.
 
     uv run python ../scripts/download_models.py            # download what is missing
     uv run python ../scripts/download_models.py --measure  # download, then measure VRAM
-    uv run python ../scripts/download_models.py --check    # report only, download nothing
+    uv run python ../scripts/download_models.py --check    # report only
     uv run python ../scripts/download_models.py --role vision
 
 ``--measure`` is the interesting mode. Download size does not predict resident
@@ -197,7 +197,9 @@ def main() -> int:
             ok = False
         else:
             try:
-                provision_llamacpp(settings, on_progress=lambda m: print(f"  [bin]     {m}"))
+                provision_llamacpp(
+                    settings, on_progress=lambda m: print(f"  [bin]     {m}")
+                )
             except Exception as exc:  # noqa: BLE001
                 print(f"  [fail]    llama-server: {exc}")
                 ok = False
