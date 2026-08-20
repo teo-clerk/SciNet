@@ -200,3 +200,77 @@ def test_emphasis_inside_a_title_is_unwrapped_not_deleted():
     from app.services.metadata.extract import strip_markdown
 
     assert strip_markdown("The **Fast** Algorithm") == "The Fast Algorithm"
+
+
+# --- abstracts ------------------------------------------------------------
+
+ABSTRACT_MD = """# A Paper About Things
+
+Ada Lovelace, Alan Turing
+
+# ABSTRACT
+
+We investigate the effects of neutrino heating on the dynamics of a spherical
+accretion shock, and show that the resulting instability is suppressed at high
+luminosity across the parameter range we consider.
+
+# 1 Introduction
+
+Something else entirely that must not end up in the abstract.
+"""
+
+
+def test_the_abstract_is_pulled_from_the_markdown():
+    """The most informative field for placing a paper, and it was being dropped."""
+    from app.services.metadata.extract import extract_abstract
+
+    abstract = extract_abstract(ABSTRACT_MD)
+    assert abstract is not None
+    assert "neutrino heating" in abstract
+    assert "Something else entirely" not in abstract, "ran past the next heading"
+
+
+def test_the_abstract_survives_varied_heading_styles():
+    from app.services.metadata.extract import extract_abstract
+
+    body = " ".join(["Substantive abstract text here."] * 8)
+    for heading in ("# Abstract", "## ABSTRACT", "### **Abstract**", "# Abstract."):
+        markdown = f"{heading}\n\n{body}\n\n# Introduction\n\nOther."
+        assert extract_abstract(markdown) is not None, heading
+
+
+def test_no_abstract_heading_yields_none():
+    from app.services.metadata.extract import extract_abstract
+
+    assert extract_abstract("# Introduction\n\nNo abstract in this paper.") is None
+
+
+def test_a_stub_abstract_is_rejected():
+    """A heading followed by nothing is not an abstract."""
+    from app.services.metadata.extract import extract_abstract
+
+    assert extract_abstract("# Abstract\n\nTBD.\n\n# Introduction\n\nx") is None
+
+
+def test_the_abstract_is_length_capped():
+    from app.services.metadata.extract import extract_abstract
+
+    markdown = "# Abstract\n\n" + ("word " * 20000)
+    assert len(extract_abstract(markdown)) <= 4000
+
+
+def test_whitespace_is_normalised():
+    from app.services.metadata.extract import extract_abstract
+
+    body = "Line one of the abstract.\nLine two continues it.\n\n" * 4
+    assert "\n" not in (extract_abstract(f"# Abstract\n\n{body}\n# Next\n") or "")
+
+
+def test_extraction_records_the_abstract_source(pdf_fixtures):
+    from app.models import MetaSource
+
+    meta = extract_from_pdf(
+        pdf_fixtures["with_identifiers.pdf"], parsed_text=ABSTRACT_MD
+    )
+    assert meta.abstract is not None
+    assert meta.field_sources["abstract"] == MetaSource.HEURISTIC

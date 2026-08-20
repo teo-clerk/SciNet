@@ -169,7 +169,14 @@ export interface PaperDetail {
   arxiv_id: string | null
   status: string
   page_count: number | null
+  tags: string[]
   parse: { tier: number; parser: string; quality_score: number | null } | null
+  cluster_name: string | null
+  /** HDBSCAN membership strength, 0..1. */
+  cluster_confidence: number | null
+  /** Distance from the fitted manifold; ~1 is typical. */
+  manifold_drift: number | null
+  provisional: boolean
 }
 
 /** Fetched per node on click — never for the whole corpus. */

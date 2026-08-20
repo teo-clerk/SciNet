@@ -128,6 +128,45 @@ def guess_title(text: str) -> str | None:
     return None
 
 
+ABSTRACT_HEADING_RE = re.compile(
+    r"^#{1,6}\s*\**\s*abstract\b.*$", re.IGNORECASE | re.MULTILINE
+)
+NEXT_HEADING_RE = re.compile(r"^#{1,6}\s+\S", re.MULTILINE)
+MIN_ABSTRACT_CHARS = 120
+MAX_ABSTRACT_CHARS = 4000
+
+
+def extract_abstract(markdown: str) -> str | None:
+    """Pull the abstract out of the parsed Markdown.
+
+    The abstract is the single most informative field for placing a paper on
+    the map — it is what the author wrote to say what the work is about — and
+    it was being left on the floor: the field existed but nothing ever filled
+    it, so every document vector was built from a title, a generated summary
+    and a list of section headings.
+
+    Found by heading rather than by position, because front matter varies
+    wildly: author lists, affiliations and preprint stamps all sit above it in
+    unpredictable amounts.
+    """
+    if not markdown:
+        return None
+
+    match = ABSTRACT_HEADING_RE.search(markdown)
+    if match is None:
+        return None
+
+    rest = markdown[match.end() :]
+    # The abstract runs until the next heading of any level.
+    following = NEXT_HEADING_RE.search(rest)
+    body = rest[: following.start()] if following else rest
+
+    cleaned = " ".join(body.split())
+    if len(cleaned) < MIN_ABSTRACT_CHARS:
+        return None
+    return cleaned[:MAX_ABSTRACT_CHARS]
+
+
 def extract_year(text: str, head_chars: int = HEAD_CHARS) -> int | None:
     years = [int(y) for y in re.findall(r"\b(19[89]\d|20[0-4]\d)\b", text[:head_chars])]
     # Latest plausible year on the front matter is the publication year far more
@@ -183,5 +222,9 @@ def extract_from_pdf(
     if (year := extract_year(identifier_text)) is not None:
         meta.year = year
         meta.field_sources["year"] = MetaSource.REGEX
+
+    if parsed_text and (abstract := extract_abstract(parsed_text)) is not None:
+        meta.abstract = abstract
+        meta.field_sources["abstract"] = MetaSource.HEURISTIC
 
     return meta

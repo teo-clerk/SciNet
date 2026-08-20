@@ -3,26 +3,48 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
+from app.core.events import BROKER
 from app.core.paths import UnsafePathError, resolve_within
-from app.models import MarkdownDoc, Paper, PaperMeta
+from app.models import (
+    Cluster,
+    MarkdownDoc,
+    Paper,
+    PaperMeta,
+    PaperTag,
+    Projection,
+    ProjectionRun,
+    Tag,
+)
 from app.schemas.paper import (
     PaperDetail,
     PaperPage,
     PaperSummary,
     ParseInfo,
+    UploadAccepted,
+    UploadRejected,
+    UploadResponse,
 )
+from app.services.ingest.registrar import register_pdf
 
 router = APIRouter(prefix="/api/papers", tags=["papers"])
+
+#: Refused above this size. A scientific PDF is rarely past 100 MB, and the
+#: upload is streamed to disk, so this guards against a mistake rather than a
+#: memory limit.
+MAX_UPLOAD_BYTES = 512 * 1024 * 1024
+UPLOAD_CHUNK = 1024 * 1024
+PDF_MAGIC = b"%PDF-"
 
 
 def _authors(meta: PaperMeta | None) -> list[str]:
@@ -76,6 +98,114 @@ def list_papers(
     )
 
 
+def _safe_destination(filename: str, library: Path) -> Path:
+    """A collision-free path inside the library for an uploaded file.
+
+    The client-supplied filename is reduced to its last component and stripped
+    of anything but a conservative character set: it arrives over HTTP and must
+    never be able to steer where the file lands.
+    """
+    stem = Path(filename or "upload.pdf").name
+    cleaned = re.sub(r"[^A-Za-z0-9._-]", "_", stem).lstrip(".") or "upload.pdf"
+    if not cleaned.lower().endswith(".pdf"):
+        cleaned += ".pdf"
+
+    candidate = library / cleaned
+    # Never overwrite. Two papers can legitimately share a filename, and
+    # content-level deduplication happens later against the file's hash.
+    counter = 1
+    while candidate.exists():
+        candidate = library / f"{Path(cleaned).stem}({counter}).pdf"
+        counter += 1
+    return resolve_within(candidate, library)
+
+
+@router.post("/upload", response_model=UploadResponse)
+async def upload_papers(
+    files: list[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> UploadResponse:
+    """Copy PDFs into the library and queue them.
+
+    Streamed to disk in chunks rather than read into memory: this is built for
+    dropping a few thousand papers in at once, and buffering those would be a
+    memory limit disguised as a feature.
+
+    Each file is registered immediately so the count in the progress drawer is
+    real, and one bad file never aborts the batch — a rejected PDF is reported
+    alongside the ones that worked.
+    """
+    settings.ensure_dirs()
+    library = settings.library_dir
+
+    accepted: list[UploadAccepted] = []
+    rejected: list[UploadRejected] = []
+
+    for upload in files:
+        name = upload.filename or "upload.pdf"
+        destination: Path | None = None
+        try:
+            destination = _safe_destination(name, library)
+
+            written = 0
+            first_chunk = True
+            with open(destination, "wb") as handle:
+                while chunk := await upload.read(UPLOAD_CHUNK):
+                    if first_chunk:
+                        # Checked from the bytes, not the extension: a file
+                        # named .pdf that is not one wastes a parse job and
+                        # lands in the library as permanent noise.
+                        if not chunk.startswith(PDF_MAGIC):
+                            raise ValueError("not a PDF (missing %PDF- header)")
+                        first_chunk = False
+                    written += len(chunk)
+                    if written > MAX_UPLOAD_BYTES:
+                        raise ValueError(
+                            f"larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB"
+                        )
+                    handle.write(chunk)
+
+            if written == 0:
+                raise ValueError("empty file")
+
+            result = register_pdf(db, destination)
+            db.commit()
+
+            accepted.append(
+                UploadAccepted(
+                    filename=name,
+                    paper_id=result.paper.id if result.paper else None,
+                    outcome=result.outcome.value,
+                    bytes=written,
+                )
+            )
+            BROKER.publish(
+                "upload.received",
+                name=name,
+                outcome=result.outcome.value,
+                paper_id=result.paper.id if result.paper else None,
+            )
+        except Exception as exc:  # noqa: BLE001 - one bad file must not end the batch
+            db.rollback()
+            if destination is not None and destination.exists():
+                destination.unlink(missing_ok=True)
+            rejected.append(UploadRejected(filename=name, reason=str(exc)[:200]))
+        finally:
+            await upload.close()
+
+    queued = sum(1 for a in accepted if a.outcome == "created")
+    BROKER.publish(
+        "upload.batch", accepted=len(accepted), queued=queued, rejected=len(rejected)
+    )
+    return UploadResponse(
+        accepted=accepted,
+        rejected=rejected,
+        queued=queued,
+        total=len(files),
+    )
+
+
 @router.get("/{paper_id}", response_model=PaperDetail)
 def get_paper(paper_id: int, db: Session = Depends(get_db)) -> PaperDetail:
     paper = db.get(Paper, paper_id)
@@ -84,6 +214,21 @@ def get_paper(paper_id: int, db: Session = Depends(get_db)) -> PaperDetail:
 
     meta = paper.meta
     md = db.get(MarkdownDoc, paper_id)
+
+    # Placement confidence, from the active projection. Two different things:
+    # how strongly the paper belongs to its cluster, and how far it sits from
+    # the manifold the reducer was fitted on.
+    placement = db.execute(
+        select(
+            Projection.cluster_probability,
+            Projection.off_manifold,
+            Projection.is_transformed,
+            Cluster.llm_label,
+        )
+        .outerjoin(Cluster, Cluster.id == Projection.cluster_id)
+        .join(ProjectionRun, ProjectionRun.id == Projection.run_id)
+        .where(Projection.paper_id == paper_id, ProjectionRun.is_active.is_(True))
+    ).first()
 
     parse_info = None
     if md is not None:
@@ -109,6 +254,27 @@ def get_paper(paper_id: int, db: Session = Depends(get_db)) -> PaperDetail:
         added_at=paper.added_at,
         last_error=paper.last_error,
         parse=parse_info,
+        cluster_name=placement.llm_label if placement else None,
+        cluster_confidence=(
+            round(placement.cluster_probability, 3)
+            if placement and placement.cluster_probability is not None
+            else None
+        ),
+        manifold_drift=(
+            round(placement.off_manifold, 2)
+            if placement and placement.off_manifold is not None
+            else None
+        ),
+        provisional=bool(placement.is_transformed) if placement else False,
+        tags=[
+            slug
+            for (slug,) in db.execute(
+                select(Tag.slug)
+                .join(PaperTag, PaperTag.tag_id == Tag.id)
+                .where(PaperTag.paper_id == paper_id)
+                .order_by(Tag.slug)
+            ).all()
+        ],
     )
 
 

@@ -60,15 +60,20 @@ def cluster_embeddings(
     *,
     min_cluster_size: int = MIN_CLUSTER_SIZE,
     random_state: int = 42,
-) -> tuple[dict[int, int], list[Cluster]]:
+) -> tuple[dict[int, int], dict[int, float], list[Cluster]]:
     """Group papers by semantic similarity.
 
-    Returns a paper_id -> label map (label -1 is noise) and the clusters.
+    Returns a paper_id -> label map (label -1 is noise), a paper_id ->
+    membership-strength map, and the clusters.
     """
     rows = matrix.shape[0]
     if rows < MIN_ROWS_TO_CLUSTER:
         logger.info("only %d rows; too few to cluster meaningfully", rows)
-        return {pid: NOISE_LABEL for pid in paper_ids}, []
+        return (
+            {pid: NOISE_LABEL for pid in paper_ids},
+            {pid: 0.0 for pid in paper_ids},
+            [],
+        )
 
     import hdbscan
     import umap
@@ -102,6 +107,14 @@ def cluster_embeddings(
     assignments = {
         pid: int(label) for pid, label in zip(paper_ids, labels, strict=True)
     }
+    # How strongly each paper belongs to the cluster it was given. HDBSCAN
+    # computes this and it was previously discarded; a low value marks a paper
+    # sitting between fields, which is information about the paper rather than
+    # a defect in the clustering.
+    probabilities = {
+        pid: float(strength)
+        for pid, strength in zip(paper_ids, clusterer.probabilities_, strict=True)
+    }
 
     clusters: list[Cluster] = []
     for label in sorted({int(x) for x in labels if x != NOISE_LABEL}):
@@ -120,7 +133,7 @@ def cluster_embeddings(
         len(clusters),
         sum(1 for x in labels if x == NOISE_LABEL),
     )
-    return assignments, clusters
+    return assignments, probabilities, clusters
 
 
 STOP_TERMS = {

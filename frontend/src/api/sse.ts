@@ -14,6 +14,7 @@ export interface PipelineEvent {
 export type EventHandler = (event: PipelineEvent) => void
 
 const WATCHED = [
+  'upload.received', 'upload.batch',
   'paper.added', 'parse.start', 'parse.done', 'metadata.done',
   'embed.done', 'project.done', 'tag.done', 'job.failed', 'paper.duplicate',
 ]

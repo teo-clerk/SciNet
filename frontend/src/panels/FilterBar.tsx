@@ -6,6 +6,7 @@
  * having a map.
  */
 import { SearchBox } from '@/panels/SearchBox'
+import { UploadButton } from '@/panels/UploadButton'
 import { useGraphStore, type ColorMode } from '@/state/graphStore'
 import { useVisibleSet } from '@/lib/filtering'
 
@@ -57,6 +58,7 @@ export function FilterBar() {
       </div>
 
       <span className="spacer" />
+      <UploadButton />
       <span className={filtering ? 'count active' : 'count'}>
         {shown.toLocaleString()} / {count.toLocaleString()}
       </span>

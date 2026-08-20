@@ -75,6 +75,16 @@ export function DetailPanel() {
         <p className="authors">{paper.authors.slice(0, 8).join(', ')}</p>
       ) : null}
 
+      {paper?.tags?.length ? (
+        <div className="tag-list">
+          {paper.tags.map((tag) => (
+            <span key={tag} className="chip tag-chip">
+              {tag}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
       {paper?.summary && (
         <section>
           <h3>Summary</h3>
@@ -86,6 +96,52 @@ export function DetailPanel() {
         <section>
           <h3>Abstract</h3>
           <p className="abstract">{paper.abstract}</p>
+        </section>
+      )}
+
+      {paper && (paper.cluster_confidence !== null || paper.manifold_drift !== null) && (
+        <section>
+          <h3>Placement</h3>
+          <dl className="placement">
+            {paper.cluster_name && (
+              <>
+                <dt>Region</dt>
+                <dd>{paper.cluster_name}</dd>
+              </>
+            )}
+            {paper.cluster_confidence !== null && (
+              <>
+                <dt title="How strongly this paper belongs to its cluster">
+                  Cluster confidence
+                </dt>
+                <dd>
+                  <span className="bar">
+                    <span
+                      className="fill"
+                      style={{ width: `${Math.round(paper.cluster_confidence * 100)}%` }}
+                    />
+                  </span>
+                  {paper.cluster_confidence.toFixed(2)}
+                  {paper.cluster_confidence < 0.5 && (
+                    <span className="dim"> · sits between fields</span>
+                  )}
+                </dd>
+              </>
+            )}
+            {paper.manifold_drift !== null && (
+              <>
+                <dt title="Distance from the region the map was fitted on; ~1 is typical">
+                  Embedding drift
+                </dt>
+                <dd>
+                  {paper.manifold_drift.toFixed(2)}
+                  {paper.manifold_drift > 1.6 && (
+                    <span className="warn"> · unlike anything else here</span>
+                  )}
+                </dd>
+              </>
+            )}
+          </dl>
         </section>
       )}
 

@@ -23,7 +23,7 @@ def blobs(n_per=25, dim=16, groups=3, seed=0):
 
 def test_too_few_papers_are_all_noise():
     matrix, _ = blobs(n_per=3)
-    assignments, clusters = cluster_embeddings(matrix, list(range(9)))
+    assignments, probabilities, clusters = cluster_embeddings(matrix, list(range(9)))
     assert clusters == []
     assert set(assignments.values()) == {NOISE_LABEL}
 
@@ -31,7 +31,9 @@ def test_too_few_papers_are_all_noise():
 def test_finds_the_planted_groups():
     matrix, truth = blobs(n_per=25, groups=3)
     ids = list(range(len(truth)))
-    assignments, clusters = cluster_embeddings(matrix, ids, min_cluster_size=5)
+    assignments, probabilities, clusters = cluster_embeddings(
+        matrix, ids, min_cluster_size=5
+    )
 
     assert 2 <= len(clusters) <= 4, f"expected ~3 clusters, got {len(clusters)}"
 
@@ -46,13 +48,13 @@ def test_finds_the_planted_groups():
 def test_every_paper_gets_an_assignment():
     matrix, truth = blobs(n_per=25)
     ids = list(range(len(truth)))
-    assignments, _ = cluster_embeddings(matrix, ids, min_cluster_size=5)
+    assignments, _, _ = cluster_embeddings(matrix, ids, min_cluster_size=5)
     assert set(assignments) == set(ids)
 
 
 def test_cluster_carries_its_members_and_centroid():
     matrix, truth = blobs(n_per=25)
-    _, clusters = cluster_embeddings(
+    _, _, clusters = cluster_embeddings(
         matrix, list(range(len(truth))), min_cluster_size=5
     )
     for cluster in clusters:
@@ -63,8 +65,8 @@ def test_cluster_carries_its_members_and_centroid():
 def test_clustering_is_deterministic():
     matrix, truth = blobs(n_per=25)
     ids = list(range(len(truth)))
-    a, _ = cluster_embeddings(matrix, ids, min_cluster_size=5)
-    b, _ = cluster_embeddings(matrix, ids, min_cluster_size=5)
+    a, _, _ = cluster_embeddings(matrix, ids, min_cluster_size=5)
+    b, _, _ = cluster_embeddings(matrix, ids, min_cluster_size=5)
     assert a == b
 
 
@@ -83,3 +85,19 @@ def test_top_terms_ignores_filler():
 
 def test_top_terms_on_empty_input():
     assert top_terms([]) == []
+
+
+def test_membership_strength_is_reported_per_paper():
+    """A low value marks a paper between fields — information, not a defect."""
+    matrix, truth = blobs(n_per=25)
+    ids = list(range(len(truth)))
+    _, probabilities, _ = cluster_embeddings(matrix, ids, min_cluster_size=5)
+
+    assert set(probabilities) == set(ids)
+    assert all(0.0 <= p <= 1.0 for p in probabilities.values())
+
+
+def test_noise_points_have_no_membership_strength():
+    matrix, _ = blobs(n_per=3)
+    assignments, probabilities, _ = cluster_embeddings(matrix, list(range(9)))
+    assert all(probabilities[pid] == 0.0 for pid in assignments)

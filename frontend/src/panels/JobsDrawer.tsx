@@ -15,6 +15,10 @@ const POLL_INTERVAL_MS = 4000
 function describe(event: PipelineEvent): string {
   const d = event.detail
   switch (event.kind) {
+    case 'upload.received':
+      return `uploaded ${d.name}${d.outcome !== 'created' ? ` (${d.outcome})` : ''}`
+    case 'upload.batch':
+      return `batch: ${d.queued} queued, ${d.rejected} rejected`
     case 'paper.added':
       return `added ${d.name ?? d.paper_id}`
     case 'parse.start':
@@ -72,11 +76,25 @@ export function JobsDrawer() {
   const outstanding = (counts?.queued ?? 0) + (counts?.running ?? 0)
   const busy = outstanding > 0
 
+  // "X of Y" from the durable job table rather than from the event stream:
+  // events are advisory and dropped under load, so counting them would drift.
+  // Parse jobs are one per paper, which makes them the honest denominator.
+  const parseDone = Object.entries(counts?.counts ?? {})
+    .filter(([k]) => k.startsWith('parse:') && k.endsWith(':done'))
+    .reduce((n, [, v]) => n + v, 0)
+  const parseTotal = Object.entries(counts?.counts ?? {})
+    .filter(([k]) => k.startsWith('parse:'))
+    .reduce((n, [, v]) => n + v, 0)
+
   return (
     <div className={`jobs-drawer ${open ? 'open' : ''}`}>
       <button className="jobs-toggle" onClick={() => setOpen((v) => !v)}>
         <span className={`pulse ${busy ? 'busy' : ''}`} />
-        {busy ? `${outstanding} queued` : 'pipeline idle'}
+        {busy
+          ? parseTotal > 0
+            ? `${parseDone} of ${parseTotal} papers · ${outstanding} jobs queued`
+            : `${outstanding} queued`
+          : 'pipeline idle'}
         {counts?.dead ? <span className="warn"> · {counts.dead} dead</span> : null}
         <span className="chevron">{open ? '▾' : '▴'}</span>
       </button>

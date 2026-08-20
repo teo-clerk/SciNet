@@ -26,6 +26,7 @@ dependencies = [
     "umap-learn>=0.5.7",
     "hdbscan>=0.8.40",
     "joblib>=1.4.0",
+    "python-multipart>=0.0.32",
 ]
 
 [project.optional-dependencies]

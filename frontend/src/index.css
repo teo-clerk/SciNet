@@ -165,3 +165,29 @@ body {
   color: var(--warn); font-size: 11.5px; white-space: nowrap;
 }
 .search-warming .spinner { position: static; border-top-color: var(--warn); }
+
+/* --- upload --- */
+.upload { display: flex; align-items: center; gap: 8px; }
+.upload button {
+  background: rgba(92,184,255,0.14); border: 1px solid rgba(92,184,255,0.4);
+  color: var(--accent); border-radius: 5px; padding: 4px 11px;
+  font: inherit; cursor: pointer; white-space: nowrap;
+}
+.upload button:hover:not(:disabled) { background: rgba(92,184,255,0.24); }
+.upload button:disabled { opacity: 0.65; cursor: default; }
+.upload-summary { font-size: 11px; color: var(--dim); white-space: nowrap; }
+
+/* --- placement confidence --- */
+.detail-panel .tag-list { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 2px; }
+.detail-panel .tag-chip { background: rgba(92,184,255,0.14); color: var(--accent); }
+.placement { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
+.placement dt { color: var(--dim); font-size: 11px; white-space: nowrap; }
+.placement dd {
+  margin: 0; font-size: 12px; display: flex; align-items: center; gap: 7px;
+  font-variant-numeric: tabular-nums;
+}
+.bar {
+  display: inline-block; width: 52px; height: 5px; flex: none;
+  background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;
+}
+.bar .fill { display: block; height: 100%; background: var(--accent); }

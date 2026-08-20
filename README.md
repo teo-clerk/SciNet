@@ -9,10 +9,22 @@ turn enrichment on.
 
 ## Status
 
-**M2 — embeddings, projection and tagging.** PDFs are watched, deduplicated,
-parsed through a three-tier escalation, embedded, positioned in 3D, clustered
-and tagged. The map persists and updates incrementally. The interactive 3D
-frontend lands in M3.
+Working end to end on a real 300-paper library. Papers are watched or uploaded,
+deduplicated, parsed, embedded, positioned in 3D, clustered, named and tagged;
+the map persists and updates incrementally, and renders at 60 fps.
+
+**[USAGE.md](USAGE.md) is the guide** — setup, the three commands to run it,
+how to get papers in, and how to read the map.
+
+Measured on 300 arXiv papers across 10 fields:
+
+| | |
+|---|---|
+| tier-0 parse (99.7% of papers) | ~390 ms/page |
+| whole-corpus ingest | ~50 min, tagging-dominated |
+| map render, 293 nodes | 60 fps, p95 17.3 ms |
+| semantic query | 0.25 s warm |
+| clustering vs known fields | ARI 0.561, 9 regions |
 
 ## How the map stays fast
 

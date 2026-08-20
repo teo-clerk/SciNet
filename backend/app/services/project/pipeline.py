@@ -268,7 +268,7 @@ def _write_clusters(
 ) -> int:
     from app.models import Cluster, PaperMeta, Projection
 
-    assignments, clusters = cluster_embeddings(matrix, paper_ids)
+    assignments, probabilities, clusters = cluster_embeddings(matrix, paper_ids)
     if not clusters:
         return 0
 
@@ -316,4 +316,14 @@ def _write_clusters(
             )
             .values(cluster_id=row.id)
         )
+        # Membership strength is per paper, not per cluster.
+        for paper_id in cluster.paper_ids:
+            session.execute(
+                update(Projection)
+                .where(
+                    Projection.run_id == run_id,
+                    Projection.paper_id == paper_id,
+                )
+                .values(cluster_probability=probabilities.get(paper_id))
+            )
     return len(clusters)

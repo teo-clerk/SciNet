@@ -63,6 +63,11 @@ class Projection(Base):
     # the paper sits off the fitted manifold and its position is provisional.
     off_manifold: Mapped[float | None] = mapped_column(Float)
 
+    #: HDBSCAN's membership strength, 0..1. Low means the paper sits on a
+    #: boundary between fields rather than inside one — which is information
+    #: about the paper, not a defect in the clustering.
+    cluster_probability: Mapped[float | None] = mapped_column(Float)
+
     cluster_id: Mapped[int | None] = mapped_column(
         ForeignKey("clusters.id", ondelete="SET NULL"), index=True
     )
