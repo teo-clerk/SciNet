@@ -123,7 +123,27 @@ try {
 
   console.log(`→ loading ${URL_ARG}`)
   await cdp.send('Page.navigate', { url: URL_ARG })
-  await sleep(4000)
+
+  // The app fetches /api/graph before it can draw anything, so poll for the
+  // canvas rather than assuming a fixed delay is enough.
+  let appeared = false
+  for (let i = 0; i < 40; i++) {
+    const probe = await cdp.send('Runtime.evaluate', {
+      expression: `!!document.querySelector('canvas')`,
+      returnByValue: true,
+    })
+    if (probe.result.value) { appeared = true; break }
+    await sleep(500)
+  }
+  if (!appeared) {
+    const why = await cdp.send('Runtime.evaluate', {
+      expression: `document.querySelector('.placeholder')?.innerText ?? '(no placeholder)'`,
+      returnByValue: true,
+    })
+    console.error(`✗ no canvas after 20s. Page says: ${why.result.value}`)
+    failed = true
+  }
+  await sleep(2500)
 
   // Did a canvas with a live WebGL context actually appear?
   const probe = await cdp.send('Runtime.evaluate', {
@@ -146,6 +166,16 @@ try {
   })
   const info = probe.result.value
   console.log('→ canvas:', JSON.stringify(info))
+
+  const drawn = await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const el = [...document.querySelectorAll('.status-bar span')]
+        .map((s) => s.textContent).join(' | ')
+      return el
+    })()`,
+    returnByValue: true,
+  })
+  console.log('→ status bar:', drawn.result.value)
   if (!info.canvas || info.contextLost) {
     console.error('✗ no live WebGL canvas')
     failed = true
