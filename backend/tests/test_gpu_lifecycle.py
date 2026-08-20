@@ -140,3 +140,32 @@ def test_a_model_is_found_in_either_cache_layout(tmp_path, monkeypatch):
     assert preflight._hf_present("org/via-hub")
     assert preflight._hf_present("org/via-st")
     assert not preflight._hf_present("org/absent")
+
+
+def test_the_orphan_scan_is_a_no_op_without_procfs(monkeypatch):
+    """Windows and macOS have no /proc.
+
+    An unguarded scan raised past the torch cache release that follows it,
+    leaving VRAM held on the platforms least able to spare it.
+    """
+    from app.services.parse import tier1_marker
+
+    real_is_dir = type(tier1_marker.Path("/proc")).is_dir
+    monkeypatch.setattr(
+        type(tier1_marker.Path("/proc")),
+        "is_dir",
+        lambda self: False if str(self) == "/proc" else real_is_dir(self),
+    )
+    # Must return quietly rather than raise.
+    tier1_marker._stop_orphaned_surya_servers()
+
+
+def test_unload_releases_the_torch_cache_even_if_the_scan_fails(monkeypatch):
+    """The scan is best-effort; freeing the card is not."""
+    from app.services.parse import tier1_marker
+
+    def boom():
+        raise OSError("procfs unavailable")
+
+    monkeypatch.setattr(tier1_marker, "_stop_orphaned_surya_servers", boom)
+    tier1_marker.unload()  # must not raise

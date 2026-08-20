@@ -75,7 +75,10 @@ def unload() -> None:
     # manager does not own and therefore does not stop. One was found alive
     # hours after its worker exited, still holding 800 MiB of an 8 GiB card and
     # starving everything that came after it.
-    _stop_orphaned_surya_servers()
+    try:
+        _stop_orphaned_surya_servers()
+    except Exception as exc:  # noqa: BLE001 - cleanup must not block the card
+        logger.debug("orphan scan skipped: %s", exc)
 
     try:
         import torch
@@ -96,8 +99,17 @@ def _stop_orphaned_surya_servers() -> None:
     import signal
     from pathlib import Path as _Path
 
+    # /proc is Linux-only. On Windows and macOS this scan cannot run, and an
+    # unguarded iterdir() would raise straight past the torch cache release
+    # below it — leaving VRAM held on exactly the platforms that cannot use
+    # this cleanup in the first place.
+    procfs = _Path("/proc")
+    if not procfs.is_dir():
+        logger.debug("no procfs; skipping the orphaned-helper scan")
+        return
+
     markers = ("surya.ocr_error", "surya.inference", "surya.scripts")
-    for entry in _Path("/proc").iterdir():
+    for entry in procfs.iterdir():
         if not entry.name.isdigit():
             continue
         try:
