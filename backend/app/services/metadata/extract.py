@@ -90,6 +90,22 @@ def split_authors(raw: str) -> list[str]:
     return names
 
 
+EMPHASIS_RE = re.compile(r"(\*{1,3}|_{1,3})(.+?)\1")
+
+
+def strip_markdown(line: str) -> str:
+    """Remove heading markers and emphasis from a candidate title line."""
+    candidate = line.strip().lstrip("#").strip()
+    # Applied repeatedly for nested emphasis (***bold italic***).
+    for _ in range(3):
+        replaced = EMPHASIS_RE.sub(r"\2", candidate)
+        if replaced == candidate:
+            break
+        candidate = replaced
+    # An unbalanced marker survives the pattern above.
+    return candidate.strip().strip("*_").strip()
+
+
 def guess_title(text: str) -> str | None:
     """First substantial line that is not page furniture.
 
@@ -98,8 +114,10 @@ def guess_title(text: str) -> str | None:
     better source can override it later.
     """
     for line in text.splitlines():
-        # Tolerate Markdown: the rescued text arrives with heading markers.
-        candidate = line.strip().lstrip("#").strip()
+        # Tolerate Markdown: the rescued text arrives with heading markers and
+        # emphasis around the title, both of which end up rendered literally on
+        # the map ("**Ultraviolet Spectra of Local Galaxies").
+        candidate = strip_markdown(line)
         if len(candidate) < MIN_TITLE_LENGTH or len(candidate) > MAX_TITLE_LENGTH:
             continue
         if FURNITURE_RE.match(candidate):

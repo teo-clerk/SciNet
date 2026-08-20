@@ -13,6 +13,7 @@
 import { create } from 'zustand'
 
 import type { DecodedGraph, GraphCluster, GraphNode } from '@/api/graph'
+import type { SearchMode } from '@/lib/search'
 
 export type ColorMode = 'cluster' | 'year' | 'provisional'
 
@@ -37,6 +38,7 @@ interface GraphState {
   clusters: GraphCluster[]
   tagVocabulary: string[]
   buffers: GraphBuffers | null
+  skeleton: Uint32Array | null
   /** Cluster centroids in world space, for floating labels. */
   clusterCentroids: Map<number, [number, number, number]>
 
@@ -44,6 +46,11 @@ interface GraphState {
   hoveredIndex: number | null
   selectedIndex: number | null
   query: string
+  searchMode: SearchMode
+  /** Paper ids returned by the active search, or null when none is running. */
+  searchResults: Set<number> | null
+  searchPending: boolean
+  searchError: string | null
   activeTags: Set<number>
 
   setLoading: () => void
@@ -53,6 +60,10 @@ interface GraphState {
   setHovered: (index: number | null) => void
   setSelected: (index: number | null) => void
   setQuery: (query: string) => void
+  setSearchMode: (mode: SearchMode) => void
+  setSearchResults: (ids: Set<number> | null) => void
+  setSearchPending: (pending: boolean) => void
+  setSearchError: (message: string | null) => void
   toggleTag: (tagId: number) => void
   clearFilters: () => void
 }
@@ -119,11 +130,16 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   clusters: [],
   tagVocabulary: [],
   buffers: null,
+  skeleton: null,
   clusterCentroids: new Map(),
   colorMode: 'cluster',
   hoveredIndex: null,
   selectedIndex: null,
   query: '',
+  searchMode: 'title',
+  searchResults: null,
+  searchPending: false,
+  searchError: null,
   activeTags: new Set(),
 
   setLoading: () => set({ status: 'loading', error: null }),
@@ -140,9 +156,12 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       clusters: graph.clusters,
       tagVocabulary: graph.tagVocabulary,
       buffers: buildBuffers(graph),
+      skeleton: graph.skeleton,
       clusterCentroids: centroidsOf(graph),
       hoveredIndex: null,
       selectedIndex: null,
+      searchResults: null,
+      searchError: null,
     }),
 
   setColorMode: (colorMode) => set({ colorMode }),
@@ -150,12 +169,23 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     if (get().hoveredIndex !== hoveredIndex) set({ hoveredIndex })
   },
   setSelected: (selectedIndex) => set({ selectedIndex }),
-  setQuery: (query) => set({ query }),
+  setQuery: (query) => set({ query, searchError: null }),
+  setSearchMode: (searchMode) =>
+    set({ searchMode, searchResults: null, searchError: null }),
+  setSearchResults: (searchResults) => set({ searchResults }),
+  setSearchPending: (searchPending) => set({ searchPending }),
+  setSearchError: (searchError) => set({ searchError, searchResults: null }),
   toggleTag: (tagId) =>
     set((state) => {
       const next = new Set(state.activeTags)
       next.has(tagId) ? next.delete(tagId) : next.add(tagId)
       return { activeTags: next }
     }),
-  clearFilters: () => set({ query: '', activeTags: new Set() }),
+  clearFilters: () =>
+    set({
+      query: '',
+      activeTags: new Set(),
+      searchResults: null,
+      searchError: null,
+    }),
 }))

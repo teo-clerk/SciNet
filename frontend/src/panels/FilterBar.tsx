@@ -5,6 +5,7 @@
  * tells you what matched but not where it sits, which is the whole point of
  * having a map.
  */
+import { SearchBox } from '@/panels/SearchBox'
 import { useGraphStore, type ColorMode } from '@/state/graphStore'
 import { useVisibleSet } from '@/lib/filtering'
 
@@ -15,8 +16,6 @@ const MODES: Array<[ColorMode, string]> = [
 ]
 
 export function FilterBar() {
-  const query = useGraphStore((s) => s.query)
-  const setQuery = useGraphStore((s) => s.setQuery)
   const colorMode = useGraphStore((s) => s.colorMode)
   const setColorMode = useGraphStore((s) => s.setColorMode)
   const vocabulary = useGraphStore((s) => s.tagVocabulary)
@@ -31,13 +30,7 @@ export function FilterBar() {
 
   return (
     <div className="filter-bar">
-      <input
-        className="search"
-        type="search"
-        placeholder="Search titles…"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
+      <SearchBox />
 
       <div className="modes">
         {MODES.map(([mode, label]) => (

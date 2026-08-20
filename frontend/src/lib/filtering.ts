@@ -11,21 +11,31 @@ import { useGraphStore } from '@/state/graphStore'
 
 export function useVisibleSet(): Set<number> | null {
   const nodes = useGraphStore((s) => s.nodes)
-  const query = useGraphStore((s) => s.query)
   const activeTags = useGraphStore((s) => s.activeTags)
+  const searchResults = useGraphStore((s) => s.searchResults)
 
   return useMemo(() => {
-    const trimmed = query.trim().toLowerCase()
-    if (!trimmed && activeTags.size === 0) return null
+    if (searchResults === null && activeTags.size === 0) return null
+
+    // Search returns paper ids; the renderer works in node indices.
+    const matchedIndices =
+      searchResults === null
+        ? null
+        : new Set(
+            nodes.reduce<number[]>((acc, node, i) => {
+              if (searchResults.has(node.id)) acc.push(i)
+              return acc
+            }, []),
+          )
 
     const visible = new Set<number>()
     nodes.forEach((node, i) => {
-      if (trimmed && !(node.title ?? '').toLowerCase().includes(trimmed)) return
+      if (matchedIndices !== null && !matchedIndices.has(i)) return
       // Tags are OR-ed: selecting two topics widens the view rather than
       // narrowing it to their intersection, which is almost always empty.
       if (activeTags.size > 0 && !node.tags.some((t) => activeTags.has(t))) return
       visible.add(i)
     })
     return visible
-  }, [nodes, query, activeTags])
+  }, [nodes, activeTags, searchResults])
 }

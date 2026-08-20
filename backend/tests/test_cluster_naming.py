@@ -122,6 +122,7 @@ def test_a_good_answer_is_returned(monkeypatch):
 
 # --- representative sampling ----------------------------------------------
 
+
 def test_titles_are_sampled_across_the_cluster_not_from_the_front():
     """The bug this guards against mislabelled a real 88-paper region.
 

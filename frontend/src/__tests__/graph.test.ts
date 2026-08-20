@@ -23,6 +23,8 @@ function payload(positions: number[], nodeCount: number): GraphPayload {
     method: 'umap',
     count: nodeCount,
     positions_f32: encode(positions),
+    skeleton_u32: '',
+    skeleton_edges: 0,
     tag_vocabulary: ['astrophysics', 'robotics'],
     clusters: [{ id: 1, label: 'Exoplanets', size: 2, terms: ['transit'] }],
     nodes: Array.from({ length: nodeCount }, (_, i) => ({
@@ -31,6 +33,7 @@ function payload(positions: number[], nodeCount: number): GraphPayload {
       year: 2020 + i,
       cluster: 1,
       tags: [0],
+      pages: 10 + i,
       provisional: i === 1,
       drift: i === 1 ? 2.4 : 0.1,
     })),

@@ -24,7 +24,21 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
-from app.models import Cluster, PaperMeta, PaperTag, Projection, ProjectionRun, Tag
+from app.models import (
+    Cluster,
+    Paper,
+    PaperMeta,
+    PaperTag,
+    Projection,
+    ProjectionRun,
+    Tag,
+)
+from app.services.project.skeleton import load as load_skeleton
+
+
+def _projection_base(settings: Settings, run_id: int):
+    return settings.models_dir / "projections" / f"run_{run_id:05d}"
+
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
 
@@ -55,8 +69,10 @@ def get_graph(
             Projection.off_manifold,
             PaperMeta.title,
             PaperMeta.year,
+            Paper.page_count.label("pages"),
         )
         .outerjoin(PaperMeta, PaperMeta.paper_id == Projection.paper_id)
+        .outerjoin(Paper, Paper.id == Projection.paper_id)
         .where(Projection.run_id == run.id)
         .order_by(Projection.paper_id)
     ).all()
@@ -65,11 +81,28 @@ def get_graph(
 
     # Keyed on the run and its size: a refit or an incremental insert both
     # change it, and nothing else needs to.
-    etag = f'W/"run-{run.id}-{len(rows)}"'
+    positions = np.array([[r.x, r.y, r.z] for r in rows], dtype=np.float32)
+
+    # The static skeleton, remapped from paper ids to the node indices the
+    # client actually holds. Sent as uint32 pairs: at 4,000 papers that is
+    # ~48 KB against ~200 KB of the equivalent JSON, and it lands straight in
+    # a BufferAttribute.
+    index_of = {row.paper_id: i for i, row in enumerate(rows)}
+    edges = load_skeleton(_projection_base(settings, run.id))
+    pairs = [
+        (index_of[a], index_of[b])
+        for a, b in edges.tolist()
+        if a in index_of and b in index_of
+    ]
+    skeleton = (
+        np.array(pairs, dtype=np.uint32).ravel()
+        if pairs
+        else np.zeros(0, dtype=np.uint32)
+    )
+
+    etag = f'W/"run-{run.id}-{len(rows)}-s{len(pairs)}"'
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag})
-
-    positions = np.array([[r.x, r.y, r.z] for r in rows], dtype=np.float32)
 
     tag_rows = db.execute(
         select(PaperTag.paper_id, Tag.slug)
@@ -97,6 +130,8 @@ def get_graph(
         "method": run.method,
         "count": len(rows),
         "positions_f32": base64.b64encode(positions.tobytes()).decode("ascii"),
+        "skeleton_u32": base64.b64encode(skeleton.tobytes()).decode("ascii"),
+        "skeleton_edges": len(pairs),
         "tag_vocabulary": vocabulary,
         "clusters": clusters,
         "nodes": [
@@ -107,6 +142,7 @@ def get_graph(
                 "cluster": r.cluster_id,
                 "tags": by_paper.get(r.paper_id, []),
                 # Surfaced so the UI can mark provisionally-placed papers.
+                "pages": r.pages,
                 "provisional": bool(r.is_transformed),
                 "drift": round(r.off_manifold or 0.0, 2),
             }

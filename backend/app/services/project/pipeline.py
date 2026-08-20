@@ -26,6 +26,8 @@ from app.services.embed.store import VectorStore
 from app.services.project.cluster import cluster_embeddings, top_terms
 from app.services.project.procrustes import align_to, mean_displacement
 from app.services.project.reducer import ProjectionModel, ProjectionParams
+from app.services.project.skeleton import build_skeleton
+from app.services.project.skeleton import save as save_skeleton
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +155,10 @@ def project_corpus(
 
     model.coords = coords
     model.save()
+
+    # The faint global graph the map is drawn over. Computed from the embedding
+    # space alongside the fit, so it never has to be recomputed per request.
+    save_skeleton(_model_path(settings, new_run.id), build_skeleton(matrix, paper_ids))
     new_run.method = model.method
     new_run.model_path = str(model.reducer_path)
     new_run.fit_matrix_path = str(model.matrix_path)

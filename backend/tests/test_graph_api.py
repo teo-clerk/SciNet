@@ -148,9 +148,15 @@ def test_payload_omits_heavy_fields(env):
         "year",
         "cluster",
         "tags",
+        "pages",
         "provisional",
         "drift",
     }
+    # The expensive fields stay out: abstracts and summaries are fetched per
+    # node on click, because shipping them for the whole corpus is what turns
+    # a 50 ms map load into a multi-second one.
+    assert "abstract" not in node
+    assert "summary" not in node
 
 
 def test_tags_are_integer_ids_against_one_vocabulary(env):

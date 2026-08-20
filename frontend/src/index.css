@@ -1,5 +1,5 @@
 :root {
-  --bg: #070912;
+  --bg: #050510;
   --panel: rgba(12, 15, 28, 0.94);
   --border: rgba(255, 255, 255, 0.08);
   --fg: #d6dbe8;
@@ -142,3 +142,21 @@ body {
 .jobs-body .row { display: flex; gap: 10px; font-size: 11.5px; padding: 2px 0; }
 .jobs-body .row.warn { color: var(--warn); }
 .jobs-body .row .dim { flex: none; font-variant-numeric: tabular-nums; }
+
+/* --- search --- */
+.search-box { display: flex; align-items: center; gap: 8px; }
+.search-input { position: relative; display: flex; align-items: center; }
+.search-input input {
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--fg); padding: 5px 26px 5px 9px;
+  font: inherit; min-width: 240px;
+}
+.search-input input:focus { outline: none; border-color: var(--accent); }
+.spinner {
+  position: absolute; right: 8px; width: 10px; height: 10px;
+  border: 2px solid rgba(255,255,255,0.2); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.search-modes { display: flex; gap: 2px; }
+.search-error { color: var(--warn); font-size: 11px; max-width: 260px; }

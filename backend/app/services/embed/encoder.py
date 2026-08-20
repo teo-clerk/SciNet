@@ -21,6 +21,10 @@ from app.core.model_store import configure_environment
 
 logger = logging.getLogger(__name__)
 
+#: Queries are embedded on the CPU so interactive search never competes with
+#: the worker for the card. See encode_query.
+QUERY_DEVICE = "cpu"
+
 QUERY_INSTRUCTION = (
     "Instruct: Given a search query, retrieve relevant scientific papers\nQuery: "
 )
@@ -84,10 +88,24 @@ def encode_documents(
     return np.asarray(vectors, dtype=np.float32)
 
 
-def encode_query(text: str, *, settings: Settings | None = None) -> np.ndarray:
-    """Embed a search query, with the instruction prefix the model expects."""
+def encode_query(
+    text: str, *, settings: Settings | None = None, device: str | None = None
+) -> np.ndarray:
+    """Embed a search query, with the instruction prefix the model expects.
+
+    ``device`` defaults to CPU rather than to the configured accelerator. The
+    GPU belongs to the worker: it holds a single residency slot precisely
+    because an 8 GiB card fits one model at a time, and the API is a separate
+    process with no visibility into that. Loading the embedder here to serve one
+    interactive query raced the worker for VRAM and returned
+    "CUDA out of memory" to the user's search box.
+
+    The trade is trivially in favour of the CPU. Batch-embedding a corpus wants
+    an accelerator; embedding six words does not — it costs a few hundred
+    milliseconds, which is well inside what a search feels like anyway.
+    """
     settings = settings or get_settings()
-    model = load(settings)
+    model = _model(settings.embed_model, device or QUERY_DEVICE)
     vector = model.encode(
         [QUERY_INSTRUCTION + text],
         convert_to_numpy=True,

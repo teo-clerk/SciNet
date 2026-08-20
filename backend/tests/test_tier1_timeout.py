@@ -61,6 +61,7 @@ def test_fast_work_returns_its_result():
 
 def test_an_error_inside_the_work_propagates():
     """A crash must surface as itself, not be masked as a timeout."""
+
     def boom():
         raise ValueError("corrupt xref")
 

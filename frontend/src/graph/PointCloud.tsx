@@ -21,7 +21,7 @@ import {
 } from '@/state/graphStore'
 import { useVisibleSet } from '@/lib/filtering'
 
-const FOG_COLOR = new THREE.Color('#070912')
+const FOG_COLOR = new THREE.Color('#050510')
 export const PICK_LAYER = 1
 
 export function PointCloud() {
@@ -68,10 +68,16 @@ export function PointCloud() {
           uFogColor: { value: FOG_COLOR },
           uFogNear: { value: 70.0 },
           uFogFar: { value: 260.0 },
+          uIntensity: { value: 0.42 },
         },
         transparent: true,
+        // Additive: overlapping sprites sum instead of occluding, so a dense
+        // cluster brightens into a glow while a sparse region stays dim. The
+        // density of the map becomes visible rather than merely inferred.
+        blending: THREE.AdditiveBlending,
         // depthWrite off deliberately: soft sprites that write depth clip each
-        // other at the rim, which reads as a dark halo around every node.
+        // other at the rim, which reads as a dark halo around every node. With
+        // additive blending it would also make the result order-dependent.
         depthWrite: false,
         depthTest: true,
       }),
@@ -118,11 +124,16 @@ export function PointCloud() {
       colors[i * 3 + 1] = rgb[1]
       colors[i * 3 + 2] = rgb[2]
 
-      // In provisional mode, drift drives size so outliers are findable.
+      // Size carries page count, log-scaled: the corpus spans 2 to 160 pages,
+      // and a linear map would make one review article dwarf every letter on
+      // the map. Log keeps a substantial paper visibly larger without letting
+      // the extremes dominate.
+      const pages = node.pages ?? 12
+      const magnitude = Math.log(Math.max(pages, 1) + 1) / Math.log(21) // 20pp -> 1.0
       sizeArr[i] =
         colorMode === 'provisional' && node.provisional
           ? 1 + Math.min(node.drift, 3) * 0.35
-          : 1
+          : 0.62 + 0.78 * Math.min(magnitude, 1.9)
     })
     attr.needsUpdate = true
     sizes.needsUpdate = true

@@ -172,3 +172,31 @@ def test_identifiers_are_found_in_either_source(pdf_fixtures):
     assert meta.doi == "10.1145/3292500.3330701"
     assert meta.arxiv_id == "2401.01234v2"
     assert meta.title == "Deep Sets for Molecular Property Prediction"
+
+
+# --- markdown artifacts in titles ----------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("**Ultraviolet Spectra of Galaxies**", "Ultraviolet Spectra of Galaxies"),
+        ("## A Real Paper Title", "A Real Paper Title"),
+        ("*Italic Title Here*", "Italic Title Here"),
+        ("***Bold Italic Title***", "Bold Italic Title"),
+        ("__Underscore Emphasis__", "Underscore Emphasis"),
+        ("**Unbalanced Emphasis", "Unbalanced Emphasis"),
+        ("Plain Title Untouched", "Plain Title Untouched"),
+    ],
+)
+def test_markdown_emphasis_is_stripped_from_titles(raw, expected):
+    """These render literally on the map if they survive extraction."""
+    from app.services.metadata.extract import strip_markdown
+
+    assert strip_markdown(raw) == expected
+
+
+def test_emphasis_inside_a_title_is_unwrapped_not_deleted():
+    from app.services.metadata.extract import strip_markdown
+
+    assert strip_markdown("The **Fast** Algorithm") == "The Fast Algorithm"

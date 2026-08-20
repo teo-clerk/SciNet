@@ -71,6 +71,12 @@ def unload() -> None:
     except Exception as exc:  # noqa: BLE001 - never block the next stage
         logger.debug("could not stop the surya server cleanly: %s", exc)
 
+    # Surya spawns a *second* server for OCR error detection, which the default
+    # manager does not own and therefore does not stop. One was found alive
+    # hours after its worker exited, still holding 800 MiB of an 8 GiB card and
+    # starving everything that came after it.
+    _stop_orphaned_surya_servers()
+
     try:
         import torch
 
@@ -78,6 +84,35 @@ def unload() -> None:
             torch.cuda.empty_cache()
     except ImportError:
         pass
+
+
+def _stop_orphaned_surya_servers() -> None:
+    """Terminate surya helper processes this machine left behind.
+
+    Matching on the module path rather than a broad pattern: these are
+    identifiable and nothing else on the system looks like them.
+    """
+    import os
+    import signal
+    from pathlib import Path as _Path
+
+    markers = ("surya.ocr_error", "surya.inference", "surya.scripts")
+    for entry in _Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            cmdline = (entry / "cmdline").read_bytes().decode(errors="ignore")
+        except OSError:
+            continue
+        if not any(marker in cmdline for marker in markers):
+            continue
+        if "python" not in cmdline:
+            continue
+        try:
+            os.kill(int(entry.name), signal.SIGTERM)
+            logger.info("stopped orphaned surya helper pid %s", entry.name)
+        except OSError:
+            pass
 
 
 def available() -> bool:

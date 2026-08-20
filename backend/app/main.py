@@ -6,18 +6,55 @@ enqueues jobs, but the worker process is the sole writer of paper data.
 
 from __future__ import annotations
 
+import contextlib
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.routers import events, graph, jobs, papers, system
+from app.routers import events, graph, jobs, papers, search, system
+
+logger = logging.getLogger(__name__)
+
+
+LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+
+
+def _warn_if_exposed() -> None:
+    """Refuse to start quietly on a non-loopback address.
+
+    This API has no authentication, serves arbitrary files from the library,
+    and can launch a local process. On a laptop that is fine because only the
+    machine itself can reach it; on 0.0.0.0 it is a file server and a remote
+    exec surface for anyone on the network. uvicorn's --host is a command-line
+    flag, so the default in settings does not actually prevent this — the check
+    has to happen at startup.
+    """
+    import os
+    import sys
+
+    bound = os.environ.get("SCINET_BOUND_HOST", "")
+    argv = " ".join(sys.argv)
+    exposed = bound not in LOOPBACK and bound != ""
+    if "--host" in argv:
+        parts = sys.argv
+        with contextlib.suppress(ValueError, IndexError):
+            exposed = parts[parts.index("--host") + 1] not in LOOPBACK
+
+    if exposed:
+        logger.warning(
+            "SciNet is bound to a non-loopback address. It has no "
+            "authentication, serves files from the library and can launch "
+            "processes. Anyone who can reach this port has those capabilities."
+        )
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     get_settings().ensure_dirs()
+    _warn_if_exposed()
     yield
 
 
@@ -38,7 +75,7 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["*"],
     )
-    for module in (system, papers, graph, jobs, events):
+    for module in (system, papers, graph, search, jobs, events):
         app.include_router(module.router)
     return app
 

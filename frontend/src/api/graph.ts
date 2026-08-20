@@ -12,6 +12,8 @@ export interface GraphNode {
   year: number | null
   cluster: number | null
   tags: number[]
+  /** Page count — the only per-paper magnitude available; drives node size. */
+  pages: number | null
   /** Placed by transform() against a stored fit rather than by a full refit. */
   provisional: boolean
   /** How far the paper sits from the fitted manifold; ~1 is typical. */
@@ -30,6 +32,9 @@ export interface GraphPayload {
   method: string
   count: number
   positions_f32: string
+  /** kNN edges as uint32 index pairs — the static visual skeleton. */
+  skeleton_u32: string
+  skeleton_edges: number
   tag_vocabulary: string[]
   clusters: GraphCluster[]
   nodes: GraphNode[]
@@ -39,6 +44,8 @@ export interface DecodedGraph {
   runId: number
   method: string
   positions: Float32Array
+  /** Flat index pairs; length is 2x the edge count. */
+  skeleton: Uint32Array
   nodes: GraphNode[]
   clusters: GraphCluster[]
   tagVocabulary: string[]
@@ -117,7 +124,20 @@ export function decodeGraph(payload: GraphPayload): DecodedGraph {
     )
   }
   const positions = normalisePositions(raw)
+
+  const skeletonBytes = atob(payload.skeleton_u32 ?? '')
+  const skeletonBuffer = new Uint8Array(skeletonBytes.length)
+  for (let i = 0; i < skeletonBytes.length; i++) {
+    skeletonBuffer[i] = skeletonBytes.charCodeAt(i)
+  }
+  const skeleton = new Uint32Array(
+    skeletonBuffer.buffer,
+    0,
+    skeletonBuffer.length / 4,
+  )
+
   return {
+    skeleton,
     runId: payload.run_id,
     method: payload.method,
     positions,

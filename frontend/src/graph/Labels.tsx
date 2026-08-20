@@ -117,7 +117,7 @@ export function TitleLabels() {
               anchorX="center"
               anchorY="bottom"
               outlineWidth={emphasised ? 0.035 : 0.02}
-              outlineColor="#070912"
+              outlineColor="#050510"
               maxWidth={14}
             >
               {truncate(node.title)}
@@ -152,7 +152,7 @@ export function ClusterLabels() {
               anchorX="center"
               anchorY="middle"
               outlineWidth={0.06}
-              outlineColor="#070912"
+              outlineColor="#050510"
               maxWidth={20}
               fillOpacity={0.92}
             >
