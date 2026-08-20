@@ -11,6 +11,8 @@ import { useGraphStore } from '@/state/graphStore'
 export function StatusBar() {
   const { fps, worstFrameMs } = useFps()
   const count = useGraphStore((s) => s.count)
+  const method = useGraphStore((s) => s.method)
+  const runId = useGraphStore((s) => s.runId)
   const [info, setInfo] = useState<SystemInfo | null>(null)
   const [apiError, setApiError] = useState<string | null>(null)
 
@@ -28,6 +30,11 @@ export function StatusBar() {
     <div className="status-bar">
       <span className="brand">SciNet</span>
       <span>{count.toLocaleString()} nodes</span>
+      {method && (
+        <span className="dim">
+          run {runId} · {method}
+        </span>
+      )}
       <span className={fps >= 58 ? 'ok' : 'warn'}>{fps} fps</span>
       <span className={budgetOk ? 'ok' : 'warn'}>worst {worstFrameMs} ms</span>
       <span className="spacer" />

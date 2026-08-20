@@ -244,6 +244,7 @@ def test_outcome_reports_why_it_escalated(tmp_path):
 
 # --- tier 1 wall-clock budget --------------------------------------------
 
+
 def test_a_tier1_timeout_falls_through_to_tier2(tmp_path):
     """A per-call limit does not bound a document; this is what does."""
     from app.services.parse.tier1_marker import Tier1Timeout

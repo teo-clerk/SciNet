@@ -273,11 +273,29 @@ def _write_clusters(
         ).all()
     }
 
+    from app.services.project import naming
+
+    can_name = naming.available()
+    if not can_name:
+        logger.info("tagging model unavailable; clusters will be unnamed")
+
     for cluster in clusters:
-        terms = top_terms([titles.get(p) or "" for p in cluster.paper_ids])
+        member_titles = [titles.get(p) or "" for p in cluster.paper_ids]
+        terms = top_terms(member_titles)
+        label = (
+            naming.name_cluster(terms, [t for t in member_titles if t])
+            if can_name
+            else None
+        )
+        if label:
+            logger.info(
+                "cluster %d (%d papers) -> %r", cluster.label, cluster.size, label
+            )
+
         row = Cluster(
             run_id=run_id,
             hdbscan_label=cluster.label,
+            llm_label=label,
             size=cluster.size,
             centroid_json=json.dumps(cluster.centroid[:32]),
             top_terms_json=json.dumps(terms),

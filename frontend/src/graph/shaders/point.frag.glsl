@@ -7,16 +7,22 @@ uniform float uFogFar;
 varying vec3  vColor;
 varying float vAlpha;
 varying float vFogDepth;
+varying float vSelected;
 
 void main() {
   // gl_PointCoord is 0..1 across the sprite quad; build a soft disc from it.
   vec2  uv = gl_PointCoord - 0.5;
   float d2 = dot(uv, uv);            // 0.25 at the sprite edge
-  if (d2 > 0.25) discard;            // keeps depth writes correct for the disc
+  if (d2 > 0.25) discard;
 
-  float rim   = smoothstep(0.25, 0.06, d2);   // antialiased edge
-  float core  = smoothstep(0.25, 0.00, d2);   // inner glow
+  float rim  = smoothstep(0.25, 0.06, d2);   // antialiased edge
+  float core = smoothstep(0.25, 0.00, d2);   // inner glow
   vec3  color = mix(vColor, vColor * 1.5 + 0.12, core * 0.55);
+
+  // A selected node gets a bright ring rather than just being bigger, so it
+  // stays findable inside a dense cluster.
+  float ring = smoothstep(0.16, 0.20, d2) * smoothstep(0.25, 0.21, d2);
+  color = mix(color, vec3(1.0), ring * vSelected);
 
   float fog = smoothstep(uFogNear, uFogFar, vFogDepth);
   color = mix(color, uFogColor, fog);

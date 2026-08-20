@@ -1,70 +1,161 @@
 /**
- * Graph data store.
+ * Graph state.
  *
- * Node data deliberately lives OUTSIDE the React tree. Positions and per-node
- * visual attributes are plain typed arrays that the renderer mutates in place;
- * React only ever renders the chrome. This is the single rule that separates
- * 60 fps from 6 at 4k nodes.
+ * Node data lives OUTSIDE the React tree. Positions and per-node visual
+ * attributes are plain typed arrays the renderer mutates in place; React
+ * renders only the chrome. Mapping 300–4,000 nodes to components is the
+ * single decision that separates 60 fps from 6.
+ *
+ * Selectors here are deliberately coarse — components subscribe to scalars
+ * (a hovered id, a colour mode) rather than to the buffers, so a hover never
+ * re-renders anything that draws.
  */
 import { create } from 'zustand'
 
-export interface NodeMeta {
-  id: number
-  title: string
-  clusterId: number
-  year: number | null
-}
+import type { DecodedGraph, GraphCluster, GraphNode } from '@/api/graph'
+
+export type ColorMode = 'cluster' | 'year' | 'provisional'
 
 export interface GraphBuffers {
-  /** xyz triples, length = count * 3 */
   positions: Float32Array
-  /** rgb triples, length = count * 3 */
   colors: Float32Array
-  /** per-node size multiplier */
   sizes: Float32Array
-  /** 0 = filtered out, 1 = visible */
+  /** 0 = filtered out (dimmed), 1 = visible. */
   filtered: Float32Array
-  /** 0 | 1 */
+  /** 0 | 0.6 (hovered) | 1 (selected). */
   selected: Float32Array
 }
 
 interface GraphState {
+  status: 'idle' | 'loading' | 'ready' | 'error'
+  error: string | null
+
+  runId: number | null
+  method: string | null
   count: number
+  nodes: GraphNode[]
+  clusters: GraphCluster[]
+  tagVocabulary: string[]
   buffers: GraphBuffers | null
-  meta: NodeMeta[]
+  /** Cluster centroids in world space, for floating labels. */
+  clusterCentroids: Map<number, [number, number, number]>
+
+  colorMode: ColorMode
   hoveredIndex: number | null
   selectedIndex: number | null
+  query: string
+  activeTags: Set<number>
 
-  setGraph: (buffers: GraphBuffers, meta: NodeMeta[]) => void
+  setLoading: () => void
+  setError: (message: string) => void
+  setGraph: (graph: DecodedGraph) => void
+  setColorMode: (mode: ColorMode) => void
   setHovered: (index: number | null) => void
   setSelected: (index: number | null) => void
+  setQuery: (query: string) => void
+  toggleTag: (tagId: number) => void
+  clearFilters: () => void
 }
 
-export const useGraphStore = create<GraphState>((set) => ({
+/** Distinct hues that stay legible against a near-black ground. */
+export const CLUSTER_PALETTE: [number, number, number][] = [
+  [0.36, 0.72, 1.0], [1.0, 0.55, 0.35], [0.55, 0.9, 0.55],
+  [0.92, 0.5, 0.78], [1.0, 0.83, 0.4], [0.6, 0.62, 1.0],
+  [0.4, 0.9, 0.85], [0.95, 0.42, 0.45], [0.75, 0.85, 0.4],
+  [0.7, 0.5, 0.95], [0.45, 0.8, 0.65], [0.9, 0.65, 0.5],
+]
+/** Noise: present but visually recessive, never competing with a real cluster. */
+export const NOISE_COLOR: [number, number, number] = [0.38, 0.4, 0.48]
+/** Placed by transform() rather than a full fit — worth seeing at a glance. */
+export const PROVISIONAL_COLOR: [number, number, number] = [1.0, 0.72, 0.2]
+export const SETTLED_COLOR: [number, number, number] = [0.3, 0.45, 0.62]
+
+export function yearColor(year: number | null, min: number, max: number) {
+  if (year === null) return NOISE_COLOR
+  const t = max > min ? (year - min) / (max - min) : 0.5
+  // Cool (old) to warm (recent); monotonic in lightness so it reads without a key.
+  return [0.25 + 0.7 * t, 0.45 + 0.25 * (1 - Math.abs(t - 0.5) * 2), 1.0 - 0.65 * t] as [
+    number,
+    number,
+    number,
+  ]
+}
+
+function buildBuffers(graph: DecodedGraph): GraphBuffers {
+  const n = graph.nodes.length
+  return {
+    positions: graph.positions,
+    colors: new Float32Array(n * 3),
+    sizes: new Float32Array(n).fill(1),
+    filtered: new Float32Array(n).fill(1),
+    selected: new Float32Array(n),
+  }
+}
+
+function centroidsOf(graph: DecodedGraph): Map<number, [number, number, number]> {
+  const sums = new Map<number, [number, number, number, number]>()
+  graph.nodes.forEach((node, i) => {
+    if (node.cluster === null) return
+    const acc = sums.get(node.cluster) ?? [0, 0, 0, 0]
+    acc[0] += graph.positions[i * 3]!
+    acc[1] += graph.positions[i * 3 + 1]!
+    acc[2] += graph.positions[i * 3 + 2]!
+    acc[3] += 1
+    sums.set(node.cluster, acc)
+  })
+
+  const out = new Map<number, [number, number, number]>()
+  for (const [id, [x, y, z, n]] of sums) out.set(id, [x / n, y / n, z / n])
+  return out
+}
+
+export const useGraphStore = create<GraphState>((set, get) => ({
+  status: 'idle',
+  error: null,
+  runId: null,
+  method: null,
   count: 0,
+  nodes: [],
+  clusters: [],
+  tagVocabulary: [],
   buffers: null,
-  meta: [],
+  clusterCentroids: new Map(),
+  colorMode: 'cluster',
   hoveredIndex: null,
   selectedIndex: null,
+  query: '',
+  activeTags: new Set(),
 
-  setGraph: (buffers, meta) =>
-    set({ buffers, meta, count: meta.length, selectedIndex: null, hoveredIndex: null }),
+  setLoading: () => set({ status: 'loading', error: null }),
+  setError: (error) => set({ status: 'error', error }),
 
-  setHovered: (hoveredIndex) => set({ hoveredIndex }),
+  setGraph: (graph) =>
+    set({
+      status: 'ready',
+      error: null,
+      runId: graph.runId,
+      method: graph.method,
+      count: graph.nodes.length,
+      nodes: graph.nodes,
+      clusters: graph.clusters,
+      tagVocabulary: graph.tagVocabulary,
+      buffers: buildBuffers(graph),
+      clusterCentroids: centroidsOf(graph),
+      hoveredIndex: null,
+      selectedIndex: null,
+    }),
 
+  setColorMode: (colorMode) => set({ colorMode }),
+  setHovered: (hoveredIndex) => {
+    if (get().hoveredIndex !== hoveredIndex) set({ hoveredIndex })
+  },
   setSelected: (selectedIndex) => set({ selectedIndex }),
+  setQuery: (query) => set({ query }),
+  toggleTag: (tagId) =>
+    set((state) => {
+      const next = new Set(state.activeTags)
+      next.has(tagId) ? next.delete(tagId) : next.add(tagId)
+      return { activeTags: next }
+    }),
+  clearFilters: () => set({ query: '', activeTags: new Set() }),
 }))
-
-/** Palette for cluster colouring — distinct hues, readable on a dark ground. */
-export const CLUSTER_PALETTE: [number, number, number][] = [
-  [0.36, 0.72, 1.0],
-  [1.0, 0.55, 0.35],
-  [0.55, 0.9, 0.55],
-  [0.92, 0.5, 0.78],
-  [1.0, 0.83, 0.4],
-  [0.6, 0.62, 1.0],
-  [0.4, 0.9, 0.85],
-  [0.95, 0.42, 0.45],
-  [0.75, 0.85, 0.4],
-  [0.7, 0.5, 0.95],
-]

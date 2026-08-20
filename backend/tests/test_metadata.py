@@ -139,6 +139,7 @@ def test_extraction_survives_a_pdf_with_no_text(pdf_fixtures):
 
 # --- escalated papers -----------------------------------------------------
 
+
 def test_rescued_text_is_preferred_over_a_broken_text_layer(pdf_fixtures):
     """A paper escalates *because* its text layer is unusable.
 
