@@ -12,6 +12,7 @@
  */
 import * as THREE from 'three'
 
+import { BASE_POINT_SIZE } from './pointStyle'
 import pickFragment from './shaders/pick.frag.glsl?raw'
 import pickVertex from './shaders/pick.vert.glsl?raw'
 
@@ -35,7 +36,7 @@ export class GpuPicker {
       fragmentShader: pickFragment,
       uniforms: {
         uPixelRatio: { value: 1 },
-        uBaseSize: { value: 3.4 },
+        uBaseSize: { value: BASE_POINT_SIZE },
       },
       transparent: false,
       depthWrite: true,

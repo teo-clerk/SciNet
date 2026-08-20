@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 
 import { GpuPicker } from './picking'
+import { BASE_POINT_SIZE } from './pointStyle'
 import { useGraphStore } from '@/state/graphStore'
 
 const PICK_INTERVAL_MS = 33
@@ -27,6 +28,8 @@ const PICK_INTERVAL_MS = 33
  * something, and no hover the user cares about happens mid-orbit.
  */
 const SETTLE_MS = 90
+/** How far a press may travel and still count as a click rather than a drag. */
+const CLICK_SLOP_PX = 5
 
 export function Picker() {
   const { gl, camera, scene, size } = useThree()
@@ -39,6 +42,8 @@ export function Picker() {
   const lastPick = useRef(0)
   const hovered = useRef<number | null>(null)
   const dragging = useRef(false)
+  /** What was under the cursor when the press began, and where it began. */
+  const pressed = useRef<{ index: number | null; x: number; y: number } | null>(null)
   const lastCameraMove = useRef(0)
   const lastCameraPos = useRef(new THREE.Vector3())
 
@@ -66,10 +71,21 @@ export function Picker() {
       dragging.current = false
       setHovered(null)
     }
-    const onDown = () => {
+    const onDown = (event: PointerEvent) => {
       dragging.current = true
-      // Whatever was hovered is not what the drag is about.
+      // Remember both what was under the cursor and where the press started.
+      // The node has to be captured here because picking is suppressed while
+      // the camera moves, so by the time the click fires there may be no
+      // current hover to read — an earlier version cleared it here and then
+      // selected that same cleared value, so every click deselected.
+      pressed.current = {
+        index: hovered.current,
+        x: event.clientX,
+        y: event.clientY,
+      }
       if (hovered.current !== null) {
+        // Drop the highlight for the duration of the drag; the remembered
+        // index above is what the click will use.
         hovered.current = null
         setHovered(null)
       }
@@ -77,10 +93,21 @@ export function Picker() {
     const onUp = () => {
       dragging.current = false
     }
-    const onClick = () => {
-      // Select whatever is currently hovered: the pick already happened, so a
-      // click never pays for a second readback.
-      setSelected(hovered.current)
+    const onClick = (event: MouseEvent) => {
+      const press = pressed.current
+      pressed.current = null
+      if (!press) return
+
+      // A press that travelled is an orbit, not a click on a paper. Without
+      // this, releasing a rotate gesture over a node would open it.
+      const travelled = Math.hypot(
+        event.clientX - press.x,
+        event.clientY - press.y,
+      )
+      if (travelled > CLICK_SLOP_PX) return
+
+      // Selecting null is meaningful: clicking empty space closes the panel.
+      setSelected(press.index)
     }
 
     canvas.addEventListener('pointermove', onMove)
@@ -113,7 +140,9 @@ export function Picker() {
     if (now - lastPick.current < PICK_INTERVAL_MS) return
     lastPick.current = now
 
-    picker.setPointScale(3.4, Math.min(gl.getPixelRatio(), 2))
+    // Same sprite size as the visible cloud, or the clickable area stops
+    // matching what is on screen.
+    picker.setPointScale(BASE_POINT_SIZE, Math.min(gl.getPixelRatio(), 2))
     const index = picker.pick(
       gl,
       camera as THREE.PerspectiveCamera,

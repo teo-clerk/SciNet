@@ -372,3 +372,42 @@ def test_the_fallback_stops_at_the_body():
         "This is body prose that should never be returned. " * 8
     )
     assert extract_abstract_unlabelled(markdown) is None
+
+
+def test_template_placeholders_are_not_treated_as_authors():
+    """Journal PDF templates leave these in the Author metadata field."""
+    assert split_authors("Lastname F, Lastname F") == []
+    assert split_authors("Author 1, Author 2") == []
+    assert split_authors("Firstname Lastname") == []
+
+
+def test_real_authors_alongside_a_placeholder_survive():
+    assert split_authors("Ada Lovelace, Lastname F") == ["Ada Lovelace"]
+
+
+def test_ordinary_surnames_are_not_mistaken_for_placeholders():
+    """The guard must not eat real people."""
+    for name in ("Nameer Al-Khwarizmi", "Anna Nameth", "Sarah Unknownson"):
+        assert split_authors(name) == [name], name
+
+
+@pytest.mark.parametrize(
+    "furniture",
+    [
+        "www.nature.com/scientificreports",
+        "https://www.sciencedirect.com/journal",
+        "IEEE Transactions on Something",
+        "Volume 14, Issue 3",
+        "ISSN 1234-5678",
+    ],
+)
+def test_journal_furniture_is_not_a_title(furniture):
+    """Journals print their address across every page, often above the title."""
+    real = "A Study of Spontaneous Yawning in Sea Lions"
+    assert guess_title(f"{furniture}\n{real}\n\nAuthors") == real
+
+
+def test_a_title_merely_mentioning_a_publisher_is_kept():
+    """The guard anchors at the start; it must not eat real titles."""
+    title = "Benchmarking Nature-Inspired Optimisation Algorithms"
+    assert guess_title(f"{title}\n\nAuthors") == title

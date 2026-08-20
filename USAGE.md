@@ -232,6 +232,11 @@ twenty times slower.
 **Everything is slow while importing.** Expected — the worker is using the whole
 machine. It is safe to stop it and restart later.
 
+**`THREE.Clock: This module has been deprecated`** in the browser console. This
+comes from inside `@react-three/fiber`, not from SciNet — three.js 0.185
+deprecated the class and the version of R3F we depend on still uses it. It is
+harmless and disappears when R3F updates. Nothing in `src/` references it.
+
 
 ---
 

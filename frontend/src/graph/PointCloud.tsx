@@ -9,6 +9,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 
+import { BASE_POINT_SIZE, CORE_RADIUS, POINT_INTENSITY } from './pointStyle'
 import fragmentShader from './shaders/point.frag.glsl?raw'
 import vertexShader from './shaders/point.vert.glsl?raw'
 import {
@@ -64,11 +65,15 @@ export function PointCloud() {
         fragmentShader,
         uniforms: {
           uPixelRatio: { value: Math.min(gl.getPixelRatio(), 2) },
-          uBaseSize: { value: 3.4 },
+          uBaseSize: { value: BASE_POINT_SIZE },
           uFogColor: { value: FOG_COLOR },
           uFogNear: { value: 70.0 },
           uFogFar: { value: 260.0 },
-          uIntensity: { value: 0.42 },
+          // Raised from 0.42: the solid core no longer relies on many
+          // overlapping sprites to become visible, so each node can carry more
+          // of its own weight without the dense regions blowing out.
+          uIntensity: { value: POINT_INTENSITY },
+          uCoreRadius: { value: CORE_RADIUS },
         },
         transparent: true,
         // Additive: overlapping sprites sum instead of occluding, so a dense

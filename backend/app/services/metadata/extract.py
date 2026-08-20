@@ -29,13 +29,24 @@ ARXIV_OLD_RE = re.compile(
 )
 
 AUTHOR_SPLIT_RE = re.compile(r"\s*(?:,|;|\band\b|&)\s*", re.IGNORECASE)
+# Journal PDF templates ship with these still in the Author metadata field, and
+# they survive into the sidebar as the paper's authors.
+PLACEHOLDER_AUTHOR_RE = re.compile(
+    r"^(?:lastname|surname|firstname|forename|author|name|anonymous|unknown"
+    r"|title|your\s+name|enter)\b",
+    re.IGNORECASE,
+)
 # Affiliation markers trailing a name: "Alan Turing2,3" or "Ada Lovelace*".
 AUTHOR_MARKER_RE = re.compile(r"[\d\*†‡§¶,\s]+$")
 
 # Lines that are page furniture rather than the title.
 FURNITURE_RE = re.compile(
     r"^(?:arxiv[:\s]|preprint|draft|under review|submitted|accepted|"
-    r"published|proceedings|copyright|©|doi[:\s]|https?://|page\s|\d+$)",
+    r"published|proceedings|copyright|©|doi[:\s]|https?://|page\s|\d+$"
+    # Journals print their own address across the top of every page, and it is
+    # frequently the first substantial line the parser sees.
+    r"|www\.|nature\.com|sciencedirect|springer|wiley|elsevier|ieee\b"
+    r"|scientific\s*reports$|vol(?:ume)?\.?\s*\d|issn|isbn)",
     re.IGNORECASE,
 )
 MIN_TITLE_LENGTH = 12
@@ -85,8 +96,13 @@ def split_authors(raw: str) -> list[str]:
     names = []
     for part in AUTHOR_SPLIT_RE.split(raw):
         cleaned = AUTHOR_MARKER_RE.sub("", part.strip()).strip()
-        if len(cleaned) > 1:
-            names.append(cleaned)
+        if len(cleaned) <= 1:
+            continue
+        if PLACEHOLDER_AUTHOR_RE.match(cleaned):
+            # An unfilled template is worse than no author at all: it reads as
+            # a real name and there is no way for the reader to tell.
+            continue
+        names.append(cleaned)
     return names
 
 
