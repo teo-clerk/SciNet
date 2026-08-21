@@ -493,3 +493,84 @@ def test_an_honest_embedded_title_is_still_preferred(pdf_fixtures):
         parsed_text="# A Worse Heuristic Guess\n\nBody.",
     )
     assert meta.title == "Deep Sets for Molecular Property Prediction"
+
+
+# --- Titles under headings -------------------------------------------------
+#
+# Journal PDFs put a citation stripe above the title, so line order alone picks
+# the stripe. The converter's level-1 heading is the better signal.
+
+
+def test_h1_heading_beats_preceding_citation_stripe() -> None:
+    from app.services.metadata.extract import guess_title
+
+    body = (
+        "An. Quím. RSEQ, 2026, 122 (1), 11-15 https://doi.org/10.62534/rseq.aq.2053\n"
+        "\nENSAYO\n\n# Einstein y la Química Einstein and Chemistry\n"
+        "\n## Julio A. Alonso\n"
+    )
+    assert guess_title(body) == "Einstein y la Química Einstein and Chemistry"
+
+
+def test_shallowest_heading_wins() -> None:
+    """Authors and banners arrive as deeper headings and must not outrank h1."""
+    from app.services.metadata.extract import guess_title
+
+    body = (
+        "### OPEN ACCESS\n\n## Angelica Kaufmann*\n\n# The Real Title Of This Paper\n"
+    )
+    assert guess_title(body) == "The Real Title Of This Paper"
+
+
+def test_section_headings_are_not_titles() -> None:
+    from app.services.metadata.extract import guess_title
+
+    body = "# **Table of Contents**\n\n# Animal sentience and consciousness\n"
+    assert guess_title(body) == "Animal sentience and consciousness"
+
+
+def test_numbered_section_heading_is_not_a_title() -> None:
+    from app.services.metadata.extract import guess_title
+
+    body = "# 1 Introduction\n\nSome body prose that follows the section head.\n"
+    assert guess_title(body) != "1 Introduction"
+
+
+def test_lines_carrying_a_doi_are_never_titles() -> None:
+    """No positional pattern catches every journal's citation style; a DOI does."""
+    from app.services.metadata.extract import guess_title
+
+    body = (
+        "REVIEW published: 26 March 2015 doi: 10.3389/fnhum.2015.00157\n"
+        "\nEvolutionary aspects of self- and world consciousness\n"
+    )
+    assert guess_title(body) == "Evolutionary aspects of self- and world consciousness"
+
+
+def test_real_title_containing_the_word_introduction_survives() -> None:
+    """The section-heading filter must match whole headings, not substrings."""
+    from app.services.metadata.extract import guess_title
+
+    title = "Introduction to Category Theory for Working Biologists"
+    assert guess_title(f"# {title}\n\nBody.\n") == title
+
+
+def test_level_two_heading_used_when_level_one_is_furniture() -> None:
+    """NIH manuscripts stamp a banner as h1 above the real, h2 title."""
+    from app.services.metadata.extract import guess_title
+
+    body = (
+        "Nat Commun. Author manuscript; available in PMC 2012 December 11.\n"
+        "\n# NIH Public Access **Author Manuscript**\n"
+        "\n## **Network physiology reveals relations between network topology**\n"
+    )
+    assert guess_title(body) == (
+        "Network physiology reveals relations between network topology"
+    )
+
+
+def test_headings_below_level_two_are_never_titles() -> None:
+    from app.services.metadata.extract import guess_title
+
+    body = "###### **Pierluigi Fasano**\n\nA Genuine Paper Title About Supply Chains\n"
+    assert guess_title(body) == "A Genuine Paper Title About Supply Chains"

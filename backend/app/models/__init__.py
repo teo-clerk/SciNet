@@ -14,7 +14,12 @@ from app.models.enums import (
     TagStatus,
 )
 from app.models.paper import Chunk, DocVector, MarkdownDoc, Paper, PaperMeta
-from app.models.projection import Cluster, Projection, ProjectionRun
+from app.models.projection import (
+    Cluster,
+    ClusterLink,
+    Projection,
+    ProjectionRun,
+)
 from app.models.system import EgressLog, Job, Setting
 from app.models.tagging import PaperTag, Tag
 
@@ -22,6 +27,7 @@ __all__ = [
     "PRIORITY",
     "Chunk",
     "Cluster",
+    "ClusterLink",
     "DocVector",
     "EgressLog",
     "Job",

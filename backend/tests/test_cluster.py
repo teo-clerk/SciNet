@@ -101,3 +101,48 @@ def test_noise_points_have_no_membership_strength():
     matrix, _ = blobs(n_per=3)
     assignments, probabilities, _ = cluster_embeddings(matrix, list(range(9)))
     assert all(probabilities[pid] == 0.0 for pid in assignments)
+
+
+# --- the dominance guard ---------------------------------------------------
+#
+# HDBSCAN's validity index measures separation, not usefulness. On the real
+# 57-paper corpus it ranked a 35-paper catch-all above eight genuine regions
+# after only two vectors changed, which is the failure this guard exists for.
+
+
+def test_dominant_share_ignores_noise() -> None:
+    import numpy as np
+
+    from app.services.project.cluster import _dominant_share
+
+    labels = np.array([0, 0, 0, 1, -1, -1])
+    # Three of six rows in the largest cluster; noise is not a cluster but is
+    # still part of the corpus being divided up.
+    assert _dominant_share(labels, 6) == 0.5
+
+
+def test_a_floor_producing_one_giant_cluster_is_rejected() -> None:
+    """Three well-separated blobs must survive a candidate that merges two."""
+    import numpy as np
+
+    from app.services.project.cluster import (
+        MAX_CLUSTER_SHARE,
+        choose_min_cluster_size,
+        cluster_embeddings,
+    )
+
+    rng = np.random.default_rng(11)
+    blobs = [
+        rng.normal(centre, 0.35, size=(14, 8))
+        for centre in ([0.0] * 8, [7.0] * 8, [-7.0] * 8)
+    ]
+    dense = np.vstack(blobs).astype(np.float32)
+
+    floor = choose_min_cluster_size(dense, dense.shape[0])
+    assignments, _probabilities, clusters = cluster_embeddings(
+        dense, list(range(dense.shape[0])), min_cluster_size=floor
+    )
+    assert len(clusters) >= 3
+    largest = max(c.size for c in clusters)
+    assert largest / dense.shape[0] <= MAX_CLUSTER_SHARE
+    assert len(assignments) == dense.shape[0]

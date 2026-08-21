@@ -9,8 +9,9 @@ import * as THREE from 'three'
 
 import { CameraRig } from './CameraRig'
 import { Edges } from './Edges'
-import { ClusterLabels, TitleLabels } from './Labels'
+import { ClusterLabels } from './Labels'
 import { Picker } from './Picker'
+import { BridgeCurves } from './BridgeCurves'
 import { PointCloud } from './PointCloud'
 import { SkeletonEdges } from './SkeletonEdges'
 
@@ -32,7 +33,7 @@ export function Scene() {
       <PointCloud />
       <Edges />
       <ClusterLabels />
-      <TitleLabels />
+      <BridgeCurves />
       <Picker />
       <CameraRig />
     </Canvas>

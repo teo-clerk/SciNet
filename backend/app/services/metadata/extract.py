@@ -151,25 +151,96 @@ def strip_markdown(line: str) -> str:
     return candidate.strip().strip("*_").strip()
 
 
+# A line carrying a bare URL or DOI is a citation stripe, a footer, or a
+# preprint banner — never a title. Cheaper and far more general than teaching
+# CITATION_HEADER_RE every journal's house style: the citation that shipped
+# this rule read "An. Quím. RSEQ, 2026, 122 (1), 11-15 https://doi.org/10.6...",
+# which matches no positional pattern but is unmistakable by its DOI.
+LOCATOR_RE = re.compile(r"https?://|\bdoi\.org/|\bdoi:\s*10\.", re.IGNORECASE)
+
+# How far into the document to look for a heading. Titles live at the top; a
+# heading found deeper is a section name.
+HEADING_SEARCH_LINES = 40
+
+# Headings are tried shallowest first, and no deeper than this. Converters mark
+# the title at the top level and demote everything else — authors arrive as
+# ``##`` or ``######``, journal banners as ``###`` — so accepting any depth
+# made "Angelica Kaufmann" and "Article in Press" into titles. But the top
+# level is not always the title either: NIH manuscripts stamp
+# "# NIH Public Access Author Manuscript" above a level-2 real title, so a
+# rejected level-1 falls through to level 2 rather than to line order.
+MAX_TITLE_HEADING_LEVEL = 2
+HEADING_RE = re.compile(r"^\s*(#{1,6})\s*\S")
+
+# A level-1 heading that names part of the document rather than the document.
+# Front matter ("Table of Contents") and numbered sections ("1 Introduction")
+# both appear above the real title often enough to matter.
+SECTION_HEADING_RE = re.compile(
+    r"^\s*(?:\d+[.)]?\s+)?(?:table\s+of\s+contents|contents|summary|"
+    r"introduction|abstract|background|references|bibliography|"
+    r"acknowledge?ments?|appendix|conclusions?|methods?|results?|discussion)"
+    r"\s*$",
+    re.IGNORECASE,
+)
+
+
+def _title_candidate(line: str) -> str | None:
+    """A line reduced to a usable title, or None if it is page furniture."""
+    # Tolerate Markdown: the rescued text arrives with heading markers and
+    # emphasis around the title, both of which end up rendered literally on
+    # the map ("**Ultraviolet Spectra of Local Galaxies").
+    candidate = LEADING_MARKER_RE.sub("", strip_markdown(line)).strip()
+    if len(candidate) < MIN_TITLE_LENGTH or len(candidate) > MAX_TITLE_LENGTH:
+        return None
+    if FURNITURE_RE.match(candidate):
+        return None
+    if CITATION_HEADER_RE.search(candidate) or LOCATOR_RE.search(candidate):
+        return None
+    if SECTION_HEADING_RE.match(candidate):
+        # Checked here rather than only in the heading pass: "Introduction" is
+        # not a title whether or not it happens to be marked up as one.
+        return None
+    return candidate
+
+
 def guess_title(text: str) -> str | None:
-    """First substantial line that is not page furniture.
+    """The document's title, preferring an explicit heading over line order.
+
+    Headings first, shallowest level first, then line order. A Markdown heading
+    near the top is the strongest signal the converter gives us — it marked
+    that line as a title — so it wins even when unmarked text precedes it,
+    which is how journal citation stripes and "PREPRINT" banners used to become
+    titles. Only if no heading qualifies does this fall back to the first
+    substantial line.
 
     Crude on purpose — it only has to be right often enough that the LLM
     fallback is rarely needed, and its verdict is recorded as HEURISTIC so a
     better source can override it later.
     """
-    for line in text.splitlines():
-        # Tolerate Markdown: the rescued text arrives with heading markers and
-        # emphasis around the title, both of which end up rendered literally on
-        # the map ("**Ultraviolet Spectra of Local Galaxies").
-        candidate = LEADING_MARKER_RE.sub("", strip_markdown(line)).strip()
-        if len(candidate) < MIN_TITLE_LENGTH or len(candidate) > MAX_TITLE_LENGTH:
-            continue
-        if FURNITURE_RE.match(candidate):
-            continue
-        if CITATION_HEADER_RE.search(candidate):
-            continue
+    lines = text.splitlines()
 
+    head = lines[:HEADING_SEARCH_LINES]
+    for level in range(1, MAX_TITLE_HEADING_LEVEL + 1):
+        for line in head:
+            match = HEADING_RE.match(line)
+            if match is None or len(match.group(1)) != level:
+                continue
+            candidate = _title_candidate(line)
+            if candidate is None:
+                continue
+            return candidate
+
+    for line in lines:
+        deep = HEADING_RE.match(line)
+        if deep is not None and len(deep.group(1)) > MAX_TITLE_HEADING_LEVEL:
+            # The converter marked this line subordinate. It was already passed
+            # over by the heading pass; picking it up here on account of its
+            # position would undo that judgement — this is how author bylines
+            # ("###### **Pierluigi Fasano**") became titles.
+            continue
+        candidate = _title_candidate(line)
+        if candidate is None:
+            continue
         if candidate.lower().startswith("abstract"):
             break
         return candidate

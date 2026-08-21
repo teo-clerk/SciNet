@@ -238,3 +238,70 @@ body {
   font: inherit; font-size: 11px; cursor: pointer; margin-left: 5px;
 }
 .list-view .actions-cell button:hover { border-color: var(--accent); color: var(--accent); }
+
+/* --- cluster inspector ---
+   Sits opposite the detail panel so a region and a paper drawn from it can be
+   read at the same time; picking a paper out of the member list must not cost
+   the reader their place in that list. */
+.cluster-inspector {
+  position: absolute; top: 0; left: 0; bottom: 0; width: 420px;
+  background: var(--panel); border-right: 1px solid var(--border);
+  padding: 18px 20px 28px; overflow-y: auto; z-index: 20;
+  backdrop-filter: blur(8px);
+  display: flex; flex-direction: column;
+}
+.cluster-inspector h2 {
+  font-size: 15px; line-height: 1.35; margin: 0 26px 10px 0;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.cluster-inspector h3 {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--dim); margin: 18px 0 6px;
+}
+.cluster-inspector p { margin: 0; font-size: 12px; line-height: 1.6; }
+.cluster-inspector .close {
+  position: absolute; top: 12px; right: 14px; background: none;
+  border: none; color: var(--dim); font-size: 22px; cursor: pointer; line-height: 1;
+}
+.cluster-inspector .close:hover { color: var(--fg); }
+.cluster-inspector .tag-list { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 2px; }
+
+/* The list is the working surface, so it takes the leftover height and
+   scrolls on its own rather than pushing the overview off the top. */
+.cluster-inspector section:last-child { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.member-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; min-height: 0; }
+.member-list li { border-bottom: 1px solid rgba(255,255,255,0.04); }
+.member-list button {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  color: var(--fg); font: inherit; cursor: pointer; padding: 8px 4px;
+}
+.member-list button:hover { background: rgba(255,255,255,0.04); }
+.member-list button:hover .member-title { color: var(--accent); }
+.member-title { display: block; font-size: 12px; line-height: 1.4; }
+.member-meta {
+  display: flex; gap: 10px; margin-top: 3px;
+  font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums;
+}
+.member-meta .warn { color: var(--warn); }
+
+/* --- inter-cluster bridge tooltip --- */
+.bridge-card {
+  width: 300px; transform: translateY(-50%);
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 7px; padding: 11px 13px; z-index: 15;
+  backdrop-filter: blur(8px); box-shadow: 0 6px 26px rgba(0,0,0,0.55);
+}
+.bridge-card h4 {
+  margin: 0 0 6px; font-size: 11px; line-height: 1.4;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent);
+}
+.bridge-card p { margin: 0; font-size: 11.5px; line-height: 1.55; color: var(--fg); }
+.bridge-card ul {
+  list-style: none; margin: 8px 0 0; padding: 8px 0 0;
+  border-top: 1px solid var(--border);
+}
+.bridge-card li {
+  font-size: 10.5px; line-height: 1.45; color: var(--dim);
+  padding-left: 9px; position: relative; margin-bottom: 3px;
+}
+.bridge-card li::before { content: '·'; position: absolute; left: 0; }

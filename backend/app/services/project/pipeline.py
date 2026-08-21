@@ -263,6 +263,83 @@ def _previous_coords(
     return rows, reference
 
 
+def _write_links(
+    session: Session,
+    run_id: int,
+    matrix: np.ndarray,
+    paper_ids: list[int],
+    assignments: dict[int, int],
+    probabilities: dict[int, float],
+    stored: dict[int, int],
+    term_lists: dict[int, list[str]],
+    names: dict[int, str],
+    titles: dict[int, str | None],
+    can_name: bool,
+) -> None:
+    """Record which regions are linked, and by what."""
+    from app.models import ClusterLink
+    from app.services.project import naming
+    from app.services.project.bridges import find_bridges, shared_terms
+
+    bridges = find_bridges(matrix, paper_ids, assignments, probabilities, stored)
+    if not bridges:
+        logger.info("no cross-cluster bridges met the evidence threshold")
+        return
+
+    id_to_label = {row_id: label for label, row_id in stored.items()}
+
+    for bridge in bridges:
+        left = id_to_label.get(bridge.source_id)
+        right = id_to_label.get(bridge.target_id)
+        shared = (
+            shared_terms(term_lists.get(left, []), term_lists.get(right, []))
+            if left is not None and right is not None
+            else []
+        )
+        bridge_titles = [titles.get(p) or "" for p in bridge.bridge_paper_ids]
+
+        summary = None
+        if can_name and left is not None and right is not None:
+            summary = naming.describe_bridge(
+                names.get(left, "?"),
+                names.get(right, "?"),
+                shared,
+                [t for t in bridge_titles if t],
+            )
+        if can_name and not summary:
+            # The model was asked whether these two regions genuinely connect
+            # and said no. Storing the link would draw a line on the map
+            # asserting a relationship that was just declined.
+            logger.info(
+                "dropping bridge %s <-> %s: no connection found",
+                names.get(left),
+                names.get(right),
+            )
+            continue
+
+        if summary:
+            logger.info(
+                "bridge %s <-> %s: %s",
+                names.get(left),
+                names.get(right),
+                summary[:80],
+            )
+
+        session.add(
+            ClusterLink(
+                run_id=run_id,
+                source_id=bridge.source_id,
+                target_id=bridge.target_id,
+                similarity=bridge.similarity,
+                bridge_paper_ids=json.dumps(bridge.bridge_paper_ids),
+                shared_terms=json.dumps(shared),
+                llm_summary=summary,
+            )
+        )
+    session.flush()
+    logger.info("evaluated %d candidate bridge(s)", len(bridges))
+
+
 def _write_clusters(
     session: Session, run_id: int, matrix: np.ndarray, paper_ids: list[int]
 ) -> int:
@@ -285,12 +362,19 @@ def _write_clusters(
     if not can_name:
         logger.info("tagging model unavailable; clusters will be unnamed")
 
+    stored: dict[int, int] = {}  # hdbscan label -> cluster row id
+    term_lists: dict[int, list[str]] = {}
+    names: dict[int, str] = {}
+
     for cluster in clusters:
         member_titles = [titles.get(p) or "" for p in cluster.paper_ids]
         terms = top_terms(member_titles)
-        label = (
-            naming.name_cluster(terms, [t for t in member_titles if t])
-            if can_name
+        usable_titles = [t for t in member_titles if t]
+
+        label = naming.name_cluster(terms, usable_titles) if can_name else None
+        overview = (
+            naming.describe_cluster(label, terms, usable_titles)
+            if can_name and label
             else None
         )
         if label:
@@ -302,12 +386,17 @@ def _write_clusters(
             run_id=run_id,
             hdbscan_label=cluster.label,
             llm_label=label,
+            llm_overview=overview,
             size=cluster.size,
             centroid_json=json.dumps(cluster.centroid[:32]),
             top_terms_json=json.dumps(terms),
         )
         session.add(row)
         session.flush()
+        stored[cluster.label] = row.id
+        term_lists[cluster.label] = terms
+        names[cluster.label] = label or f"Region {cluster.label}"
+
         session.execute(
             update(Projection)
             .where(
@@ -316,7 +405,6 @@ def _write_clusters(
             )
             .values(cluster_id=row.id)
         )
-        # Membership strength is per paper, not per cluster.
         for paper_id in cluster.paper_ids:
             session.execute(
                 update(Projection)
@@ -326,4 +414,19 @@ def _write_clusters(
                 )
                 .values(cluster_probability=probabilities.get(paper_id))
             )
+
+    _write_links(
+        session,
+        run_id,
+        matrix,
+        paper_ids,
+        assignments,
+        probabilities,
+        stored,
+        term_lists,
+        names,
+        titles,
+        can_name,
+    )
+
     return len(clusters)

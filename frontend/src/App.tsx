@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 
 import { fetchGraph } from '@/api/graph'
 import { Scene } from '@/graph/Scene'
+import { ClusterInspector } from '@/panels/ClusterInspector'
 import { DetailPanel } from '@/panels/DetailPanel'
 import { FilterBar } from '@/panels/FilterBar'
 import { ListView } from '@/panels/ListView'
@@ -49,8 +50,12 @@ export default function App() {
             )}
           </div>
         )}
+        {/* Inside the canvas host, not beside it: anchored to the viewport
+            they covered the search box and the filter bar, which are how the
+            reader gets back out of whatever the panel is showing. */}
+        <ClusterInspector />
+        <DetailPanel />
       </main>
-      <DetailPanel />
       <JobsDrawer />
     </div>
   )

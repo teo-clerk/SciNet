@@ -138,3 +138,196 @@ def available(settings: Settings | None = None) -> bool:
     except Exception:  # noqa: BLE001
         return False
     return settings.llm_model in PRIVATE_OLLAMA.installed()
+
+
+OVERVIEW_SCHEMA = {
+    "type": "object",
+    "properties": {"overview": {"type": "string"}},
+    "required": ["overview"],
+}
+
+# Property order is load-bearing. Constrained decoding fills the fields in the
+# order they are declared, so the verdict must come first: asked for the prose
+# first, the model has not decided anything yet and emits filler — every pair
+# on the real corpus came back with the literal string "connected".
+BRIDGE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        # Asked for explicitly rather than inferred from the prose. On a real
+        # corpus the model answered "loosely related" for most pairs — which
+        # was correct — and detecting that by string matching would be brittle.
+        "connected": {"type": "boolean"},
+        "relationship": {"type": "string"},
+    },
+    "required": ["connected", "relationship"],
+}
+
+# A summary shorter than this is not a sentence; it is the model restating the
+# field name or the verdict.
+MIN_BRIDGE_WORDS = 6
+
+MAX_OVERVIEW_CHARS = 420
+MAX_BRIDGE_CHARS = 300
+
+
+def trim_to_sentence(text: str, limit: int) -> str:
+    """Cut to the last sentence that fits, not to the last character.
+
+    A hard slice ends summaries mid-word ("...linking gut microbiota to suga"),
+    which reads as a bug in the pipeline rather than a length cap. Falls back to
+    a word boundary when the first sentence is already over the limit.
+    """
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    cut = max(head.rfind(". "), head.rfind("! "), head.rfind("? "))
+    if cut > limit // 3:
+        return head[: cut + 1]
+    space = head.rfind(" ")
+    return (head[:space] if space > 0 else head).rstrip(",;:") + "\u2026"
+
+
+def _ask_json(prompt: str, schema: dict, settings, client) -> dict | None:
+    """One constrained call, returning the whole object."""
+    payload = {
+        "model": settings.llm_model,
+        "prompt": prompt,
+        "stream": False,
+        "format": schema,
+        "keep_alive": settings.ollama_keep_alive,
+        "options": {"temperature": 0.25, "num_ctx": settings.llm_num_ctx},
+    }
+    owned = client is None
+    http = client or httpx.Client(timeout=REQUEST_TIMEOUT)
+    try:
+        response = http.post(f"{settings.ollama_url}/api/generate", json=payload)
+        response.raise_for_status()
+        return json.loads(response.json().get("response", "{}"))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("llm call failed: %s", exc)
+        return None
+    finally:
+        if owned:
+            http.close()
+
+
+def _ask(prompt: str, schema: dict, key: str, settings, client) -> str | None:
+    """One constrained call. Returns None rather than raising: an unnamed
+    region is a missing label, not a failed projection."""
+    payload = {
+        "model": settings.llm_model,
+        "prompt": prompt,
+        "stream": False,
+        "format": schema,
+        "keep_alive": settings.ollama_keep_alive,
+        "options": {"temperature": 0.25, "num_ctx": settings.llm_num_ctx},
+    }
+    owned = client is None
+    http = client or httpx.Client(timeout=REQUEST_TIMEOUT)
+    try:
+        response = http.post(f"{settings.ollama_url}/api/generate", json=payload)
+        response.raise_for_status()
+        value = json.loads(response.json().get("response", "{}")).get(key)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("llm call failed: %s", exc)
+        return None
+    finally:
+        if owned:
+            http.close()
+    return " ".join(str(value).split()) if value else None
+
+
+def describe_cluster(
+    name: str,
+    terms: list[str],
+    titles: list[str],
+    *,
+    settings: Settings | None = None,
+    client: httpx.Client | None = None,
+) -> str | None:
+    """A few sentences on what a region contains and what holds it together.
+
+    The label names the region; this explains it. Given the same evidence the
+    label was drawn from, and told to describe rather than speculate — a
+    confident description of papers the model cannot see is worse than none,
+    because the reader has no way to check it.
+    """
+    settings = settings or get_settings()
+    if not titles:
+        return None
+
+    prompt = "\n".join(
+        [
+            f'These papers were grouped together and the group is called "{name}".',
+            "",
+            "Most distinctive words: " + (", ".join(terms[:12]) or "(none)"),
+            "",
+            "Papers in the group:",
+            *[f"- {t}" for t in sample_titles(titles, limit=14)],
+            "",
+            "In two or three sentences, describe what this group of papers is "
+            "about and what they have in common. Describe only what these "
+            "titles show; do not speculate about work that is not listed, and "
+            "do not restate the group's name.",
+        ]
+    )
+    overview = _ask(prompt, OVERVIEW_SCHEMA, "overview", settings, client)
+    return trim_to_sentence(overview, MAX_OVERVIEW_CHARS) if overview else None
+
+
+def describe_bridge(
+    left_name: str,
+    right_name: str,
+    shared: list[str],
+    bridge_titles: list[str],
+    *,
+    settings: Settings | None = None,
+    client: httpx.Client | None = None,
+) -> str | None:
+    """How two regions relate, grounded in the papers that span them.
+
+    The papers are the evidence and are given to the model explicitly, because
+    the interesting failure here is a fluent, plausible connection between two
+    fields that this particular library does not actually contain.
+    """
+    settings = settings or get_settings()
+    if not bridge_titles:
+        return None
+
+    prompt = "\n".join(
+        [
+            f'Two groups of papers in a library are called "{left_name}" and '
+            f'"{right_name}".',
+            "",
+            "These papers sit between the two groups:",
+            *[f"- {t}" for t in bridge_titles[:8] if t],
+            "",
+            "Vocabulary both groups use: " + (", ".join(shared[:10]) or "(none)"),
+            "",
+            "First, set connected to true only if the listed papers show a "
+            "real, specific link between the two groups. Sharing a broad "
+            "field, or a word like 'review', is not a link. If in doubt, set "
+            "it to false.",
+            "Then write relationship: one or two full sentences saying how "
+            "the two groups connect, naming the specific idea or method "
+            "involved and referring to the papers above. Do not answer with a "
+            "single word.",
+        ]
+    )
+    answer = _ask_json(prompt, BRIDGE_SCHEMA, settings, client)
+    if not answer or not answer.get("connected"):
+        # The model was asked directly and said no. Drawing the line anyway
+        # would assert a relationship it just declined to find.
+        return None
+    summary = " ".join(str(answer.get("relationship") or "").split())
+    if len(summary.split()) < MIN_BRIDGE_WORDS:
+        # A one-word answer is not an explanation, and an unexplained line on
+        # the map is an assertion the reader cannot check.
+        logger.warning(
+            "discarding degenerate bridge summary %r for %s <-> %s",
+            summary,
+            left_name,
+            right_name,
+        )
+        return None
+    return trim_to_sentence(summary, MAX_BRIDGE_CHARS)

@@ -90,6 +90,27 @@ def _floor_candidates(rows: int) -> list[int]:
     return sorted({span[round(i * step)] for i in range(MAX_FLOOR_CANDIDATES)})
 
 
+# A single cluster may not hold more than this share of the corpus. The
+# validity index measures separation, not usefulness, and it will happily rank
+# "one tight region plus one bag holding everything else" above a genuine
+# decomposition — on the 57-paper corpus it scored a 35-paper catch-all
+# (0.654) as the best available split, having preferred eight real regions
+# (0.732) one run earlier, after two vectors changed. A region covering most of
+# the map is the unclustered state wearing a label, so candidates that produce
+# one are only used when nothing else clusters at all.
+MAX_CLUSTER_SHARE = 0.5
+
+
+def _dominant_share(labels: np.ndarray, rows: int) -> float:
+    """Fraction of the corpus sitting in the largest cluster."""
+    sizes: dict[int, int] = {}
+    for value in labels:
+        label = int(value)
+        if label != NOISE_LABEL:
+            sizes[label] = sizes.get(label, 0) + 1
+    return max(sizes.values()) / rows if sizes and rows else 1.0
+
+
 def choose_min_cluster_size(dense: np.ndarray, rows: int) -> int:
     """Let the data pick its own floor.
 
@@ -109,6 +130,10 @@ def choose_min_cluster_size(dense: np.ndarray, rows: int) -> int:
 
     best_floor: int | None = None
     best_validity = float("-inf")
+    # Kept separately so a corpus that genuinely refuses to split still gets
+    # grouped rather than falling through to the absolute minimum.
+    fallback_floor: int | None = None
+    fallback_validity = float("-inf")
 
     for floor in _floor_candidates(rows):
         clusterer = hdbscan.HDBSCAN(
@@ -127,8 +152,20 @@ def choose_min_cluster_size(dense: np.ndarray, rows: int) -> int:
             validity = float(clusterer.relative_validity_)
         except Exception:  # noqa: BLE001 - a degenerate tree is just unusable
             continue
+        if _dominant_share(clusterer.labels_, rows) > MAX_CLUSTER_SHARE:
+            if validity > fallback_validity:
+                fallback_validity, fallback_floor = validity, floor
+            continue
         if validity > best_validity:
             best_validity, best_floor = validity, floor
+
+    if best_floor is None and fallback_floor is not None:
+        logger.info(
+            "every floor produced a dominant cluster; using %d (validity %.3f)",
+            fallback_floor,
+            fallback_validity,
+        )
+        return fallback_floor
 
     if best_floor is None:
         # Nothing produced two clusters; fall back to the smallest floor so the

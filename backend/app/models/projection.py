@@ -84,8 +84,45 @@ class Cluster(Base):
     )
     hdbscan_label: Mapped[int] = mapped_column(Integer)  # -1 = noise
     llm_label: Mapped[str | None] = mapped_column(Text)
+    #: A few sentences on what the region contains and what holds it together.
+    #: The label names it; this explains it.
+    llm_overview: Mapped[str | None] = mapped_column(Text)
     size: Mapped[int] = mapped_column(Integer, default=0)
     centroid_json: Mapped[str | None] = mapped_column(Text)
     top_terms_json: Mapped[str | None] = mapped_column(Text)
 
     run: Mapped[ProjectionRun] = relationship(back_populates="clusters")
+
+
+class ClusterLink(Base):
+    """A conceptual bridge between two regions of the map.
+
+    Regions drawn apart tell the reader what is distinct; they say nothing
+    about what is shared, which in a cross-disciplinary library is often the
+    interesting part. A link records that two clusters are close in embedding
+    space, which papers sit between them, and — once named — how they relate.
+    """
+
+    __tablename__ = "cluster_links"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("projection_runs.id", ondelete="CASCADE"), index=True
+    )
+    #: Ordered so that a pair is stored once: source_id < target_id.
+    source_id: Mapped[int] = mapped_column(
+        ForeignKey("clusters.id", ondelete="CASCADE")
+    )
+    target_id: Mapped[int] = mapped_column(
+        ForeignKey("clusters.id", ondelete="CASCADE")
+    )
+
+    #: Cosine similarity between centroids, in the embedding space. Never
+    #: computed on the rendered coordinates — UMAP distorts global distance,
+    #: so two regions can look adjacent on screen and be unrelated.
+    similarity: Mapped[float] = mapped_column(Float)
+    #: The papers that actually sit between the two, as evidence.
+    bridge_paper_ids: Mapped[str | None] = mapped_column(Text)
+    shared_terms: Mapped[str | None] = mapped_column(Text)
+    llm_summary: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)

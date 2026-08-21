@@ -50,6 +50,8 @@ interface GraphState {
   sortAscending: boolean
   hoveredIndex: number | null
   selectedIndex: number | null
+  /** Cluster whose inspector is open, or null. */
+  inspectedCluster: number | null
   query: string
   searchMode: SearchMode
   /** Paper ids returned by the active search, or null when none is running. */
@@ -68,6 +70,7 @@ interface GraphState {
   setSort: (key: SortKey) => void
   setHovered: (index: number | null) => void
   setSelected: (index: number | null) => void
+  inspectCluster: (clusterId: number | null) => void
   setQuery: (query: string) => void
   setSearchMode: (mode: SearchMode) => void
   setSearchResults: (ids: Set<number> | null) => void
@@ -148,6 +151,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   sortAscending: true,
   hoveredIndex: null,
   selectedIndex: null,
+  inspectedCluster: null,
   query: '',
   searchMode: 'title',
   searchResults: null,
@@ -191,7 +195,13 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   setHovered: (hoveredIndex) => {
     if (get().hoveredIndex !== hoveredIndex) set({ hoveredIndex })
   },
+  // Region and paper are independent, and deliberately so. Picking a paper out
+  // of a cluster's list must not close the list — the reader is working
+  // through it, and losing their place after every click makes the list
+  // useless for the one thing it is for. They occupy opposite sides of the
+  // canvas so both can be read at once.
   setSelected: (selectedIndex) => set({ selectedIndex }),
+  inspectCluster: (inspectedCluster) => set({ inspectedCluster }),
   setQuery: (query) => set({ query, searchError: null }),
   setSearchMode: (searchMode) =>
     set({ searchMode, searchResults: null, searchError: null }),

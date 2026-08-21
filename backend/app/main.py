@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.warmup import WARMER
-from app.routers import events, graph, jobs, papers, search, system
+from app.routers import clusters, events, graph, jobs, papers, search, system
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["*"],
     )
-    for module in (system, papers, graph, search, jobs, events):
+    for module in (system, papers, graph, clusters, search, jobs, events):
         app.include_router(module.router)
     return app
 
