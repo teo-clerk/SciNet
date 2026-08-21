@@ -83,16 +83,34 @@ MAX_PAPER_CHARS = 120_000
 WORD_RE = re.compile(rf"[^\W\d_]{{{MIN_TERM_LENGTH},}}", re.UNICODE)
 SENTENCE_END_RE = re.compile(r"[.!?](?:\s|$)")
 
+#: A figure or table caption. It is prose, and it is about a figure rather
+#: than about the document — a paper's best-scoring paragraph is frequently its
+#: richest caption, and a textbook is full of them.
+CAPTION_RE = re.compile(
+    r"^\**\s*(?:fig(?:ure)?|table|chart|scheme|box|plate|exhibit)\s*\.?\s*"
+    r"[0-9IVX]+\b",
+    re.IGNORECASE,
+)
+
 #: A converted table arrives as a run of pipe-delimited cells. It reads as
 #: prose to every other test here — long enough, punctuated, not especially
 #: capitalised — and a keywords table was being returned as a paper's abstract.
 TABLE_RE = re.compile(r"\|.*\|.*\|")
+
+#: How much of a paragraph's opening is examined for publishing boilerplate.
+#: A copyright notice *leads* with it; a real abstract that merely contains the
+#: phrase does so because the extractor ran past its end into a page footer.
+#: Searching the whole paragraph rejected two genuine abstracts on the real
+#: corpus for carrying "All rights reserved" a thousand characters in.
+BOILERPLATE_HEAD_CHARS = 200
 
 #: Front matter and running furniture that reads like prose but says nothing.
 BOILERPLATE_RE = re.compile(
     r"all\s+rights\s+reserved|no\s+part\s+of\s+this\s+(?:book|publication)|"
     r"library\s+of\s+congress|british\s+library\s+cataloguing|"
     r"printed\s+in\s+the\s+united|isbn|first\s+published|"
+    # "some rights reserved" and "all rights reserved" are the same notice.
+    r"rights\s+reserved|exclusive\s+licensee|copyright\s*©|"
     r"typeset\s+by|cover\s+design|reprinted|this\s+page\s+intentionally",
     re.IGNORECASE,
 )
@@ -114,8 +132,35 @@ class Synopsis:
     strategy: Strategy
 
 
+def is_boilerplate(text: str) -> bool:
+    """Does this paragraph *open* as a copyright or cataloguing notice?"""
+    return bool(BOILERPLATE_RE.search(text[:BOILERPLATE_HEAD_CHARS]))
+
+
 def _paragraphs(markdown: str) -> list[str]:
     return [block.strip() for block in markdown.split("\n\n") if block.strip()]
+
+
+def is_furniture(text: str) -> bool:
+    """Is this a piece of the document rather than a statement about it?
+
+    Shared by both prose tests. They differ in their thresholds — one is
+    tuned for a paper's front matter and one for a book's body — but they
+    must agree about what is not writing at all, and they did not: a fragment
+    beginning mid-sentence was rejected by one and accepted by the other, so
+    which rung of the ladder you landed on decided whether you got it.
+    """
+    if is_boilerplate(text):
+        return True
+    if CAPTION_RE.match(text):
+        return True
+    if TABLE_RE.search(text):
+        return True
+    # Begins mid-sentence, so it is the tail of a paragraph the converter split
+    # — across a page break, a column, or in OCR output, where it is the norm.
+    # Quoting from the middle of a sentence reads as damage whatever else it
+    # says. Scripts without letter case are unaffected: islower() is False.
+    return text[:1].islower()
 
 
 def is_prose(paragraph: str) -> bool:
@@ -130,9 +175,7 @@ def is_prose(paragraph: str) -> bool:
         return False
     if text.startswith("#") or text.startswith(">") or text.startswith("- "):
         return False
-    if BOILERPLATE_RE.search(text):
-        return False
-    if TABLE_RE.search(text):
+    if is_furniture(text):
         return False
     if len(SENTENCE_END_RE.findall(text)) < 2:
         return False

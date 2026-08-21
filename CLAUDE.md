@@ -81,10 +81,16 @@ Target scale 3–4k papers on a single laptop.
   The digest is deliberately capped at abstract length — if books contributed
   four thousand characters and papers twelve hundred, that difference would
   land in the document vector and the map would start clustering by *format*.
-- **A copyright page reads as prose** by every shape test — long, punctuated,
-  not especially capitalised — and was being returned as books' abstracts. So
-  does a Markdown table, which is how a keywords table became a real paper's
-  abstract. Both are rejected explicitly.
+- **Four things read as prose and are not**, all found on the real corpus,
+  all rejected by `synopsis.is_furniture`: a copyright page (long, punctuated,
+  not especially capitalised); a converted Markdown table, which is how a
+  keywords table became a paper's abstract; a figure caption, which is often a
+  paper's single most topical paragraph and is about the figure; and a
+  paragraph beginning mid-sentence, which is the tail of one the converter
+  split — the norm in OCR output. Boilerplate is matched only in a paragraph's
+  *opening*: a real abstract that runs on into a page footer says "all rights
+  reserved" a thousand characters in, and rejecting it for that cost two
+  genuine abstracts before the rule was narrowed.
 - **Chunk vectors were computed and discarded.** Chunks are retrieved by BM25
   over `chunks_fts`; nothing ever read a chunk vector. Invisible at 57 papers,
   not at 550 with books among them, where one book is hundreds of chunks. Only
@@ -195,6 +201,7 @@ cd backend && uv run python -m app.workers.runner   # worker
 cd backend && uv run python ../scripts/backfill.py  # bulk import
 cd backend && uv run python ../scripts/clean_library.py --dry-run  # find junk
 cd backend && uv run python ../scripts/check_portability.py  # models stay local
+cd backend && uv run python ../scripts/fix_abstracts.py  # re-derive bad abstracts
 cd backend && uv run scinet-stop                 # stop API, worker, Vite
 ./scripts/stop.sh                                # the same, from anywhere
 cd frontend && bun test                          # frontend unit tests

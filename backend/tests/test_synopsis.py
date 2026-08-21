@@ -215,3 +215,63 @@ def test_a_converted_table_is_not_an_abstract():
     )
 
     assert not is_prose(table)
+
+
+def test_an_abstract_that_merely_mentions_copyright_is_still_an_abstract():
+    """Two real abstracts were rejected for carrying a page footer.
+
+    A copyright notice *opens* with its boilerplate. An abstract that ends up
+    with "All rights reserved" a thousand characters in got there because the
+    extractor ran past the abstract into the foot of the page, and throwing the
+    whole thing away costs far more than the trailing sentence does.
+    """
+    real = (
+        "Most early studies of consciousness have focused on human subjects, "
+        "which is understandable given that humans can report the events they "
+        "experience through language. Extending the question to other animals "
+        "requires measures that do not depend on verbal report at all. "
+        + "This paper reviews the candidate measures and their limits. " * 6
+        + "Copyright 2024. All rights reserved."
+    )
+
+    assert is_prose(real)
+
+
+def test_a_notice_that_opens_with_boilerplate_is_still_rejected():
+    assert not is_prose(
+        "All rights reserved. No part of this book may be reproduced in any "
+        "form or by any means, electronic or mechanical, without permission "
+        "in writing from the publisher. First published 1976."
+    )
+
+
+def test_a_figure_caption_is_not_a_summary_of_the_document():
+    """A paper's richest paragraph is often its best figure caption.
+
+    It is prose, and it is about the figure. Three papers on the real corpus
+    were being summarised by one.
+    """
+    assert not is_prose(
+        "**Fig. 2 | Benefits of touch on physical and mental health. a** , "
+        "Orchard plot of the effects of touch interventions on physical "
+        "outcomes across the included trials. Effect sizes are shown with "
+        "their confidence intervals and weighted by sample size."
+    )
+    assert not is_prose(
+        "Table 3. Comparison of gyrification indices across primate species, "
+        "with cortical surface area and folding wavelength reported for each. "
+        "Values are means over the specimens available for that species."
+    )
+
+
+def test_a_fragment_beginning_mid_sentence_is_not_used():
+    """Converters split paragraphs across pages and columns; OCR always does.
+
+    Quoting from the middle of a sentence reads as damage whatever it says.
+    """
+    assert not is_prose(
+        "waned. However, it is possible that this was in response to the "
+        "earlier intervention rather than to the treatment under study, and "
+        "the design cannot distinguish the two. Later cohorts showed the "
+        "same pattern."
+    )

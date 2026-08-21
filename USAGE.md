@@ -168,7 +168,14 @@ So the abstract is looked for in five places, strongest evidence first:
    the front.
 
 Only the last invents anything, and the sidebar marks it as assembled rather
-than written. Rung 3 is switched off for anything longer than about 65 pages:
+than written.
+
+If you improve on this later, existing rows keep whatever the rules said the
+day they were parsed. `scripts/fix_abstracts.py` re-derives the ones that are
+demonstrably wrong — a keywords table, a page header, a figure caption — and
+leaves good ones alone. It is a dry run unless you pass `--apply`, and because
+an abstract feeds the document vector, the map only reflects the change after a
+re-embed. Rung 3 is switched off for anything longer than about 65 pages:
 "the first substantial paragraph is the abstract" is a paper's rule, and
 applied to a book it returns the opening of chapter one.
 

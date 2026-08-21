@@ -19,10 +19,9 @@ from app.core.paths import DocumentKind, classify_document
 from app.models import MetaSource
 from app.services.ingest.identity import normalise_doi
 from app.services.metadata.synopsis import (
-    BOILERPLATE_RE,
-    TABLE_RE,
     Strategy,
     find_synopsis,
+    is_furniture,
 )
 
 # Identifiers are searched only near the front of the document: a DOI further in
@@ -328,11 +327,9 @@ def _looks_like_prose(paragraph: str) -> bool:
     # enough, several sentences, not especially capitalised. It was being
     # returned as the abstract for books, which is how "All rights reserved.
     # No part of this book may be reproduced" ended up describing a paper.
-    if BOILERPLATE_RE.search(text):
-        return False
-    # A keywords/summary table converted to Markdown pipes. Reads as prose by
-    # every other measure here and is not one.
-    if TABLE_RE.search(text):
+    # Copyright pages, figure captions, converted tables and fragments that
+    # begin mid-sentence. All read as prose by the measures below.
+    if is_furniture(text):
         return False
     if len(SENTENCE_END_RE.findall(text)) < MIN_ABSTRACT_SENTENCES:
         return False
