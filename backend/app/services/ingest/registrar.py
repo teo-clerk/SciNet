@@ -17,6 +17,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.paths import classify_document
 from app.core.types import utcnow
 from app.models import Job, JobKind, Paper, PaperStatus
 from app.services.ingest.hashing import hash_file
@@ -40,13 +41,19 @@ class RegistrationResult:
     existing: Paper | None = None
 
 
-def register_pdf(
+def register_document(
     session: Session,
     path: Path | str,
     *,
     pipeline_version: int = 1,
 ) -> RegistrationResult:
-    """Record a PDF, or explain why it was not recorded."""
+    """Record a library document, or explain why it was not recorded.
+
+    Format-agnostic: PDFs, plain text, Markdown and .docx all become the same
+    kind of row. What a file *is* only matters at the parse stage, and the
+    column is still called ``pdf_path`` because renaming it would rewrite every
+    migration for no behavioural gain.
+    """
     path = Path(path).resolve()
     digest = hash_file(path)
 
@@ -117,15 +124,30 @@ def refresh_work_key(session: Session, paper: Paper) -> Registration:
     return Registration.CREATED
 
 
-def pending_pdfs(root: Path, session: Session) -> list[Path]:
-    """PDFs under ``root`` that are not yet known, by path.
+def library_documents(root: Path) -> list[Path]:
+    """Every ingestible file under ``root``, at any depth.
 
-    A path-level filter only. Content hashing happens in ``register_pdf``,
+    Recursive because people organise libraries into folders — by year, by
+    project, by reading list — and a scan that only sees the top level silently
+    ignores most of the collection. Classification is by content where possible,
+    so an extensionless arXiv download is still found.
+    """
+    return sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file() and classify_document(path) is not None
+    )
+
+
+def pending_documents(root: Path, session: Session) -> list[Path]:
+    """Documents under ``root`` that are not yet known, by path.
+
+    A path-level filter only. Content hashing happens in ``register_document``,
     since hashing every file on every scan would dominate a rescan of a large
     library.
     """
     known = {row for row in session.scalars(select(Paper.pdf_path))}
-    return [p for p in sorted(root.rglob("*.pdf")) if str(p.resolve()) not in known]
+    return [p for p in library_documents(root) if str(p.resolve()) not in known]
 
 
 def dead_paper_ids(session: Session) -> list[int]:

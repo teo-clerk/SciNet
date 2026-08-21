@@ -1,4 +1,4 @@
-"""Watches the library folder for new PDFs.
+"""Watches the library folder for new documents.
 
 The hard part is not noticing files, it is noticing them at the right moment. A
 PDF being copied in fires modify events continuously, and hashing it mid-copy
@@ -20,9 +20,9 @@ from watchdog.observers import Observer
 
 from app.core.db import session_scope
 from app.core.events import BROKER
-from app.core.paths import is_pdf
+from app.core.paths import classify_document
 from app.services.ingest.hashing import is_stable
-from app.services.ingest.registrar import Registration, register_pdf
+from app.services.ingest.registrar import Registration, register_document
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ SETTLE_POLL_SECONDS = 1.0
 MAX_SETTLE_ATTEMPTS = 30
 
 
-class PdfHandler(FileSystemEventHandler):
+class DocumentHandler(FileSystemEventHandler):
     """Queues candidate paths; a background thread does the slow part."""
 
     def __init__(self, on_ready: Callable[[Path], None]) -> None:
@@ -50,7 +50,7 @@ class PdfHandler(FileSystemEventHandler):
 
     def _note(self, raw_path: str) -> None:
         path = Path(raw_path)
-        if not is_pdf(path):
+        if classify_document(path) is None:
             return
         with self._lock:
             # Resetting the deadline on every event is the debounce: the clock
@@ -95,9 +95,9 @@ class PdfHandler(FileSystemEventHandler):
 
 
 def admit_path(path: Path) -> None:
-    """Register a settled PDF and enqueue its parse job."""
+    """Register a settled document and enqueue its parse job."""
     with session_scope() as session:
-        result = register_pdf(session, path)
+        result = register_document(session, path)
 
     if result.outcome is Registration.CREATED and result.paper is not None:
         logger.info("ingested %s as paper %d", path.name, result.paper.id)
@@ -109,11 +109,11 @@ def admit_path(path: Path) -> None:
 def watch(root: Path, on_ready: Callable[[Path], None] = admit_path) -> Observer:
     """Start watching ``root``. Caller owns stopping the returned observer."""
     root.mkdir(parents=True, exist_ok=True)
-    handler = PdfHandler(on_ready)
+    handler = DocumentHandler(on_ready)
     handler.start()
 
     observer = Observer()
     observer.schedule(handler, str(root), recursive=True)
     observer.start()
-    logger.info("watching %s for new PDFs", root)
+    logger.info("watching %s for new documents", root)
     return observer

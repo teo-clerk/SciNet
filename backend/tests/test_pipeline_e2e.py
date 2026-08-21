@@ -22,7 +22,7 @@ from app.models import (
     PaperMeta,
     PaperStatus,
 )
-from app.services.ingest.registrar import Registration, register_pdf
+from app.services.ingest.registrar import Registration, register_document
 from app.workers.handlers import handle_metadata, handle_parse
 from app.workers.queue import claim_next, complete
 
@@ -67,7 +67,7 @@ def run_stage(sf, kind: JobKind, settings: Settings, handler) -> int:
 
 def test_pdf_becomes_a_parsed_paper(sf, settings, library):
     with sf() as s:
-        result = register_pdf(s, library["with_identifiers.pdf"])
+        result = register_document(s, library["with_identifiers.pdf"])
         s.commit()
         assert result.outcome is Registration.CREATED
         paper_id = result.paper.id
@@ -88,7 +88,7 @@ def test_pdf_becomes_a_parsed_paper(sf, settings, library):
 
 def test_metadata_stage_extracts_identifiers(sf, settings, library):
     with sf() as s:
-        paper_id = register_pdf(s, library["with_identifiers.pdf"]).paper.id
+        paper_id = register_document(s, library["with_identifiers.pdf"]).paper.id
         s.commit()
 
     run_stage(sf, JobKind.PARSE, settings, handle_parse)
@@ -108,7 +108,7 @@ def test_metadata_stage_extracts_identifiers(sf, settings, library):
 def test_metadata_hands_off_to_embedding(sf, settings, library):
     """The stage boundary that carries a paper into M2."""
     with sf() as s:
-        paper_id = register_pdf(s, library["with_identifiers.pdf"]).paper.id
+        paper_id = register_document(s, library["with_identifiers.pdf"]).paper.id
         s.commit()
     run_stage(sf, JobKind.PARSE, settings, handle_parse)
     run_stage(sf, JobKind.METADATA, settings, handle_metadata)
@@ -124,7 +124,7 @@ def test_metadata_hands_off_to_embedding(sf, settings, library):
 
 def test_parse_enqueues_metadata(sf, settings, library):
     with sf() as s:
-        register_pdf(s, library["with_identifiers.pdf"])
+        register_document(s, library["with_identifiers.pdf"])
         s.commit()
     run_stage(sf, JobKind.PARSE, settings, handle_parse)
 
@@ -139,10 +139,10 @@ def test_parse_enqueues_metadata(sf, settings, library):
 
 def test_reingesting_the_same_bytes_is_a_noop(sf, settings, library):
     with sf() as s:
-        first = register_pdf(s, library["with_identifiers.pdf"])
+        first = register_document(s, library["with_identifiers.pdf"])
         s.commit()
     with sf() as s:
-        second = register_pdf(s, library["with_identifiers.pdf"])
+        second = register_document(s, library["with_identifiers.pdf"])
         s.commit()
 
     assert second.outcome is Registration.DUPLICATE_CONTENT
@@ -153,14 +153,14 @@ def test_reingesting_the_same_bytes_is_a_noop(sf, settings, library):
 
 def test_a_moved_file_follows_rather_than_duplicating(sf, settings, library):
     with sf() as s:
-        paper_id = register_pdf(s, library["with_identifiers.pdf"]).paper.id
+        paper_id = register_document(s, library["with_identifiers.pdf"]).paper.id
         s.commit()
 
     moved = settings.library_dir / "renamed.pdf"
     library["with_identifiers.pdf"].rename(moved)
 
     with sf() as s:
-        result = register_pdf(s, moved)
+        result = register_document(s, moved)
         s.commit()
         assert result.outcome is Registration.MOVED
         assert s.query(Paper).count() == 1
@@ -169,7 +169,7 @@ def test_a_moved_file_follows_rather_than_duplicating(sf, settings, library):
 
 def test_quality_report_is_persisted_for_diagnosis(sf, settings, library):
     with sf() as s:
-        paper_id = register_pdf(s, library["clean_single_column.pdf"]).paper.id
+        paper_id = register_document(s, library["clean_single_column.pdf"]).paper.id
         s.commit()
     run_stage(sf, JobKind.PARSE, settings, handle_parse)
 
@@ -182,7 +182,7 @@ def test_quality_report_is_persisted_for_diagnosis(sf, settings, library):
 
 def test_a_missing_pdf_fails_the_job_not_the_worker(sf, settings, library):
     with sf() as s:
-        register_pdf(s, library["clean_single_column.pdf"])
+        register_document(s, library["clean_single_column.pdf"])
         s.commit()
     library["clean_single_column.pdf"].unlink()
 
@@ -190,3 +190,120 @@ def test_a_missing_pdf_fails_the_job_not_the_worker(sf, settings, library):
         job = claim_next(s, kinds=[JobKind.PARSE])
         with pytest.raises(FileNotFoundError):
             handle_parse(s, job, settings)
+
+
+# --- recursive, multi-format ingestion -------------------------------------
+#
+# A library is a folder tree, not a flat directory, and not everything in it is
+# a PDF. These assert the two halves of that: discovery reaches every depth,
+# and a non-PDF comes out the far end of the pipeline indistinguishable from a
+# PDF.
+
+
+def test_discovery_reaches_every_subdirectory(settings, pdf_fixtures):
+    from app.services.ingest.registrar import library_documents
+
+    settings.ensure_dirs()
+    root = settings.library_dir
+    (root / "2024" / "neuro").mkdir(parents=True)
+    (root / "unsorted").mkdir()
+
+    shutil.copy(pdf_fixtures["with_identifiers.pdf"], root / "top.pdf")
+    shutil.copy(pdf_fixtures["clean_single_column.pdf"], root / "2024" / "mid.pdf")
+    (root / "2024" / "neuro" / "deep.md").write_text(
+        "# Deep\n\nProse.", encoding="utf-8"
+    )
+    (root / "unsorted" / "notes.txt").write_text("Some notes here.", encoding="utf-8")
+    # Not a document, and must not be picked up.
+    (root / "unsorted" / "cover.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+
+    found = {p.name for p in library_documents(root)}
+    assert found == {"top.pdf", "mid.pdf", "deep.md", "notes.txt"}
+
+
+def test_a_markdown_file_becomes_a_paper(sf, settings):
+    """The whole point of multi-format support, checked end to end."""
+    settings.ensure_dirs()
+    nested = settings.library_dir / "reading" / "2026"
+    nested.mkdir(parents=True)
+    source = nested / "review.md"
+    source.write_text(
+        "# Structural Constraints on Neural Development\n\n"
+        "## Abstract\n\n"
+        "This review examines how mechanical constraints shape the developing "
+        "cortex, drawing together evidence from imaging and modelling work "
+        "across several model organisms and developmental stages.\n",
+        encoding="utf-8",
+    )
+
+    with sf() as s:
+        result = register_document(s, source)
+        s.commit()
+        assert result.outcome is Registration.CREATED
+        paper_id = result.paper.id
+
+    assert run_stage(sf, JobKind.PARSE, settings, handle_parse) == 1
+    assert run_stage(sf, JobKind.METADATA, settings, handle_metadata) == 1
+
+    with sf() as s:
+        paper = s.get(Paper, paper_id)
+        md = s.get(MarkdownDoc, paper_id)
+        meta = s.get(PaperMeta, paper_id)
+
+        assert paper.status == PaperStatus.PARSED
+        assert md.parser == "markdown-passthrough"
+        assert md.tier == 0
+        # The title must survive to the map, exactly as it would from a PDF.
+        assert meta.title == "Structural Constraints on Neural Development"
+        assert meta.abstract and "mechanical constraints" in meta.abstract
+
+
+def test_a_docx_becomes_a_paper(sf, settings):
+    pytest.importorskip("docx")
+    import docx
+
+    settings.ensure_dirs()
+    source = settings.library_dir / "drafts" / "paper.docx"
+    source.parent.mkdir(parents=True)
+    document = docx.Document()
+    document.add_heading("Epigenetic Drift in Long-Lived Cells", level=1)
+    document.add_paragraph(
+        "We tracked methylation across three decades of samples and found that "
+        "drift accumulates in a manner consistent with replicative age rather "
+        "than chronological age."
+    )
+    document.save(str(source))
+
+    with sf() as s:
+        paper_id = register_document(s, source).paper.id
+        s.commit()
+
+    assert run_stage(sf, JobKind.PARSE, settings, handle_parse) == 1
+    run_stage(sf, JobKind.METADATA, settings, handle_metadata)
+
+    with sf() as s:
+        md = s.get(MarkdownDoc, paper_id)
+        meta = s.get(PaperMeta, paper_id)
+        assert md.parser == "python-docx"
+        assert meta.title == "Epigenetic Drift in Long-Lived Cells"
+
+
+def test_the_next_stage_is_queued_for_a_non_pdf(sf, settings):
+    """A .txt must not stall: parse has to hand off to metadata like a PDF."""
+    settings.ensure_dirs()
+    source = settings.library_dir / "notes.txt"
+    source.write_text("A Note On Something\n\n" + "Body prose. " * 40, encoding="utf-8")
+
+    with sf() as s:
+        paper_id = register_document(s, source).paper.id
+        s.commit()
+
+    run_stage(sf, JobKind.PARSE, settings, handle_parse)
+
+    with sf() as s:
+        queued = (
+            s.query(Job)
+            .filter(Job.paper_id == paper_id, Job.kind == JobKind.METADATA)
+            .count()
+        )
+        assert queued == 1

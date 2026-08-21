@@ -82,6 +82,21 @@ works immediately.
 serves it without the worker running. Papers only move through the pipeline
 while the worker is up, and anything left unfinished resumes when it restarts.
 
+### Stopping everything
+
+Closing a terminal does not always take its process with it, and a stale
+process is worse than an obvious one: a second worker fights the first for the
+database write lock, and an API left over from an earlier session serves routes
+that no longer exist in the code you are editing.
+
+```bash
+./scripts/stop.sh              # stop the API, the worker, and Vite
+./scripts/stop.sh --dry-run    # show what is running, change nothing
+```
+
+It finds processes by the port they listen on and by what they are running, so
+it will not match — or kill — the shell you type it into.
+
 ---
 
 ## 3. Getting papers in
@@ -94,7 +109,8 @@ drawer at the bottom left.
 
 **Drop files into `data/library/`.** The watcher notices them within a couple of
 seconds. It waits for the file to stop changing before reading it, so copying a
-large PDF in is safe.
+large PDF in is safe. **Subfolders work** — organise the library by year, topic
+or reading list however you like; the scan is recursive.
 
 **Import an existing collection:**
 
@@ -105,6 +121,67 @@ cd backend && uv run python ../scripts/backfill.py ~/Papers
 Backfill is resumable. Interrupt it and run it again; it picks up where it
 stopped, because registration is keyed on file content and the job queue is
 durable.
+
+### What counts as a paper
+
+| format | how it is read |
+|---|---|
+| `.pdf` | tiered: fast text layer, escalating to OCR only when needed |
+| `.txt`, `.md` | read directly as UTF-8 |
+| `.docx` | read with `python-docx`; Word heading styles become Markdown headings |
+| no extension | PDFs are recognised by content, so bare arXiv downloads work |
+
+Everything lands in the same pipeline. A `.docx` is embedded, positioned,
+clustered and tagged exactly like a PDF.
+
+### Nothing is parsed twice
+
+**Parsing is fully persistent. Restarting the app never re-parses anything.**
+
+Every stage writes its result to disk and is keyed on file *content*, not
+filename or modification time:
+
+- Extracted Markdown lives in `data/markdown/`.
+- Vectors live in a memmap in `data/vectors/`; the fitted UMAP reducer is
+  serialised beside them.
+- Coordinates, clusters and metadata live in SQLite.
+
+So starting the app opens the existing map immediately — no refit, no
+re-embedding, no re-reading of PDFs. Only files that are genuinely new are
+processed, and they are added *incrementally*: a new paper is projected through
+the existing reducer with `transform()`, which takes seconds and leaves every
+existing node exactly where it was.
+
+Re-running `backfill.py` over the same folder is therefore cheap and safe — it
+registers nothing it already has. Renaming or moving a file is recognised as the
+same paper and simply updates its path.
+
+Work is only redone when you ask for it: changing the embedding model
+invalidates vectors and projections (but never the extracted Markdown), and a
+full re-projection has to be requested explicitly.
+
+### Broken files and duplicates
+
+Libraries accumulate things that are not papers: HTML paywall pages saved with a
+`.pdf` extension, truncated downloads, zero-byte placeholders, and the same
+paper downloaded three times. These used to be skipped silently on every scan.
+Now they are taken out:
+
+```bash
+cd backend && uv run python ../scripts/clean_library.py --dry-run   # report only
+cd backend && uv run python ../scripts/clean_library.py             # quarantine
+```
+
+Backfill runs this automatically before scanning; pass `--no-clean` to skip it.
+
+Files are **moved to `data/quarantine/<timestamp>/`**, not deleted, with a
+`manifest.json` recording why each one was removed. Look through it and delete
+the folder when you are satisfied. Pass `--purge` if you would rather they were
+deleted outright.
+
+Only files that *claim* to be documents are ever touched. A cover image or a
+`.bib` file sitting in the library is left exactly where it is. Duplicates must
+be byte-identical — two versions of the same paper are two papers.
 
 ### What happens to a paper
 
@@ -263,6 +340,13 @@ for a single run are set differently too:
 
 ```powershell
 $env:SCINET_ENRICHMENT_ENABLED = "true"; uv run python -m app.workers.runner
+```
+
+To stop everything, call the Python script directly — `stop.sh` is a bash
+wrapper, but the logic it wraps is cross-platform and uses `netstat` on Windows:
+
+```powershell
+cd backend; uv run python ../scripts/stop.py
 ```
 
 ### Opening a PDF

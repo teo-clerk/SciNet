@@ -175,3 +175,63 @@ def test_identical_content_is_accepted_but_not_queued_twice(env):
 def test_an_empty_upload_is_rejected_by_validation(env):
     client, _, _ = env
     assert client.post("/api/papers/upload", files=[]).status_code == 422
+
+
+# --- multi-format uploads --------------------------------------------------
+#
+# The upload button, the watched folder and backfill must agree about what a
+# paper is. When they disagree, a file the watcher would have accepted gets
+# rejected for arriving through a different door.
+
+
+def test_uploading_markdown_is_accepted(env):
+    client, _factory, settings = env
+    body = b"# A Markdown Paper\n\nBody prose that is long enough to be real.\n"
+
+    payload = upload(client, [("review.md", body)]).json()
+
+    assert payload["rejected"] == []
+    assert (settings.library_dir / "review.md").exists()
+
+
+def test_uploading_a_docx_keeps_its_extension(env):
+    docx = pytest.importorskip("docx")
+    client, _factory, settings = env
+
+    document = docx.Document()
+    document.add_heading("An Uploaded Draft", level=1)
+    document.add_paragraph("Some content worth keeping.")
+    buffer = io.BytesIO()
+    document.save(buffer)
+
+    payload = upload(client, [("draft.docx", buffer.getvalue())]).json()
+
+    assert payload["rejected"] == []
+    # Must not have been renamed to draft.docx.pdf.
+    assert (settings.library_dir / "draft.docx").exists()
+
+
+def test_binary_disguised_as_text_is_rejected(env):
+    client, _factory, _settings = env
+
+    payload = upload(client, [("evil.txt", b"MZ\x90\x00\x03\x00binary")]).json()
+
+    assert len(payload["rejected"]) == 1
+    assert "not text" in payload["rejected"][0]["reason"]
+
+
+def test_a_zip_named_docx_is_rejected(env):
+    client, _factory, _settings = env
+
+    payload = upload(client, [("fake.docx", b"just some bytes")]).json()
+
+    assert "Word document" in payload["rejected"][0]["reason"]
+
+
+def test_an_unknown_extension_must_still_prove_it_is_a_pdf(env):
+    """Preserves the old behaviour for extensionless arXiv downloads."""
+    client, _factory, _settings = env
+
+    payload = upload(client, [("cover.png", b"\x89PNG\r\n\x1a\n" + b"0" * 64)]).json()
+
+    assert "%PDF-" in payload["rejected"][0]["reason"]

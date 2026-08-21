@@ -2,10 +2,10 @@
 
 Titles are heuristic, and improving the heuristic leaves the corpus behind:
 rows keep whatever the rules said on the day they were parsed. This re-runs
-``extract_from_pdf`` — the same entry point the pipeline uses — over papers
+``extract_from_document`` — the same entry point the pipeline uses — over papers
 that already have Markdown, and writes back only the title.
 
-It goes through ``extract_from_pdf`` on purpose. An earlier version of this
+It goes through ``extract_from_document`` on purpose. An earlier version of this
 script called ``guess_title`` directly, skipping the embedded-metadata
 precedence that runs ahead of it, and overwrote 29 correct titles with page
 furniture. Anything that reimplements the precedence will drift from it.
@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from sqlalchemy import text  # noqa: E402
 
 from app.core.db import session_scope  # noqa: E402
-from app.services.metadata.extract import extract_from_pdf  # noqa: E402
+from app.services.metadata.extract import extract_from_document  # noqa: E402
 
 
 def main() -> int:
@@ -56,7 +56,7 @@ def main() -> int:
             if md_path and Path(md_path).exists():
                 parsed = Path(md_path).read_text(errors="replace")
             try:
-                fresh = extract_from_pdf(pdf_path, parsed_text=parsed).title
+                fresh = extract_from_document(pdf_path, parsed_text=parsed).title
             except Exception as exc:  # noqa: BLE001 - one bad PDF must not stop the run
                 failures.append((paper_id, str(exc)))
                 continue

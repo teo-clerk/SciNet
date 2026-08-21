@@ -19,6 +19,7 @@ dependencies = [
     "watchdog>=5.0.0",
     "pymupdf>=1.24.0",
     "pymupdf4llm>=0.0.17",
+    "python-docx>=1.1.0",
     # projection / clustering
     "numpy>=1.26,<3",
     "scipy>=1.14.0",

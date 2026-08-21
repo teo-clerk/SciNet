@@ -16,7 +16,12 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.core.events import BROKER
-from app.core.paths import UnsafePathError, resolve_within
+from app.core.paths import (
+    DOCX_MAGIC,
+    SUPPORTED_EXTENSIONS,
+    UnsafePathError,
+    resolve_within,
+)
 from app.models import (
     Cluster,
     MarkdownDoc,
@@ -36,7 +41,7 @@ from app.schemas.paper import (
     UploadRejected,
     UploadResponse,
 )
-from app.services.ingest.registrar import register_pdf
+from app.services.ingest.registrar import register_document
 
 router = APIRouter(prefix="/api/papers", tags=["papers"])
 
@@ -123,17 +128,41 @@ def _safe_destination(filename: str, library: Path) -> Path:
     """
     stem = Path(filename or "upload.pdf").name
     cleaned = re.sub(r"[^A-Za-z0-9._-]", "_", stem).lstrip(".") or "upload.pdf"
-    if not cleaned.lower().endswith(".pdf"):
+    # A supported extension is kept; anything else is treated as a PDF claim
+    # and has to prove it below. That keeps extensionless arXiv downloads
+    # working while giving an .exe nowhere useful to land.
+    suffix = Path(cleaned).suffix.lower()
+    if suffix not in SUPPORTED_EXTENSIONS:
         cleaned += ".pdf"
+        suffix = ".pdf"
 
     candidate = library / cleaned
     # Never overwrite. Two papers can legitimately share a filename, and
     # content-level deduplication happens later against the file's hash.
     counter = 1
     while candidate.exists():
-        candidate = library / f"{Path(cleaned).stem}({counter}).pdf"
+        candidate = library / f"{Path(cleaned).stem}({counter}){suffix}"
         counter += 1
     return resolve_within(candidate, library)
+
+
+def _reject_wrong_contents(chunk: bytes, destination: Path) -> None:
+    """Check an upload's first bytes against what its name claims.
+
+    Checked from the bytes, not the extension: a file named .pdf that is not
+    one wastes a parse job and lands in the library as permanent noise. Text
+    formats have no magic number, so the test there is only that the file is
+    not binary — a NUL byte in the first chunk is never valid UTF-8 text.
+    """
+    suffix = destination.suffix.lower()
+    if suffix == ".pdf":
+        if not chunk.startswith(PDF_MAGIC):
+            raise ValueError("not a PDF (missing %PDF- header)")
+    elif suffix == ".docx":
+        if not chunk.startswith(DOCX_MAGIC):
+            raise ValueError("not a Word document (missing zip header)")
+    elif b"\x00" in chunk:
+        raise ValueError(f"not text ({suffix} contains binary data)")
 
 
 @router.post("/upload", response_model=UploadResponse)
@@ -142,14 +171,18 @@ async def upload_papers(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> UploadResponse:
-    """Copy PDFs into the library and queue them.
+    """Copy documents into the library and queue them.
 
     Streamed to disk in chunks rather than read into memory: this is built for
     dropping a few thousand papers in at once, and buffering those would be a
     memory limit disguised as a feature.
 
+    Accepts every format the library does — PDF, plain text, Markdown and
+    .docx — so the upload button and the watched folder agree about what a
+    paper is.
+
     Each file is registered immediately so the count in the progress drawer is
-    real, and one bad file never aborts the batch — a rejected PDF is reported
+    real, and one bad file never aborts the batch — a rejected file is reported
     alongside the ones that worked.
     """
     settings.ensure_dirs()
@@ -169,11 +202,7 @@ async def upload_papers(
             with open(destination, "wb") as handle:
                 while chunk := await upload.read(UPLOAD_CHUNK):
                     if first_chunk:
-                        # Checked from the bytes, not the extension: a file
-                        # named .pdf that is not one wastes a parse job and
-                        # lands in the library as permanent noise.
-                        if not chunk.startswith(PDF_MAGIC):
-                            raise ValueError("not a PDF (missing %PDF- header)")
+                        _reject_wrong_contents(chunk, destination)
                         first_chunk = False
                     written += len(chunk)
                     if written > MAX_UPLOAD_BYTES:
@@ -185,7 +214,7 @@ async def upload_papers(
             if written == 0:
                 raise ValueError("empty file")
 
-            result = register_pdf(db, destination)
+            result = register_document(db, destination)
             db.commit()
 
             accepted.append(

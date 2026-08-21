@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 
-from app.services.ingest.watcher import DEBOUNCE_SECONDS, PdfHandler
+from app.services.ingest.watcher import DEBOUNCE_SECONDS, DocumentHandler
 
 
 class Event:
@@ -19,15 +19,29 @@ class Event:
         self.is_directory = is_directory
 
 
-def make_handler(admitted: list) -> PdfHandler:
-    return PdfHandler(on_ready=admitted.append)
+def make_handler(admitted: list) -> DocumentHandler:
+    return DocumentHandler(on_ready=admitted.append)
 
 
-def test_non_pdf_files_are_ignored(tmp_path):
+def test_unsupported_formats_are_ignored(tmp_path):
+    """Everything a library accumulates that is not a document."""
     admitted: list = []
     handler = make_handler(admitted)
-    handler.on_created(Event(str(tmp_path / "notes.txt")))
+    for name in ("cover.png", "notes.epub", "archive.zip", "data.csv"):
+        handler.on_created(Event(str(tmp_path / name)))
     assert handler._pending == {}
+
+
+def test_text_formats_are_queued(tmp_path):
+    """Text, Markdown and Word documents go through the same pipeline."""
+    handler = make_handler([])
+    for name in ("notes.txt", "review.md", "draft.docx"):
+        handler.on_created(Event(str(tmp_path / name)))
+    assert {p.name for p in handler._pending} == {
+        "notes.txt",
+        "review.md",
+        "draft.docx",
+    }
 
 
 def test_directories_are_ignored(tmp_path):

@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pymupdf
 
+from app.core.paths import DocumentKind, classify_document
 from app.models import MetaSource
 from app.services.ingest.identity import normalise_doi
 
@@ -362,7 +363,21 @@ def extract_year(text: str, head_chars: int = HEAD_CHARS) -> int | None:
     return max(years) if years else None
 
 
-def extract_from_pdf(
+def _embedded_metadata(path: Path | str) -> tuple[dict[str, str], str]:
+    """The PDF's own metadata dictionary and first page, if it is a PDF.
+
+    Text, Markdown and .docx files carry no equivalent — .docx has core
+    properties, but they are almost always the authoring tool's defaults, and
+    trusting them would put "Normal.dotm" on the map as a title. For those
+    formats everything comes from the parsed text instead.
+    """
+    if classify_document(Path(path)) is not DocumentKind.PDF:
+        return {}, ""
+    with pymupdf.open(path) as doc:
+        return dict(doc.metadata or {}), (doc[0].get_text() if doc.page_count else "")
+
+
+def extract_from_document(
     path: Path | str, *, parsed_text: str | None = None
 ) -> ExtractedMeta:
     """Read everything obtainable without a model.
@@ -374,10 +389,12 @@ def extract_from_pdf(
     font, or mojibake from a double-encoded stream. The rescued text is used
     for the shape heuristics when it is available; the raw page is still read
     for the PDF's own metadata dictionary, which is unaffected by any of this.
+
+    Non-PDF documents take the same path with an empty metadata dictionary:
+    the heuristics only ever needed text, and the parse stage has already
+    produced it.
     """
-    with pymupdf.open(path) as doc:
-        embedded = dict(doc.metadata or {})
-        raw_head = doc[0].get_text() if doc.page_count else ""
+    embedded, raw_head = _embedded_metadata(path)
 
     head_text = parsed_text[: HEAD_CHARS * 2] if parsed_text else raw_head
     # Identifiers are searched in both: a DOI can survive in one and not the

@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.events import BROKER
-from app.core.paths import markdown_path_for
+from app.core.paths import DocumentKind, classify_document, markdown_path_for
 from app.models import (
     Job,
     JobKind,
@@ -25,12 +25,51 @@ from app.models import (
     PaperStatus,
 )
 from app.services.ingest.registrar import Registration, refresh_work_key
-from app.services.metadata.extract import extract_from_pdf
+from app.services.metadata.extract import extract_from_document
 from app.services.parse import tier0_pymupdf, tier1_marker, tier2_vlm
-from app.services.parse.router import parse_with_escalation
+from app.services.parse.quality import QualityReport
+from app.services.parse.router import TierOutcome, parse_with_escalation
+from app.services.parse.text_documents import (
+    UnreadableDocument,
+    parse_text_document,
+)
 from app.workers.queue import enqueue
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_document(path: Path) -> TierOutcome:
+    """Route a library file to the reader that can open it.
+
+    Only PDFs go through tier escalation, because only PDFs have the problem it
+    solves: text that may or may not be recoverable, at a cost worth probing
+    for first. Text, Markdown and .docx are already text — they are read once
+    and wrapped in the same outcome so nothing downstream has to care.
+    """
+    kind = classify_document(path)
+    if kind is None:
+        raise UnreadableDocument(f"{path.name} is not a format SciNet can read")
+
+    if kind is DocumentKind.PDF:
+        return parse_with_escalation(
+            path,
+            tier0=tier0_pymupdf.parse,
+            tier1=tier1_marker.parse,
+            tier2=tier2_vlm.parse,
+            probe=tier0_pymupdf.probe_pdf,
+        )
+
+    result = parse_text_document(path, kind)
+    # Native text has nothing to assess: there was no lossy conversion whose
+    # output might be garbage, so the quality gate would only ever confirm what
+    # reading the file already proved.
+    return TierOutcome(
+        result=result,
+        report=QualityReport(passed=True, score=1.0, reasons=(), metrics={}),
+        escalation_reasons=(),
+        degraded=False,
+        notes=[f"read directly as {kind.value}"],
+    )
 
 
 def handle_parse(session: Session, job: Job, settings: Settings) -> None:
@@ -49,13 +88,7 @@ def handle_parse(session: Session, job: Job, settings: Settings) -> None:
 
     BROKER.publish("parse.start", paper_id=paper.id, name=pdf.name)
 
-    outcome = parse_with_escalation(
-        pdf,
-        tier0=tier0_pymupdf.parse,
-        tier1=tier1_marker.parse,
-        tier2=tier2_vlm.parse,
-        probe=tier0_pymupdf.probe_pdf,
-    )
+    outcome = _parse_document(pdf)
 
     md_path = markdown_path_for(paper.id, settings.markdown_dir)
     md_path.parent.mkdir(parents=True, exist_ok=True)
@@ -116,7 +149,7 @@ def handle_metadata(session: Session, job: Job, settings: Settings) -> None:
         if md_path.exists():
             parsed_text = md_path.read_text(encoding="utf-8")
 
-    extracted = extract_from_pdf(paper.pdf_path, parsed_text=parsed_text)
+    extracted = extract_from_document(paper.pdf_path, parsed_text=parsed_text)
 
     meta = session.get(PaperMeta, paper.id) or PaperMeta(paper_id=paper.id)
     meta.title = extracted.title

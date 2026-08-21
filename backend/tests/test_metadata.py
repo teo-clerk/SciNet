@@ -13,7 +13,7 @@ from app.models import MetaSource
 from app.services.metadata.extract import (
     extract_arxiv_id,
     extract_doi,
-    extract_from_pdf,
+    extract_from_document,
     guess_title,
     split_authors,
 )
@@ -109,7 +109,7 @@ def test_title_returns_none_for_empty_text():
 
 
 def test_extracts_identifiers_from_a_pdf(pdf_fixtures):
-    meta = extract_from_pdf(pdf_fixtures["with_identifiers.pdf"])
+    meta = extract_from_document(pdf_fixtures["with_identifiers.pdf"])
     assert meta.arxiv_id == "2401.01234v2"
     assert meta.doi == "10.1145/3292500.3330701"
     assert meta.title == "Deep Sets for Molecular Property Prediction"
@@ -117,7 +117,7 @@ def test_extracts_identifiers_from_a_pdf(pdf_fixtures):
 
 def test_records_the_source_of_each_field(pdf_fixtures):
     """Provenance is what lets enrichment refine fields without clobbering."""
-    meta = extract_from_pdf(pdf_fixtures["with_identifiers.pdf"])
+    meta = extract_from_document(pdf_fixtures["with_identifiers.pdf"])
     assert meta.field_sources["doi"] == MetaSource.REGEX
     assert meta.field_sources["title"] in {
         MetaSource.PDF_EMBEDDED,
@@ -126,13 +126,13 @@ def test_records_the_source_of_each_field(pdf_fixtures):
 
 
 def test_pdf_without_identifiers_yields_none_not_a_guess(pdf_fixtures):
-    meta = extract_from_pdf(pdf_fixtures["clean_single_column.pdf"])
+    meta = extract_from_document(pdf_fixtures["clean_single_column.pdf"])
     assert meta.doi is None
     assert meta.arxiv_id is None
 
 
 def test_extraction_survives_a_pdf_with_no_text(pdf_fixtures):
-    meta = extract_from_pdf(pdf_fixtures["scanned_no_text_layer.pdf"])
+    meta = extract_from_document(pdf_fixtures["scanned_no_text_layer.pdf"])
     assert meta.doi is None
     assert meta.title is None
 
@@ -147,13 +147,15 @@ def test_rescued_text_is_preferred_over_a_broken_text_layer(pdf_fixtures):
     escalation existed to escape.
     """
     rescued = "# Learning Scientific Document Embeddings\n\nWe present a method."
-    meta = extract_from_pdf(pdf_fixtures["cid_no_whitespace.pdf"], parsed_text=rescued)
+    meta = extract_from_document(
+        pdf_fixtures["cid_no_whitespace.pdf"], parsed_text=rescued
+    )
     assert meta.title == "Learning Scientific Document Embeddings"
 
 
 def test_a_broken_text_layer_alone_yields_run_together_junk(pdf_fixtures):
     """The behaviour the fix above avoids, pinned so it cannot come back."""
-    meta = extract_from_pdf(pdf_fixtures["cid_no_whitespace.pdf"])
+    meta = extract_from_document(pdf_fixtures["cid_no_whitespace.pdf"])
     assert meta.title is not None
     assert " " not in meta.title, "this fixture has no spaces; that is the point"
 
@@ -166,7 +168,7 @@ def test_markdown_heading_markers_are_stripped_from_titles():
 
 def test_identifiers_are_found_in_either_source(pdf_fixtures):
     """A DOI can survive in the raw layer even when the prose does not."""
-    meta = extract_from_pdf(
+    meta = extract_from_document(
         pdf_fixtures["with_identifiers.pdf"], parsed_text="# Clean Title\n\nBody."
     )
     assert meta.doi == "10.1145/3292500.3330701"
@@ -269,7 +271,7 @@ def test_whitespace_is_normalised():
 def test_extraction_records_the_abstract_source(pdf_fixtures):
     from app.models import MetaSource
 
-    meta = extract_from_pdf(
+    meta = extract_from_document(
         pdf_fixtures["with_identifiers.pdf"], parsed_text=ABSTRACT_MD
     )
     assert meta.abstract is not None
@@ -351,7 +353,9 @@ def test_a_labelled_abstract_is_preferred_over_the_fallback(pdf_fixtures):
         "# Abstract\n\n" + ("The genuine abstract text. " * 8) + "\n\n"
         "# 1 Introduction\n\nBody."
     )
-    meta = extract_from_pdf(pdf_fixtures["with_identifiers.pdf"], parsed_text=markdown)
+    meta = extract_from_document(
+        pdf_fixtures["with_identifiers.pdf"], parsed_text=markdown
+    )
     assert meta.abstract.startswith("The genuine abstract text")
 
 
@@ -483,12 +487,14 @@ def test_a_junk_embedded_title_falls_back_to_the_heuristic(pdf_fixtures):
     doc.save(junk)
     doc.close()
 
-    meta = extract_from_pdf(junk, parsed_text="# The Real Title Of This Paper\n\nBody.")
+    meta = extract_from_document(
+        junk, parsed_text="# The Real Title Of This Paper\n\nBody."
+    )
     assert meta.title == "The Real Title Of This Paper"
 
 
 def test_an_honest_embedded_title_is_still_preferred(pdf_fixtures):
-    meta = extract_from_pdf(
+    meta = extract_from_document(
         pdf_fixtures["with_identifiers.pdf"],
         parsed_text="# A Worse Heuristic Guess\n\nBody.",
     )

@@ -7,6 +7,7 @@ symlinks resolved — see the "path traversal" edge case in the design plan.
 
 from __future__ import annotations
 
+from enum import StrEnum
 from pathlib import Path
 
 
@@ -51,6 +52,55 @@ def is_pdf(path: Path) -> bool:
     # Readable and not a PDF. A .pdf extension on a non-PDF is a lie, and
     # trusting it costs a wasted parse job and a permanent piece of noise.
     return False
+
+
+DOCX_MAGIC = b"PK\x03\x04"
+
+
+class DocumentKind(StrEnum):
+    """What a library file is, and therefore how it must be read."""
+
+    PDF = "pdf"
+    TEXT = "text"
+    MARKDOWN = "markdown"
+    DOCX = "docx"
+
+
+# Extensions we will open when the content check is inconclusive. PDFs are
+# deliberately absent: they are recognised by their magic bytes, because papers
+# from arXiv routinely arrive with no extension at all.
+TEXT_EXTENSIONS = {".txt": DocumentKind.TEXT, ".md": DocumentKind.MARKDOWN}
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", *TEXT_EXTENSIONS}
+
+
+def classify_document(path: Path) -> DocumentKind | None:
+    """What kind of document is this, or None if we cannot ingest it.
+
+    Content first, extension second, for the same reason ``is_pdf`` works that
+    way: the name is a claim and the bytes are evidence. A ``.docx`` is a zip,
+    so its magic only narrows the field — the extension settles it, and a
+    mislabelled zip fails later in the extractor rather than here, where we
+    cannot tell the difference without unpacking it.
+    """
+    if is_pdf(path):
+        return DocumentKind.PDF
+
+    suffix = path.suffix.lower()
+    if suffix == ".docx":
+        try:
+            with open(path, "rb") as handle:
+                if handle.read(len(DOCX_MAGIC)) != DOCX_MAGIC:
+                    # Readable and not a zip: the extension is a lie.
+                    return None
+        except OSError:
+            # Unreadable or not there yet — the watcher classifies paths from
+            # filesystem events, which arrive while the file is still being
+            # copied. Trust the name here as ``is_pdf`` does; the extractor is
+            # the one that has to succeed, and it runs once the file settles.
+            pass
+        return DocumentKind.DOCX
+
+    return TEXT_EXTENSIONS.get(suffix)
 
 
 def markdown_path_for(paper_id: int, markdown_dir: Path) -> Path:

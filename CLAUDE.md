@@ -35,6 +35,31 @@ Target scale 3–4k papers on a single laptop.
 - **Provenance everywhere.** Derived rows carry `model_id` / `pipeline_version`.
   Swapping the embedding model invalidates vectors and projections but **not**
   markdown.
+- **Property order is load-bearing in constrained decoding.** Ollama's `format`
+  schema fills fields in declaration order, so a verdict field must be declared
+  *before* the prose it governs. `BRIDGE_SCHEMA` asked for `relationship` first
+  and every bridge on the real corpus came back with the literal string
+  `"connected"` — the model had not decided anything yet and emitted filler.
+  Reordering it to `connected` then `relationship` produced real sentences from
+  the same model and prompt. `NAME_SCHEMA` is the deliberate opposite: its
+  `confident` flag is a self-assessment of the name already written, so it
+  comes last.
+- **A cluster may not hold more than half the corpus** (`MAX_CLUSTER_SHARE`).
+  HDBSCAN's `relative_validity_` measures separation, not usefulness, and will
+  rank "one tight region plus a bag holding everything else" above a real
+  decomposition: on the 57-paper corpus it scored a 35-paper catch-all at 0.654
+  as the best split, having preferred eight genuine regions at 0.732 one run
+  earlier, after only two vectors changed. Floors producing a dominant cluster
+  are used only when nothing else clusters at all.
+- **The library is not all PDFs.** `.txt`, `.md` and `.docx` skip tier
+  escalation entirely — that machinery exists because a PDF's text layer may
+  not be recoverable, which is not a question these formats have. They report
+  tier 0 with their own parser name and enter the identical
+  metadata → embed → project → tag path.
+- **Cleanup quarantines, it does not delete.** Broken files and byte-identical
+  duplicates move to `data/quarantine/<timestamp>/` with a manifest. The
+  detectors are heuristics running against the operator's own library, and a
+  false positive on a real paper is unrecoverable; `--purge` is opt-in.
 
 ## Layout
 
@@ -122,6 +147,8 @@ frontend/src/
 cd backend && uv run pytest                     # tests
 cd backend && uv run python -m app.workers.runner   # worker
 cd backend && uv run python ../scripts/backfill.py  # bulk import
+cd backend && uv run python ../scripts/clean_library.py --dry-run  # find junk
+./scripts/stop.sh                                # stop API, worker, Vite
 cd frontend && bun test                          # frontend unit tests
 bun scripts/verify_render.mjs http://localhost:5173  # 3D render gate
 cd backend && uv run python ../scripts/eval_clustering.py  # cluster quality
