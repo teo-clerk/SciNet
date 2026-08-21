@@ -6,14 +6,18 @@ not (HTML paywall pages saved as ``.pdf``, truncated downloads), files too
 small to hold a paper, and exact byte-identical copies of a paper already
 present.
 
-Files are **moved to ``data/quarantine/<timestamp>/``** with a manifest saying
-why, not deleted — these are heuristics running against the operator's own
-library, and a false positive on a real paper is unrecoverable. Pass
-``--purge`` to delete outright once you trust it.
+Matching files are **deleted**. Run ``--dry-run`` first on a library this has
+never seen: these are heuristics against the operator's own collection, and a
+false positive on a real paper cannot be undone. ``--quarantine`` moves files
+to ``data/quarantine/<timestamp>/`` with a manifest instead, which is the
+reviewable middle ground.
 
-    uv run python ../scripts/clean_library.py --dry-run   # report only
-    uv run python ../scripts/clean_library.py             # quarantine
-    uv run python ../scripts/clean_library.py --purge     # delete
+Only files that present themselves as documents are ever candidates — a cover
+image or a .bib file filed alongside the papers is left alone.
+
+    uv run python ../scripts/clean_library.py --dry-run      # report only
+    uv run python ../scripts/clean_library.py                # delete
+    uv run python ../scripts/clean_library.py --quarantine   # move aside
 """
 
 from __future__ import annotations
@@ -48,9 +52,9 @@ def main() -> int:
     )
     parser.add_argument("--dry-run", action="store_true", help="report, change nothing")
     parser.add_argument(
-        "--purge",
+        "--quarantine",
         action="store_true",
-        help="delete permanently instead of moving to quarantine",
+        help="move to data/quarantine/<timestamp>/ instead of deleting",
     )
     args = parser.parse_args()
 
@@ -65,7 +69,7 @@ def main() -> int:
         }
 
     findings, quarantine = clean_library(
-        root, keep_paths=known, purge=args.purge, dry_run=args.dry_run
+        root, keep_paths=known, quarantine=args.quarantine, dry_run=args.dry_run
     )
 
     if not findings:
@@ -84,11 +88,11 @@ def main() -> int:
     print()
     if args.dry_run:
         print(f"{len(findings)} file(s) would be removed; nothing was changed")
-    elif args.purge:
-        print(f"deleted {len(findings)} file(s)")
-    else:
+    elif args.quarantine:
         print(f"moved {len(findings)} file(s) to {quarantine}")
         print("Review them there; the directory can be deleted once you are happy.")
+    else:
+        print(f"deleted {len(findings)} file(s)")
     return 0
 
 

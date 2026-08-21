@@ -1,4 +1,4 @@
-"""Deterministic metadata extraction from a PDF.
+"""Deterministic metadata extraction from a library document.
 
 Order of authority: the PDF's own metadata dictionary, then regular expressions
 over the first page, then shape heuristics. An LLM is only consulted afterwards
@@ -18,6 +18,12 @@ import pymupdf
 from app.core.paths import DocumentKind, classify_document
 from app.models import MetaSource
 from app.services.ingest.identity import normalise_doi
+from app.services.metadata.synopsis import (
+    BOILERPLATE_RE,
+    TABLE_RE,
+    Strategy,
+    find_synopsis,
+)
 
 # Identifiers are searched only near the front of the document: a DOI further in
 # almost always belongs to a cited paper, not to this one.
@@ -318,6 +324,16 @@ def _looks_like_prose(paragraph: str) -> bool:
         return False
     if AFFILIATION_RE.search(text):
         return False
+    # A copyright page reads like prose by every other measure here: long
+    # enough, several sentences, not especially capitalised. It was being
+    # returned as the abstract for books, which is how "All rights reserved.
+    # No part of this book may be reproduced" ended up describing a paper.
+    if BOILERPLATE_RE.search(text):
+        return False
+    # A keywords/summary table converted to Markdown pipes. Reads as prose by
+    # every other measure here and is not one.
+    if TABLE_RE.search(text):
+        return False
     if len(SENTENCE_END_RE.findall(text)) < MIN_ABSTRACT_SENTENCES:
         return False
 
@@ -363,18 +379,58 @@ def extract_year(text: str, head_chars: int = HEAD_CHARS) -> int | None:
     return max(years) if years else None
 
 
-def _embedded_metadata(path: Path | str) -> tuple[dict[str, str], str]:
-    """The PDF's own metadata dictionary and first page, if it is a PDF.
+@dataclass(frozen=True)
+class _Embedded:
+    """Metadata a file carries about itself, if its format has any."""
 
-    Text, Markdown and .docx files carry no equivalent — .docx has core
-    properties, but they are almost always the authoring tool's defaults, and
-    trusting them would put "Normal.dotm" on the map as a title. For those
-    formats everything comes from the parsed text instead.
+    fields: dict[str, str] = field(default_factory=dict)
+    #: Raw first-page text, used only for identifier matching.
+    head_text: str = ""
+    year: int | None = None
+    source: MetaSource = MetaSource.PDF_EMBEDDED
+
+
+def _embedded_metadata(path: Path | str) -> _Embedded:
+    """Whatever the container itself claims, by format.
+
+    PDFs carry a metadata dictionary that is worth reading and frequently worth
+    ignoring. EPUBs carry a package document, which is far better: it is what a
+    publisher filled in, not what a template left behind, and it is the only
+    place a book's year is written down at all — the year regex reads the front
+    matter, and a book's front matter is a copyright page listing every
+    printing since 1974.
+
+    Plain text and Markdown carry nothing, and .docx carries only the authoring
+    tool's defaults, which would put "Normal.dotm" on the map as a title.
     """
-    if classify_document(Path(path)) is not DocumentKind.PDF:
-        return {}, ""
-    with pymupdf.open(path) as doc:
-        return dict(doc.metadata or {}), (doc[0].get_text() if doc.page_count else "")
+    path = Path(path)
+    kind = classify_document(path)
+
+    if kind is DocumentKind.PDF:
+        with pymupdf.open(path) as doc:
+            head = doc[0].get_text() if doc.page_count else ""
+            return _Embedded(dict(doc.metadata or {}), head)
+
+    if kind is DocumentKind.EPUB:
+        from app.services.parse.ebook import epub_metadata
+
+        book = epub_metadata(path)
+        return _Embedded(
+            {"title": book.title or "", "author": "; ".join(book.authors)},
+            year=book.year,
+            source=MetaSource.EBOOK_EMBEDDED,
+        )
+
+    if kind is DocumentKind.MOBI:
+        from app.services.parse.ebook import mobi_metadata
+
+        book = mobi_metadata(path)
+        return _Embedded(
+            {"title": book.title or "", "author": "; ".join(book.authors)},
+            source=MetaSource.EBOOK_EMBEDDED,
+        )
+
+    return _Embedded()
 
 
 def extract_from_document(
@@ -394,7 +450,8 @@ def extract_from_document(
     the heuristics only ever needed text, and the parse stage has already
     produced it.
     """
-    embedded, raw_head = _embedded_metadata(path)
+    container = _embedded_metadata(path)
+    embedded, raw_head = container.fields, container.head_text
 
     head_text = parsed_text[: HEAD_CHARS * 2] if parsed_text else raw_head
     # Identifiers are searched in both: a DOI can survive in one and not the
@@ -416,7 +473,7 @@ def extract_from_document(
     )
     if embedded_usable:
         meta.title = embedded_title
-        meta.field_sources["title"] = MetaSource.PDF_EMBEDDED
+        meta.field_sources["title"] = container.source
     elif (guessed := guess_title(head_text)) is not None:
         meta.title = guessed
         meta.field_sources["title"] = MetaSource.HEURISTIC
@@ -424,7 +481,7 @@ def extract_from_document(
     if embedded_author := (embedded.get("author") or "").strip():
         if names := split_authors(embedded_author):
             meta.authors = names
-            meta.field_sources["authors"] = MetaSource.PDF_EMBEDDED
+            meta.field_sources["authors"] = container.source
 
     if (doi := extract_doi(identifier_text)) is not None:
         meta.doi = doi
@@ -434,18 +491,25 @@ def extract_from_document(
         meta.arxiv_id = arxiv
         meta.field_sources["arxiv_id"] = MetaSource.REGEX
 
-    if (year := extract_year(identifier_text)) is not None:
+    if container.year is not None:
+        # A stated publication date beats scraping four digits off the page.
+        meta.year = container.year
+        meta.field_sources["year"] = container.source
+    elif (year := extract_year(identifier_text)) is not None:
         meta.year = year
         meta.field_sources["year"] = MetaSource.REGEX
 
     if parsed_text:
-        # Prefer a labelled abstract; fall back to the shape of the front
-        # matter when the paper never uses the word.
-        abstract = extract_abstract(parsed_text) or extract_abstract_unlabelled(
-            parsed_text
-        )
-        if abstract is not None:
-            meta.abstract = abstract
-            meta.field_sources["abstract"] = MetaSource.HEURISTIC
+        # A labelled abstract, else one recognised by its shape, else a book's
+        # preface, else a digest of the document's own most topical paragraphs.
+        # See app.services.metadata.synopsis for why the ladder has four rungs.
+        synopsis = find_synopsis(parsed_text)
+        if synopsis is not None:
+            meta.abstract = synopsis.text
+            meta.field_sources["abstract"] = (
+                MetaSource.EXTRACTED_DIGEST
+                if synopsis.strategy is Strategy.DIGEST
+                else MetaSource.HEURISTIC
+            )
 
     return meta

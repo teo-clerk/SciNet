@@ -60,11 +60,24 @@ def _model(model_id: str, device: str):
     return SentenceTransformer(model_id, device=device)
 
 
+def _prepared(model_id: str, device: str, settings: Settings):
+    """Load a model with the project's cache configured first.
+
+    Every path to ``_model`` goes through here. It did not always: the API's
+    background warmup called ``encode_query``, which reached ``_model``
+    directly, so the API process downloaded the embedding model into
+    ``~/.cache/huggingface`` while the worker put an identical copy in
+    ``data/models/hf``. Nothing failed and nothing said so — the only symptom
+    was 1.6 GB in the wrong place and a checkout that would not have carried
+    its own weights if it were zipped up and moved.
+    """
+    configure_environment(settings)
+    return _model(model_id, device)
+
+
 def load(settings: Settings | None = None):
     settings = settings or get_settings()
-    # Ensures weights land in the project's cache, not the user's home.
-    configure_environment(settings)
-    return _model(settings.embed_model, settings.device)
+    return _prepared(settings.embed_model, settings.device, settings)
 
 
 def unload() -> None:
@@ -126,7 +139,7 @@ def encode_query(
     milliseconds, which is well inside what a search feels like anyway.
     """
     settings = settings or get_settings()
-    model = _model(settings.embed_model, device or QUERY_DEVICE)
+    model = _prepared(settings.embed_model, device or QUERY_DEVICE, settings)
     prefix = query_instruction(settings.embed_model)
     vector = model.encode(
         [prefix + text],

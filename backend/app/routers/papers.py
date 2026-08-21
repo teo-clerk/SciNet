@@ -17,7 +17,10 @@ from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.core.events import BROKER
 from app.core.paths import (
-    DOCX_MAGIC,
+    FORMAT_NAMES,
+    MAGIC_BY_EXTENSION,
+    MOBI_TYPES,
+    PALM_TYPE_OFFSET,
     SUPPORTED_EXTENSIONS,
     UnsafePathError,
     resolve_within,
@@ -50,7 +53,6 @@ router = APIRouter(prefix="/api/papers", tags=["papers"])
 #: memory limit.
 MAX_UPLOAD_BYTES = 512 * 1024 * 1024
 UPLOAD_CHUNK = 1024 * 1024
-PDF_MAGIC = b"%PDF-"
 
 
 def _authors(meta: PaperMeta | None) -> list[str]:
@@ -60,6 +62,16 @@ def _authors(meta: PaperMeta | None) -> list[str]:
         return json.loads(meta.authors_json)
     except json.JSONDecodeError:
         return []
+
+
+def _field_source(meta: PaperMeta | None, field: str) -> str | None:
+    """Which extraction strategy won a field, for the sidebar to disclose."""
+    if meta is None or not meta.field_sources_json:
+        return None
+    try:
+        return json.loads(meta.field_sources_json).get(field)
+    except json.JSONDecodeError:
+        return None
 
 
 def _summary(paper: Paper) -> PaperSummary:
@@ -150,19 +162,28 @@ def _reject_wrong_contents(chunk: bytes, destination: Path) -> None:
     """Check an upload's first bytes against what its name claims.
 
     Checked from the bytes, not the extension: a file named .pdf that is not
-    one wastes a parse job and lands in the library as permanent noise. Text
-    formats have no magic number, so the test there is only that the file is
-    not binary — a NUL byte in the first chunk is never valid UTF-8 text.
+    one wastes a parse job and lands in the library as permanent noise. Three
+    kinds of format need three kinds of test — a signature at byte zero, the
+    PalmDB type field a MOBI keeps at byte 60, and for text formats, which have
+    no magic number at all, only that the file is not binary, since a NUL byte
+    in the first chunk is never valid UTF-8.
     """
     suffix = destination.suffix.lower()
-    if suffix == ".pdf":
-        if not chunk.startswith(PDF_MAGIC):
-            raise ValueError("not a PDF (missing %PDF- header)")
-    elif suffix == ".docx":
-        if not chunk.startswith(DOCX_MAGIC):
-            raise ValueError("not a Word document (missing zip header)")
-    elif b"\x00" in chunk:
-        raise ValueError(f"not text ({suffix} contains binary data)")
+
+    name = FORMAT_NAMES.get(suffix, suffix.lstrip(".") or "document")
+
+    if expected := MAGIC_BY_EXTENSION.get(suffix):
+        if not any(chunk.startswith(magic) for magic in expected):
+            raise ValueError(f"not a {name} (wrong file signature)")
+        return
+
+    if suffix in (".mobi", ".azw3"):
+        if chunk[PALM_TYPE_OFFSET : PALM_TYPE_OFFSET + 8] not in MOBI_TYPES:
+            raise ValueError(f"not a {name} (no PalmDB header)")
+        return
+
+    if b"\x00" in chunk:
+        raise ValueError(f"not a {name} (it contains binary data)")
 
 
 @router.post("/upload", response_model=UploadResponse)
@@ -177,9 +198,9 @@ async def upload_papers(
     dropping a few thousand papers in at once, and buffering those would be a
     memory limit disguised as a feature.
 
-    Accepts every format the library does — PDF, plain text, Markdown and
-    .docx — so the upload button and the watched folder agree about what a
-    paper is.
+    Accepts every format the library does — PDF, EPUB, MOBI, AZW3, DjVu,
+    .docx, plain text and Markdown — so the upload button and the watched
+    folder agree about what a paper is.
 
     Each file is registered immediately so the count in the progress drawer is
     real, and one bad file never aborts the batch — a rejected file is reported
@@ -291,6 +312,7 @@ def get_paper(paper_id: int, db: Session = Depends(get_db)) -> PaperDetail:
         **_summary(paper).model_dump(),
         authors=_authors(meta),
         abstract=meta.abstract if meta else None,
+        abstract_source=_field_source(meta, "abstract"),
         summary=meta.summary if meta else None,
         venue=meta.venue if meta else None,
         page_count=paper.page_count,

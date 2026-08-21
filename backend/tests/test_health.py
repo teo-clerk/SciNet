@@ -99,3 +99,62 @@ def test_sqlite_pragmas_applied(client):
     with client.scinet_engine.connect() as conn:
         assert conn.exec_driver_sql("PRAGMA journal_mode").scalar() == "wal"
         assert conn.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
+
+
+def _add_paper(client, *, abstract: str, source: str) -> int:
+    """A ready paper with a known abstract provenance."""
+    import json
+
+    from sqlalchemy.orm import sessionmaker
+
+    from app.models import Paper, PaperMeta, PaperStatus
+
+    factory = sessionmaker(bind=client.scinet_engine, expire_on_commit=False)
+    with factory() as session:
+        paper = Paper(
+            content_sha256="a" * 64,
+            work_key="w" * 16,
+            pdf_path="/library/book.epub",
+            pdf_bytes=1024,
+            status=PaperStatus.READY,
+            pipeline_version=1,
+        )
+        session.add(paper)
+        session.flush()
+        session.add(
+            PaperMeta(
+                paper_id=paper.id,
+                title="A Book",
+                abstract=abstract,
+                authors_json="[]",
+                field_sources_json=json.dumps({"abstract": source}),
+            )
+        )
+        session.commit()
+        return paper.id
+
+
+def test_an_assembled_abstract_is_disclosed_as_one(client):
+    """A book has no abstract, so one may have been built from its own text.
+
+    Presented without saying so it reads as the author's summary of their own
+    work, which is exactly what it is not.
+    """
+    paper_id = _add_paper(
+        client, abstract="Assembled from the chapters.", source="extracted_digest"
+    )
+
+    body = client.get(f"/api/papers/{paper_id}").json()
+
+    assert body["abstract"] == "Assembled from the chapters."
+    assert body["abstract_source"] == "extracted_digest"
+
+
+def test_an_authored_abstract_is_not_labelled_as_assembled(client):
+    paper_id = _add_paper(
+        client, abstract="We propose a new architecture.", source="heuristic"
+    )
+
+    body = client.get(f"/api/papers/{paper_id}").json()
+
+    assert body["abstract_source"] == "heuristic"

@@ -51,15 +51,60 @@ Target scale 3–4k papers on a single laptop.
   as the best split, having preferred eight genuine regions at 0.732 one run
   earlier, after only two vectors changed. Floors producing a dominant cluster
   are used only when nothing else clusters at all.
-- **The library is not all PDFs.** `.txt`, `.md` and `.docx` skip tier
-  escalation entirely — that machinery exists because a PDF's text layer may
-  not be recoverable, which is not a question these formats have. They report
-  tier 0 with their own parser name and enter the identical
-  metadata → embed → project → tag path.
-- **Cleanup quarantines, it does not delete.** Broken files and byte-identical
-  duplicates move to `data/quarantine/<timestamp>/` with a manifest. The
-  detectors are heuristics running against the operator's own library, and a
-  false positive on a real paper is unrecoverable; `--purge` is opt-in.
+- **The library is not all PDFs.** `.txt`, `.md`, `.docx`, `.epub`, `.mobi`,
+  `.azw3` and `.djvu` skip tier escalation entirely — that machinery exists
+  because a PDF's text layer may not be recoverable, which is not a question
+  these formats have. They report tier 0 with their own parser name and enter
+  the identical metadata → embed → project → tag path.
+- **EPUB is unzipped here; MOBI is handed to MuPDF.** An EPUB's headings are
+  marked up semantically and its package document holds a real title, author
+  and date, all of which beat anything inferred from layout — so it is read
+  directly with `zipfile` + `html.parser` and no new dependency. MOBI/AZW3
+  payloads are PalmDOC/KF8-compressed, which MuPDF already decompresses
+  correctly, so reimplementing it would be a lot of work to reach the same
+  text.
+- **DjVu text is decoded in pure Python** (`parse/djvu_bzz.py`). The OCR layer
+  is BZZ-compressed — a Burrows-Wheeler transform under an adaptive binary
+  arithmetic coder — and nothing on PyPI decodes it without the DjVuLibre C
+  library and a compiler, which is exactly the dependency a project that must
+  zip up and run on Windows cannot take. The 251-entry coder table is a format
+  constant, not a tuning choice. Verified byte-for-byte against DjVuLibre's own
+  `bzz` encoder, *including on incompressible input*, which is the case that
+  drives the least-probable-symbol path compressible text never reaches.
+  A DjVu with no OCR layer fails loudly rather than ingesting empty.
+- **A book has no abstract, so the abstract is a five-rung ladder**
+  (`metadata/synopsis.py`): labelled abstract → preface → unlabelled abstract
+  by shape → introduction → a digest assembled from the document's own most
+  topical paragraphs. The shape rung is **switched off above ~65 pages**: its
+  rule is "the first substantial paragraph near the top is the abstract", which
+  is true of a preprint and false of a book, where it returns chapter one.
+  The digest is deliberately capped at abstract length — if books contributed
+  four thousand characters and papers twelve hundred, that difference would
+  land in the document vector and the map would start clustering by *format*.
+- **A copyright page reads as prose** by every shape test — long, punctuated,
+  not especially capitalised — and was being returned as books' abstracts. So
+  does a Markdown table, which is how a keywords table became a real paper's
+  abstract. Both are rejected explicitly.
+- **Chunk vectors were computed and discarded.** Chunks are retrieved by BM25
+  over `chunks_fts`; nothing ever read a chunk vector. Invisible at 57 papers,
+  not at 550 with books among them, where one book is hundreds of chunks. Only
+  the document vector is embedded now.
+- **Cleanup deletes.** Broken files and byte-identical duplicates are removed
+  from disk; `--quarantine` moves them to `data/quarantine/<timestamp>/` with a
+  manifest instead, and `--dry-run` is the right first run on an unfamiliar
+  library. Only files *presenting themselves as documents* are ever candidates,
+  so a cover image or a `.bib` filed alongside the papers is left alone.
+- **Duplicate detection groups by size before hashing.** Byte-identical files
+  are the same size, so a library of 550 distinct files hashes nothing at all.
+- **Model caches must be configured before torch is imported, in every
+  process.** The API loads the embedding model too — for search — and
+  `encode_query` reached the loader directly, bypassing `configure_environment`.
+  Nothing failed; the only symptom was 1.6 GB of weights in
+  `~/.cache/huggingface` and a checkout that would have been hollow if zipped
+  and moved. `scripts/check_portability.py` is the gate.
+- **`os.kill(pid, 0)` is not a liveness probe on Windows.** Every signal value
+  but the two console-control ones reaches TerminateProcess, so the portable-
+  looking probe kills what it asks about. `app/cli/stop.py` queries instead.
 
 ## Layout
 
@@ -70,6 +115,7 @@ backend/app/
   routers/   thin HTTP; no business logic
   services/  ingest · parse · metadata · embed · tagging · project
   workers/   queue (SQLite-backed) · runner · handlers
+  cli/       console entry points (scinet-stop)
 frontend/src/
   graph/     Scene · PointCloud (one THREE.Points, one draw call) · shaders
   panels/    sidebar, filters, search, status
@@ -148,7 +194,9 @@ cd backend && uv run pytest                     # tests
 cd backend && uv run python -m app.workers.runner   # worker
 cd backend && uv run python ../scripts/backfill.py  # bulk import
 cd backend && uv run python ../scripts/clean_library.py --dry-run  # find junk
-./scripts/stop.sh                                # stop API, worker, Vite
+cd backend && uv run python ../scripts/check_portability.py  # models stay local
+cd backend && uv run scinet-stop                 # stop API, worker, Vite
+./scripts/stop.sh                                # the same, from anywhere
 cd frontend && bun test                          # frontend unit tests
 bun scripts/verify_render.mjs http://localhost:5173  # 3D render gate
 cd backend && uv run python ../scripts/eval_clustering.py  # cluster quality

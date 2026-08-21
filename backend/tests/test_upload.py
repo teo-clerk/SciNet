@@ -97,7 +97,7 @@ def test_one_bad_file_does_not_end_the_batch(env):
 
     assert len(body["accepted"]) == 2
     assert len(body["rejected"]) == 1
-    assert "%PDF-" in body["rejected"][0]["reason"]
+    assert "not a PDF" in body["rejected"][0]["reason"]
     with factory() as s:
         assert s.query(Paper).count() == 2
 
@@ -217,15 +217,28 @@ def test_binary_disguised_as_text_is_rejected(env):
     payload = upload(client, [("evil.txt", b"MZ\x90\x00\x03\x00binary")]).json()
 
     assert len(payload["rejected"]) == 1
-    assert "not text" in payload["rejected"][0]["reason"]
+    assert "binary data" in payload["rejected"][0]["reason"]
 
 
-def test_a_zip_named_docx_is_rejected(env):
+def test_a_file_that_is_not_the_format_it_claims_is_rejected(env):
     client, _factory, _settings = env
 
-    payload = upload(client, [("fake.docx", b"just some bytes")]).json()
+    payload = upload(
+        client,
+        [
+            ("fake.docx", b"just some bytes"),
+            ("fake.epub", b"not a zip either"),
+            ("fake.mobi", b"no palm header here" + b"\x00" * 80),
+            ("fake.djvu", b"<html>Access denied</html>"),
+        ],
+    ).json()
 
-    assert "Word document" in payload["rejected"][0]["reason"]
+    reasons = {r["filename"]: r["reason"] for r in payload["rejected"]}
+    assert payload["accepted"] == []
+    assert "Word document" in reasons["fake.docx"]
+    assert "EPUB book" in reasons["fake.epub"]
+    assert "MOBI book" in reasons["fake.mobi"]
+    assert "DjVu document" in reasons["fake.djvu"]
 
 
 def test_an_unknown_extension_must_still_prove_it_is_a_pdf(env):
@@ -234,4 +247,4 @@ def test_an_unknown_extension_must_still_prove_it_is_a_pdf(env):
 
     payload = upload(client, [("cover.png", b"\x89PNG\r\n\x1a\n" + b"0" * 64)]).json()
 
-    assert "%PDF-" in payload["rejected"][0]["reason"]
+    assert "not a PDF" in payload["rejected"][0]["reason"]

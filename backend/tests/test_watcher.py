@@ -27,20 +27,22 @@ def test_unsupported_formats_are_ignored(tmp_path):
     """Everything a library accumulates that is not a document."""
     admitted: list = []
     handler = make_handler(admitted)
-    for name in ("cover.png", "notes.epub", "archive.zip", "data.csv"):
+    for name in ("cover.png", "slides.pptx", "archive.zip", "data.csv"):
         handler.on_created(Event(str(tmp_path / name)))
     assert handler._pending == {}
 
 
-def test_text_formats_are_queued(tmp_path):
-    """Text, Markdown and Word documents go through the same pipeline."""
+def test_every_readable_format_is_queued(tmp_path):
+    """Books and text alike go through the same pipeline as a PDF."""
     handler = make_handler([])
-    for name in ("notes.txt", "review.md", "draft.docx"):
+    for name in ("notes.txt", "review.md", "draft.docx", "kuhn.epub", "geb.azw3"):
         handler.on_created(Event(str(tmp_path / name)))
     assert {p.name for p in handler._pending} == {
         "notes.txt",
         "review.md",
         "draft.docx",
+        "kuhn.epub",
+        "geb.azw3",
     }
 
 

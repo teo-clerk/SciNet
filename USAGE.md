@@ -90,12 +90,16 @@ database write lock, and an API left over from an earlier session serves routes
 that no longer exist in the code you are editing.
 
 ```bash
-./scripts/stop.sh              # stop the API, the worker, and Vite
-./scripts/stop.sh --dry-run    # show what is running, change nothing
+cd backend && uv run scinet-stop           # stop the API, the worker, and Vite
+cd backend && uv run scinet-stop --dry-run # show what is running, change nothing
+
+./scripts/stop.sh                          # the same, from anywhere in the repo
 ```
 
-It finds processes by the port they listen on and by what they are running, so
-it will not match — or kill — the shell you type it into.
+Both run the same code, which works on Linux, macOS and Windows. It finds
+processes by the port they listen on and by the binary they are *running* — not
+by matching text in a command line — so it will not match, or kill, the shell
+you type it into.
 
 ---
 
@@ -128,11 +132,45 @@ durable.
 |---|---|
 | `.pdf` | tiered: fast text layer, escalating to OCR only when needed |
 | `.txt`, `.md` | read directly as UTF-8 |
-| `.docx` | read with `python-docx`; Word heading styles become Markdown headings |
-| no extension | PDFs are recognised by content, so bare arXiv downloads work |
+| `.docx` | `python-docx`; Word heading styles become Markdown headings |
+| `.epub` | unzipped directly, so chapter headings and the real title, author and publication date all survive |
+| `.mobi`, `.azw3` | read through MuPDF, which handles the PalmDOC/KF8 compression |
+| `.djvu` | the OCR text layer the scanner saved, decoded in-process |
+| no extension | PDFs, DjVu and MOBI are recognised by content, so bare arXiv and archive downloads work |
 
-Everything lands in the same pipeline. A `.docx` is embedded, positioned,
-clustered and tagged exactly like a PDF.
+Everything lands in the same pipeline. A book is embedded, positioned,
+clustered and tagged exactly like a paper, and sits next to the papers on its
+subject rather than in a "books" corner of the map.
+
+Two things are worth knowing:
+
+- **A DjVu with no text layer cannot be read.** DjVu holds page images plus
+  whatever text the scanning software recognised. If nobody ever ran OCR on it,
+  there is no text to recover and the file is reported as failed rather than
+  ingested blank. Run it through OCR yourself and re-add it.
+- **DRM-protected books cannot be read by anything**, this included. An
+  `.azw3` bought from a store will be rejected with a clear message.
+
+### Books have no abstract
+
+A paper says what it is about in its abstract. A book opens with a title page,
+a copyright notice, a dedication and a table of contents — thousands of
+characters containing nothing about the subject.
+
+So the abstract is looked for in five places, strongest evidence first:
+
+1. a heading that says **Abstract**;
+2. a **preface**, foreword or prologue — a book's abstract under another name;
+3. an unlabelled opening paragraph shaped like an abstract (preprints do this);
+4. the opening of an **introduction**;
+5. failing all of that, a **digest** assembled from the document's own most
+   topical paragraphs, sampled across the whole document rather than taken from
+   the front.
+
+Only the last invents anything, and the sidebar marks it as assembled rather
+than written. Rung 3 is switched off for anything longer than about 65 pages:
+"the first substantial paragraph is the abstract" is a paper's rule, and
+applied to a book it returns the opening of chapter one.
 
 ### Nothing is parsed twice
 
@@ -168,16 +206,18 @@ paper downloaded three times. These used to be skipped silently on every scan.
 Now they are taken out:
 
 ```bash
-cd backend && uv run python ../scripts/clean_library.py --dry-run   # report only
-cd backend && uv run python ../scripts/clean_library.py             # quarantine
+cd backend && uv run python ../scripts/clean_library.py --dry-run     # report only
+cd backend && uv run python ../scripts/clean_library.py               # delete
+cd backend && uv run python ../scripts/clean_library.py --quarantine  # move aside
 ```
 
 Backfill runs this automatically before scanning; pass `--no-clean` to skip it.
 
-Files are **moved to `data/quarantine/<timestamp>/`**, not deleted, with a
-`manifest.json` recording why each one was removed. Look through it and delete
-the folder when you are satisfied. Pass `--purge` if you would rather they were
-deleted outright.
+**Matching files are deleted.** Run `--dry-run` first on a library this has
+never seen — these are heuristics against your own collection, and a false
+positive on a real paper cannot be undone. `--quarantine` moves files to
+`data/quarantine/<timestamp>/` with a `manifest.json` recording why each one
+went, which is the reviewable middle ground.
 
 Only files that *claim* to be documents are ever touched. A cover image or a
 `.bib` file sitting in the library is left exactly where it is. Duplicates must
@@ -277,6 +317,34 @@ sqlite3 data/scinet.db "SELECT ts, service, url FROM egress_log ORDER BY ts DESC
 ```
 
 Enabling it tells those services which papers you read. That is the trade.
+
+### Everything stays in the folder
+
+SciNet is meant to be portable: zip the project, unzip it on another machine,
+and it runs. That only holds if the models are inside it, and model libraries
+do not do that by default — every one of them writes into your home directory
+unless told otherwise, and when one slips through nothing fails. The model just
+downloads again, into the wrong place, and the copy you moved turns out to be
+hollow.
+
+So it is checked rather than assumed:
+
+```bash
+cd backend && uv run python ../scripts/check_portability.py
+```
+
+It prints where every cache variable points, then looks in the usual global
+locations (`~/.cache/huggingface`, `~/.ollama`, `~/.cache/torch` and the Windows
+and macOS equivalents) for weights **this project is configured to use** — which
+is what separates SciNet leaking into your home directory from your home
+directory simply having models in it. It exits non-zero if it finds any, names
+the exact directory, and tells you whether the project already has its own copy
+before suggesting you delete anything.
+
+One thing it reports and does not fix: Surya writes server lock and log files to
+`~/.cache/datalab/surya`, a path hardcoded upstream with no setting behind it.
+No weights go there, and it is only touched when tier 1 runs, which is off by
+default.
 
 ---
 

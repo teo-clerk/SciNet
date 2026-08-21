@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
+from app.core.model_store import configure_environment
 from app.core.warmup import WARMER
 from app.routers import clusters, events, graph, jobs, papers, search, system
 
@@ -54,7 +55,13 @@ def _warn_if_exposed() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    get_settings().ensure_dirs()
+    settings = get_settings()
+    settings.ensure_dirs()
+    # Before the warmup thread imports sentence-transformers. The API loads the
+    # embedding model too — for search queries — and without this it downloads
+    # its own copy into the user's home cache instead of using the project's.
+    applied = configure_environment(settings)
+    logger.info("model cache: %s", applied["HF_HOME"])
     _warn_if_exposed()
     # Dispatched, not awaited. The embedding model takes ~25s to load and the
     # map does not need it at all, so startup returns immediately and the load

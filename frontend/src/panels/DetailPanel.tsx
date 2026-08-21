@@ -95,6 +95,12 @@ export function DetailPanel() {
       {paper?.abstract && (
         <section>
           <h3>Abstract</h3>
+          {paper.abstract_source === 'extracted_digest' && (
+            /* A book has no abstract, so this one was assembled from the
+               book's own paragraphs. Saying so matters: presented plainly it
+               reads as the author's summary of their work, and it is not. */
+            <p className="assembled">Assembled from the text — this document has no abstract of its own.</p>
+          )}
           <p className="abstract">{paper.abstract}</p>
         </section>
       )}

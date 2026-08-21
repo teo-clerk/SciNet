@@ -305,3 +305,14 @@ body {
   padding-left: 9px; position: relative; margin-bottom: 3px;
 }
 .bridge-card li::before { content: '·'; position: absolute; left: 0; }
+
+/* Disclosure above a synthesised abstract. Quiet, but not hidden — the reader
+   has to be able to tell an assembled summary from one an author wrote. */
+.assembled {
+  margin: 0 0 0.5rem;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  color: var(--muted, #8b93a7);
+  font-style: italic;
+}

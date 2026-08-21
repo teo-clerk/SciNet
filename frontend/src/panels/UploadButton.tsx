@@ -1,13 +1,47 @@
 /**
  * Adding papers from the interface.
  *
- * Uploads are sent in batches rather than as one request: a few thousand PDFs
+ * Uploads are sent in batches rather than as one request: a few thousand files
  * is several gigabytes, and a single multipart body that size is a timeout
  * waiting to happen and gives no progress until it finishes. Batching means
  * the count advances steadily and a network hiccup costs one batch, not the
  * whole import.
  */
 import { useCallback, useRef, useState } from 'react'
+
+/** Everything the backend will read. Kept in step with SUPPORTED_EXTENSIONS in
+ *  backend/app/core/paths.py — the upload button and the watched folder have to
+ *  agree about what a paper is, or dropping a book in one place works and the
+ *  other silently ignores it. */
+export const ACCEPTED = [
+  '.pdf',
+  '.epub',
+  '.mobi',
+  '.azw3',
+  '.djvu',
+  '.djv',
+  '.docx',
+  '.txt',
+  '.md',
+]
+
+/** A real file extension: a few letters, no digits. Anything else is part of
+ *  the name — an arXiv download is called `2504.15673`, and reading `.15673`
+ *  as its type is how those got dropped from a library that wanted them. */
+const EXTENSION = /\.[a-z]{1,5}$/
+
+/** Permissive by design, and it has to be: the server decides by reading the
+ *  bytes, so the only job here is to spare the user from uploading a folder of
+ *  images. Anything without a recognisable extension is passed along for the
+ *  server to judge. */
+export const isReadable = (file: { name: string }): boolean => {
+  const name = file.name.toLowerCase()
+  const base = name.slice(
+    Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\')) + 1,
+  )
+  const match = base.match(EXTENSION)
+  return match === null || ACCEPTED.includes(match[0])
+}
 
 const BATCH_SIZE = 20
 
@@ -84,9 +118,7 @@ export function UploadButton() {
   }, [])
 
   const onPick = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const chosen = Array.from(event.target.files ?? []).filter((f) =>
-      f.name.toLowerCase().endsWith('.pdf'),
-    )
+    const chosen = Array.from(event.target.files ?? []).filter(isReadable)
     void send(chosen)
     event.target.value = '' // allow re-picking the same files
   }
@@ -98,7 +130,7 @@ export function UploadButton() {
       <input
         ref={input}
         type="file"
-        accept="application/pdf,.pdf"
+        accept={ACCEPTED.join(',')}
         multiple
         onChange={onPick}
         hidden

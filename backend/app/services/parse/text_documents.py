@@ -1,10 +1,12 @@
-"""Reading the formats that are already text.
+"""Reading every format that is not a PDF.
 
 The tiered PDF router exists because a PDF may or may not carry a usable text
-layer, and finding out is expensive. None of that applies here: a ``.txt``,
-``.md`` or ``.docx`` either opens or it does not. So these bypass escalation
-entirely and report tier 0 — the tier field records how much work the text
-cost, and this is the cheapest text there is.
+layer, and finding out is expensive. None of that applies here. A ``.txt``,
+``.md``, ``.docx`` or ``.epub`` either opens or it does not, and a ``.djvu``
+either carries the OCR text its scanner saved or it carries nothing this side
+of running OCR ourselves. So these bypass escalation entirely and report tier
+0 — the tier field records how much work the text cost, and this is the
+cheapest text there is.
 
 Every extractor returns the same ``ParseResult`` the PDF tiers return, so the
 rest of the pipeline — metadata, embedding, projection, tagging — cannot tell
@@ -101,16 +103,66 @@ def read_docx(path: Path) -> str:
     return body
 
 
+def _read_plain(path: Path) -> tuple[str, int | None]:
+    return read_text_file(path), None
+
+
+def _read_docx(path: Path) -> tuple[str, int | None]:
+    return read_docx(path), None
+
+
+def _read_epub(path: Path) -> tuple[str, int | None]:
+    from app.services.parse.ebook import UnreadableBook, read_epub
+
+    try:
+        return read_epub(path)
+    except UnreadableBook as exc:
+        raise UnreadableDocument(str(exc)) from exc
+
+
+def _read_mobi(path: Path) -> tuple[str, int | None]:
+    from app.services.parse.ebook import UnreadableBook, read_mobi
+
+    try:
+        return read_mobi(path)
+    except UnreadableBook as exc:
+        raise UnreadableDocument(str(exc)) from exc
+
+
+def _read_djvu(path: Path) -> tuple[str, int | None]:
+    from app.services.parse.djvu import NotADjVu, read_djvu_text
+
+    try:
+        text, pages = read_djvu_text(path)
+    except NotADjVu as exc:
+        raise UnreadableDocument(str(exc)) from exc
+    if not text.strip():
+        # Images with no OCR layer. Reporting this as an empty document would
+        # put a blank node on the map; a failure is something the operator can
+        # act on, by running the file through OCR themselves.
+        raise UnreadableDocument(
+            f"{path.name} has no text layer — it is a scan that was never "
+            "run through OCR"
+        )
+    return text, pages
+
+
 READERS = {
-    DocumentKind.TEXT: read_text_file,
-    DocumentKind.MARKDOWN: read_text_file,
-    DocumentKind.DOCX: read_docx,
+    DocumentKind.TEXT: _read_plain,
+    DocumentKind.MARKDOWN: _read_plain,
+    DocumentKind.DOCX: _read_docx,
+    DocumentKind.EPUB: _read_epub,
+    DocumentKind.MOBI: _read_mobi,
+    DocumentKind.DJVU: _read_djvu,
 }
 
 PARSER_NAMES = {
     DocumentKind.TEXT: "utf8-text",
     DocumentKind.MARKDOWN: "markdown-passthrough",
     DocumentKind.DOCX: "python-docx",
+    DocumentKind.EPUB: "epub-xhtml",
+    DocumentKind.MOBI: "mupdf-mobi",
+    DocumentKind.DJVU: "djvu-textlayer",
 }
 
 
@@ -121,7 +173,8 @@ def parse_text_document(path: Path | str, kind: DocumentKind) -> ParseResult:
     if reader is None:
         raise UnreadableDocument(f"no reader for {kind}")
 
-    text = reader(path).strip()
+    text, pages = reader(path)
+    text = text.strip()
     if not text:
         raise UnreadableDocument(f"{path.name} is empty")
 
@@ -130,5 +183,6 @@ def parse_text_document(path: Path | str, kind: DocumentKind) -> ParseResult:
         tier=0,
         parser=PARSER_NAMES[kind],
         parser_version=PARSER_VERSION,
-        page_count=_page_count(text),
+        # Formats with real pages report them; the rest are measured in text.
+        page_count=pages if pages else _page_count(text),
     )

@@ -38,8 +38,16 @@ class JobState(StrEnum):
 
 class MetaSource(StrEnum):
     PDF_EMBEDDED = "pdf_embedded"
+    #: A book's own package metadata (EPUB OPF, MOBI header). Distinct from
+    #: PDF_EMBEDDED because it is far more trustworthy: an EPUB's title is
+    #: what the publisher typed, where a PDF's is often the LaTeX template's.
+    EBOOK_EMBEDDED = "ebook_embedded"
     REGEX = "regex"
     HEURISTIC = "heuristic"
+    #: An abstract assembled from the document's own paragraphs because it
+    #: had none. Books land here. Kept distinct so the interface can say so,
+    #: and so it is never mistaken for something an author wrote.
+    EXTRACTED_DIGEST = "extracted_digest"
     LLM = "llm"
     CROSSREF = "crossref"
     OPENALEX = "openalex"

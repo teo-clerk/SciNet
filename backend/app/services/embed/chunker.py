@@ -25,10 +25,25 @@ BOILERPLATE_SECTIONS = re.compile(
     re.IGNORECASE,
 )
 
+#: A ceiling on chunks from one document, and a guard rather than a routine
+#: limit: it corresponds to roughly 1,200 printed pages, which no book in a
+#: normal library reaches. It exists because "no limit" is not a limit, and a
+#: 5,000-page reference work would otherwise put nine megabytes of duplicated
+#: text through the full-text index on its own.
+#:
+#: Chunk size cannot be raised to compensate. The encoder is a 512-token model
+#: and silently truncates past it, so a larger chunk would not be *coarser*, it
+#: would be *lossy* — the tail of every chunk would simply stop being indexed.
+MAX_CHUNKS_PER_DOC = 1200
+
 DEFAULT_CHUNK_CHARS = 1800
 DEFAULT_OVERLAP_CHARS = 200
 MIN_CHUNK_CHARS = 120
 MAX_DOC_CHARS = 6000
+#: Section headings kept in the document text. Sampled across the document
+#: rather than taken from the front: a forty-chapter book described by its
+#: first twenty chapter titles is described by half of itself.
+MAX_HEADINGS = 20
 
 
 @dataclass(frozen=True)
@@ -79,6 +94,7 @@ def chunk_markdown(
     max_chars: int = DEFAULT_CHUNK_CHARS,
     overlap: int = DEFAULT_OVERLAP_CHARS,
     drop_boilerplate: bool = True,
+    max_chunks: int = MAX_CHUNKS_PER_DOC,
 ) -> list[Chunk]:
     """Section-aware chunks for retrieval.
 
@@ -87,7 +103,7 @@ def chunk_markdown(
     breaks with a small overlap, so a sentence straddling a split is still
     retrievable from one side.
     """
-    chunks: list[Chunk] = []
+    per_section: list[tuple[str | None, list[str]]] = []
     for section in split_sections(markdown):
         if drop_boilerplate and is_boilerplate(section.title):
             continue
@@ -95,10 +111,55 @@ def chunk_markdown(
         if len(body) < MIN_CHUNK_CHARS:
             continue
 
-        for piece in _split_long(body, max_chars, overlap):
-            if len(piece.strip()) >= MIN_CHUNK_CHARS:
-                chunks.append(Chunk(len(chunks), section.title, piece.strip()))
-    return chunks
+        pieces = [
+            piece.strip()
+            for piece in _split_long(body, max_chars, overlap)
+            if len(piece.strip()) >= MIN_CHUNK_CHARS
+        ]
+        if pieces:
+            per_section.append((section.title, pieces))
+
+    if sum(len(pieces) for _, pieces in per_section) > max_chunks:
+        per_section = _fit_budget(per_section, max_chunks)
+
+    return [
+        Chunk(index, title, piece)
+        for index, (title, piece) in enumerate(
+            (title, piece) for title, pieces in per_section for piece in pieces
+        )
+    ]
+
+
+def _fit_budget(
+    per_section: list[tuple[str | None, list[str]]], budget: int
+) -> list[tuple[str | None, list[str]]]:
+    """Spend a chunk budget across sections, openings first.
+
+    Handed out in rounds: every section gets its first chunk before any section
+    gets its second. For a book that means each chapter stays findable, which
+    is the granularity a reader actually wants from one — "which chapter is
+    this in" — where spending the whole budget on chapter one would leave the
+    rest of the book invisible to search.
+    """
+    kept: list[list[str]] = [[] for _ in per_section]
+    taken = 0
+    for depth in range(max((len(p) for _, p in per_section), default=0)):
+        progressed = False
+        for index, (_, pieces) in enumerate(per_section):
+            if depth >= len(pieces):
+                continue
+            kept[index].append(pieces[depth])
+            taken += 1
+            progressed = True
+            if taken >= budget:
+                break
+        if taken >= budget or not progressed:
+            break
+    return [
+        (title, pieces)
+        for (title, _), pieces in zip(per_section, kept, strict=True)
+        if pieces
+    ]
 
 
 def _split_long(text: str, max_chars: int, overlap: int) -> list[str]:
@@ -153,6 +214,14 @@ def document_text(
             if s.title and not is_boilerplate(s.title)
         ]
         if headings:
-            parts.append("Sections: " + "; ".join(headings[:20]))
+            parts.append("Sections: " + "; ".join(_spread(headings, MAX_HEADINGS)))
 
     return "\n\n".join(p for p in parts if p)[:max_chars]
+
+
+def _spread(items: list[str], limit: int) -> list[str]:
+    """At most ``limit`` items, evenly sampled and in original order."""
+    if len(items) <= limit:
+        return items
+    step = len(items) / limit
+    return [items[int(index * step)] for index in range(limit)]

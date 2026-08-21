@@ -30,6 +30,10 @@ class PaperSummary(BaseModel):
 class PaperDetail(PaperSummary):
     authors: list[str] = []
     abstract: str | None = None
+    #: Where the abstract came from. A book has none, so one may have been
+    #: assembled from its own paragraphs; the reader has to be able to tell
+    #: that from something its author wrote.
+    abstract_source: str | None = None
     summary: str | None = None
     venue: str | None = None
     tags: list[str] = []

@@ -86,12 +86,12 @@ def main() -> int:
     parser.add_argument(
         "--no-clean",
         action="store_true",
-        help="do not quarantine broken files and duplicates before scanning",
+        help="do not delete broken files and duplicates before scanning",
     )
     parser.add_argument(
-        "--purge",
+        "--quarantine",
         action="store_true",
-        help="delete broken files and duplicates instead of quarantining them",
+        help="move broken files and duplicates aside instead of deleting them",
     )
     parser.add_argument(
         "--scan-only",
@@ -114,12 +114,14 @@ def main() -> int:
             known = {
                 str(Path(p).resolve()) for p in session.scalars(select(Paper.pdf_path))
             }
-        findings, quarantine = clean_library(root, keep_paths=known, purge=args.purge)
+        findings, quarantine = clean_library(
+            root, keep_paths=known, quarantine=args.quarantine
+        )
         if findings:
             summary: dict[str, int] = {}
             for finding in findings:
                 summary[finding.reason.value] = summary.get(finding.reason.value, 0) + 1
-            verb = "purged" if args.purge else "quarantined"
+            verb = "quarantined" if args.quarantine else "deleted"
             print(f"{verb} {len(findings)} file(s): {summary}")
             if quarantine:
                 print(f"  -> {quarantine}")

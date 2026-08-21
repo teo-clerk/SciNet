@@ -106,13 +106,13 @@ def test_near_duplicates_are_not_touched(tmp_path):
     assert inspect_library(tmp_path) == []
 
 
-def test_clean_moves_to_quarantine_and_records_why(tmp_path):
+def test_quarantine_moves_and_records_why(tmp_path):
     library = tmp_path / "library"
     library.mkdir()
     write(library, "good.pdf", PAPER)
     write(library, "junk.pdf", b"<html>" + b" " * 4096)
 
-    findings, destination = clean_library(library)
+    findings, destination = clean_library(library, quarantine=True)
 
     assert len(findings) == 1
     assert not (library / "junk.pdf").exists()
@@ -123,12 +123,12 @@ def test_clean_moves_to_quarantine_and_records_why(tmp_path):
     assert destination.parent.name == QUARANTINE_DIRNAME
 
 
-def test_purge_deletes_outright(tmp_path):
+def test_removal_means_deletion(tmp_path):
     library = tmp_path / "library"
     library.mkdir()
     junk = write(library, "junk.pdf", b"<html>" + b" " * 4096)
 
-    findings, destination = clean_library(library, purge=True)
+    findings, destination = clean_library(library)
 
     assert len(findings) == 1
     assert not junk.exists()
@@ -153,8 +153,8 @@ def test_quarantined_files_are_not_re_examined(tmp_path):
     library.mkdir()
     write(library, "junk.pdf", b"<html>" + b" " * 4096)
 
-    clean_library(library)
-    findings, _ = clean_library(library)
+    clean_library(library, quarantine=True)
+    findings, _ = clean_library(library, quarantine=True)
     assert findings == []
 
 
@@ -164,7 +164,7 @@ def test_same_name_from_different_folders_does_not_collide(tmp_path):
     write(library, "a/junk.pdf", b"<html>" + b" " * 4096)
     write(library, "b/junk.pdf", b"<html>" + b" " * 5000)
 
-    findings, destination = clean_library(library)
+    findings, destination = clean_library(library, quarantine=True)
     assert len(findings) == 2
     quarantined = list(destination.rglob("*.pdf"))
     assert len(quarantined) == 2
@@ -173,3 +173,37 @@ def test_same_name_from_different_folders_does_not_collide(tmp_path):
 def test_minimum_size_is_far_below_a_real_paper(tmp_path):
     """Guards the threshold against being raised into real-paper territory."""
     assert MIN_CONTAINER_BYTES < 14_000
+
+
+def test_a_truncated_epub_is_corrupt_not_merely_small(tmp_path):
+    """A zip that will not open is corrupt definitively, not heuristically.
+
+    It is large enough to pass the size floor and carries the right signature,
+    so nothing else here catches it — and left in place it fails a parse job on
+    every run instead of once.
+    """
+    library = tmp_path / "library"
+    library.mkdir()
+    broken = write(library, "book.epub", b"PK\x03\x04 truncated" + b"\x00" * 900)
+
+    findings = inspect_library(library)
+
+    assert [f.reason for f in findings] == [Reason.NOT_A_DOCUMENT]
+    assert "will not open" in findings[0].detail
+    assert findings[0].path == broken
+
+
+def test_a_real_epub_is_left_alone(tmp_path):
+    from tests.fixtures.documents import build_epub
+
+    library = tmp_path / "library"
+    library.mkdir()
+    build_epub(
+        library / "kuhn.epub",
+        title="The Structure of Scientific Revolutions",
+        author="Thomas S. Kuhn",
+        year="1962",
+        chapters=[("A Role for History", "History, viewed as a repository.")],
+    )
+
+    assert inspect_library(library) == []

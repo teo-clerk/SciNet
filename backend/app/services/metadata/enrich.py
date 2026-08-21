@@ -133,7 +133,11 @@ def enrich_paper(session: Session, paper: Paper, settings: Settings) -> bool:
         return False
 
     sources = json.loads(meta.field_sources_json or "{}")
-    overwritable = {str(MetaSource.HEURISTIC), str(MetaSource.LLM)}
+    overwritable = {
+        str(MetaSource.HEURISTIC),
+        str(MetaSource.LLM),
+        str(MetaSource.EXTRACTED_DIGEST),
+    }
     changed = False
 
     def take(field: str, value: Any) -> None:

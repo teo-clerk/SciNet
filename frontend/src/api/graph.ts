@@ -164,6 +164,8 @@ export interface PaperDetail {
   title: string | null
   authors: string[]
   abstract: string | null
+  /** Which strategy produced the abstract; books rarely have a real one. */
+  abstract_source: string | null
   summary: string | null
   year: number | null
   venue: string | null

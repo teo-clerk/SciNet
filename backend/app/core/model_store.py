@@ -147,8 +147,17 @@ def configure_environment(settings: Settings | None = None) -> dict[str, str]:
     applied = {
         "HF_HOME": str(cache),
         "HF_HUB_CACHE": str(cache / "hub"),
+        # Both spellings: the name changed between huggingface_hub releases and
+        # which one is honoured depends on the version that ends up installed.
+        "HUGGINGFACE_HUB_CACHE": str(cache / "hub"),
         "TRANSFORMERS_CACHE": str(cache / "hub"),
+        "HF_DATASETS_CACHE": str(cache / "datasets"),
         "SENTENCE_TRANSFORMERS_HOME": str(cache),
+        # Not a model, but tokenisers and matplotlib both write into the home
+        # directory on first use, and a portable checkout should not.
+        "TIKTOKEN_CACHE_DIR": str(cache / "tiktoken"),
+        "NLTK_DATA": str(cache / "nltk"),
+        "MPLCONFIGDIR": str(cache / "matplotlib"),
         # Surya keeps its own cache root, separate from the HF hub layout.
         "MODEL_CACHE_DIR": str(cache / "surya"),
         "TORCH_HOME": str(cache / "torch"),

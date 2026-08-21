@@ -30,6 +30,11 @@ dependencies = [
     "python-multipart>=0.0.32",
 ]
 
+[project.scripts]
+# `uv run scinet-stop` from backend/. The logic lives in the package so it is
+# importable and testable; scripts/stop.sh and scripts/stop.py wrap it.
+scinet-stop = "app.cli.stop:main"
+
 [project.optional-dependencies]
 # Heavy GPU stack — installed deliberately at M1 (tier 1) / M2 (embeddings).
 #   uv sync --extra gpu

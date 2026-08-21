@@ -9,10 +9,15 @@ Skipping them at ingestion was not enough. They stayed on disk, were rescanned
 on every startup, and had to be re-diagnosed by hand each time the operator
 wondered why the paper count was short. So they are taken out of the library.
 
-**Nothing is deleted by default.** Files are moved to a timestamped quarantine
-directory with a manifest recording why, because the detectors are heuristics
-and a false positive against a real paper is unrecoverable. ``purge=True``
-deletes outright for operators who want the literal behaviour.
+**Removal means deletion.** ``quarantine=True`` moves files to a timestamped
+directory with a manifest instead, for a first run against an unfamiliar
+library; ``dry_run=True`` reports and changes nothing, which is what
+``clean_library.py`` does unless told otherwise.
+
+Only files that *present themselves as documents* are ever candidates. A
+``.png`` cover or a ``.bib`` file sitting in the library is not broken — it is
+simply not a paper, and deleting what the operator deliberately filed there
+would be a far worse failure than leaving it alone.
 """
 
 from __future__ import annotations
@@ -20,6 +25,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+import zipfile
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -46,7 +52,19 @@ MANIFEST_NAME = "manifest.json"
 # floor, and a short reading note is a legitimate document: an early version of
 # this rule quarantined a 540-byte set of notes as "empty".
 MIN_CONTAINER_BYTES = 512
-CONTAINER_KINDS = {DocumentKind.PDF, DocumentKind.DOCX}
+CONTAINER_KINDS = {
+    DocumentKind.PDF,
+    DocumentKind.DOCX,
+    DocumentKind.EPUB,
+    DocumentKind.MOBI,
+    DocumentKind.DJVU,
+}
+
+#: Formats that are zip archives underneath. For these, "is it corrupt" has a
+#: definite answer rather than a heuristic one — the central directory either
+#: reads or it does not — so a truncated download is caught here instead of
+#: failing a parse job over and over.
+ZIP_KINDS = {DocumentKind.DOCX, DocumentKind.EPUB}
 
 
 class Reason(StrEnum):
@@ -87,7 +105,7 @@ def inspect_library(root: Path, *, keep_paths: set[str] | None = None) -> list[F
     """
     keep_paths = keep_paths or set()
     findings: list[Finding] = []
-    by_digest: dict[str, list[Path]] = {}
+    by_size: dict[int, list[Path]] = {}
 
     for path in sorted(root.rglob("*")):
         if not path.is_file() or _in_quarantine(path, root):
@@ -108,7 +126,17 @@ def inspect_library(root: Path, *, keep_paths: set[str] | None = None) -> list[F
                     path,
                     Reason.NOT_A_DOCUMENT,
                     f"{path.suffix or 'no extension'} but the contents are not a "
-                    "PDF, Word document, or text",
+                    "document in any format SciNet reads",
+                )
+            )
+            continue
+
+        if kind in ZIP_KINDS and not zipfile.is_zipfile(path):
+            findings.append(
+                Finding(
+                    path,
+                    Reason.NOT_A_DOCUMENT,
+                    f"{kind.value} files are zip archives, and this one will not open",
                 )
             )
             continue
@@ -123,7 +151,18 @@ def inspect_library(root: Path, *, keep_paths: set[str] | None = None) -> list[F
             findings.append(Finding(path, Reason.EMPTY, "contains only whitespace"))
             continue
 
-        by_digest.setdefault(hash_file(path), []).append(path)
+        by_size.setdefault(size, []).append(path)
+
+    # Byte-identical files are the same size, so only same-size groups can hold
+    # duplicates. Checking that first matters once a library holds books: a
+    # library of 550 distinct files hashes nothing at all here, where hashing
+    # every candidate would read several gigabytes off the disk to prove it.
+    by_digest: dict[str, list[Path]] = {}
+    for candidates in by_size.values():
+        if len(candidates) < 2:
+            continue
+        for path in candidates:
+            by_digest.setdefault(hash_file(path), []).append(path)
 
     for digest, copies in by_digest.items():
         if len(copies) < 2:
@@ -162,21 +201,22 @@ def clean_library(
     root: Path,
     *,
     keep_paths: set[str] | None = None,
-    purge: bool = False,
+    quarantine: bool = False,
     dry_run: bool = False,
 ) -> tuple[list[Finding], Path | None]:
     """Take the findings out of the library.
 
-    Returns the findings and the quarantine directory, if one was made.
+    Deletes by default. Returns the findings and the quarantine directory, if
+    one was made.
     """
     findings = inspect_library(root, keep_paths=keep_paths)
     if not findings or dry_run:
         return findings, None
 
-    if purge:
+    if not quarantine:
         for finding in findings:
             finding.path.unlink(missing_ok=True)
-            logger.info("purged %s (%s)", finding.path, finding.reason.value)
+            logger.info("deleted %s (%s)", finding.path, finding.reason.value)
         return findings, None
 
     stamp = utcnow().strftime("%Y%m%d-%H%M%S")

@@ -97,10 +97,13 @@ def handle_embed(session: Session, job: Job, settings: Settings) -> None:
 
     chunks = chunk_markdown(markdown) if markdown else []
 
-    vectors = encoder.encode_documents(
-        [doc_text] + [c.text for c in chunks], settings=settings
-    )
-    doc_vector, chunk_vectors = vectors[0], vectors[1:]
+    # Only the document vector is embedded. Chunks are retrieved by BM25 over
+    # their text (see the chunks_fts index), and nothing has ever read a chunk
+    # vector — they were encoded and dropped on the floor. That was invisible
+    # at fifty papers and is not at five hundred with books among them: a
+    # single book contributes hundreds of chunks, so this was most of the GPU
+    # time in the embed stage, spent on vectors no query could reach.
+    doc_vector = encoder.encode_documents([doc_text], settings=settings)[0]
 
     store = open_store(settings)
     row = store.add(paper.id, doc_vector)
@@ -143,7 +146,6 @@ def handle_embed(session: Session, job: Job, settings: Settings) -> None:
         "embed.done",
         paper_id=paper.id,
         chunks=len(chunks),
-        vectors=int(chunk_vectors.shape[0]),
     )
 
 
