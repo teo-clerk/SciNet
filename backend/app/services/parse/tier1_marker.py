@@ -2,7 +2,7 @@
 
 The strongest batch option for multi-column academic layouts, at roughly
 1-3 s/page on this hardware. Imported lazily and behind ``ParserUnavailable``
-because it is a heavy optional dependency (``uv sync --extra gpu``) and a
+because it is a heavy optional dependency (``uv sync --extra tier1``) and a
 machine without it should still ingest papers, just with more escalations to
 tier 2.
 
@@ -40,7 +40,7 @@ def _converter():
         from marker.models import create_model_dict
     except ImportError as exc:  # pragma: no cover - depends on optional extra
         raise ParserUnavailable(
-            "marker-pdf is not installed; run `uv sync --extra gpu`"
+            "marker-pdf is not installed; run `uv sync --extra tier1`"
         ) from exc
 
     settings = get_settings()

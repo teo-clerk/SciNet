@@ -147,7 +147,7 @@ The heavy GPU stack (torch, sentence-transformers, marker-pdf) is a separate
 extra so the first install stays small:
 
 ```bash
-cd backend && uv sync --extra gpu --group dev
+cd backend && uv sync --group dev
 ```
 
 ## Running
@@ -193,7 +193,7 @@ expensive conversion only runs on output that will actually be kept.
 | 1 | Marker + Surya | ~1-3 s/page, GPU | broken layouts, scans |
 | 2 | `qwen2.5vl:7b` | ~10 s/page, GPU | what neither of the above can read |
 
-Tier 1 needs `uv sync --extra gpu`. Without it the router falls through to
+Tier 1 needs `uv sync --extra tier1`. Without it the router falls through to
 tier 2 rather than stranding the paper.
 
 ## Privacy

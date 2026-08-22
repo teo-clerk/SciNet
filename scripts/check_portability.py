@@ -97,6 +97,22 @@ def _hf_directory_name(reference: str) -> str:
     return "models--" + reference.replace("/", "--")
 
 
+def _weight_dirs(root: Path, reference: str) -> list[Path]:
+    """Directories actually holding this model's weights.
+
+    ``.locks`` carries a directory per model with the same name and no weights
+    at all, and it outlives the blobs — so matching on the name alone reports a
+    model as leaked after its weights have been deleted, and then points the
+    operator at a lock directory and calls it safe to delete.
+    """
+    name = _hf_directory_name(reference)
+    return [
+        found
+        for found in root.rglob(name)
+        if ".locks" not in found.parts and any(found.rglob("*"))
+    ]
+
+
 def local_copies(settings) -> set[str]:
     """Which of this project's models are already inside it.
 
@@ -108,7 +124,7 @@ def local_copies(settings) -> set[str]:
     store = settings.models_dir
     present = set()
     for entry in huggingface_models():
-        if any(store.rglob(_hf_directory_name(entry.reference))):
+        if _weight_dirs(store, entry.reference):
             present.add(entry.reference)
 
     manifests = store / "ollama" / "manifests"
@@ -130,8 +146,7 @@ def leaked_models(root: Path) -> list[str]:
     found: list[str] = []
 
     for entry in huggingface_models():
-        target = _hf_directory_name(entry.reference)
-        if any(root.rglob(target)):
+        if _weight_dirs(root, entry.reference):
             found.append(entry.reference)
 
     manifests = root / "models" / "manifests"
@@ -199,7 +214,7 @@ def main() -> int:
         print(f"FAIL: this project's models are in {len(leaks)} global cache(s).")
         for root, ours in leaks:
             for reference in ours:
-                target = next(iter(root.rglob(_hf_directory_name(reference))), root)
+                target = next(iter(_weight_dirs(root, reference)), root)
                 if reference in held:
                     print(f"  {reference}")
                     print("    duplicate of a copy already inside the project;")

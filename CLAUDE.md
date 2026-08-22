@@ -122,6 +122,18 @@ Target scale 3–4k papers on a single laptop.
   over `chunks_fts`; nothing ever read a chunk vector. Invisible at 57 papers,
   not at 550 with books among them, where one book is hundreds of chunks. Only
   the document vector is embedded now.
+- **The embedder is a hard dependency, not an extra.** It lived under
+  `--extra gpu` because it drags torch in (~2.5 GB), which is a real cost and
+  the wrong thing to make optional: the document vector is what places a paper
+  on the map, so a base install parsed 506 documents and then failed 449 embed
+  jobs in a row with `ModuleNotFoundError`. `marker-pdf` stays optional under
+  `--extra tier1` — nothing stops working without it, the router falls through.
+- **`dead` is a verdict on the document, not on the machine.** A stage that
+  fails because a library is missing burns all three attempts on the same
+  ImportError, and nothing ever retries it — being out of retries is what
+  `dead` records. `scripts/revive_jobs.py` returns only jobs whose recorded
+  error matches a known environmental cause, and checks the module imports
+  before doing it; a DRM-locked book stays dead.
 - **Retrying is for a bad minute, not a bad file.** `parse/errors.py` splits
   failures in two: a property of the *document* (encryption, no text layer, a
   container that will not open) fails its job immediately; a property of the
@@ -247,6 +259,7 @@ cd backend && uv run python ../scripts/backfill.py  # bulk import
 cd backend && uv run python ../scripts/clean_library.py --dry-run  # find junk
 cd backend && uv run python ../scripts/check_portability.py  # models stay local
 cd backend && uv run python ../scripts/fix_abstracts.py  # re-derive bad abstracts
+cd backend && uv run python ../scripts/revive_jobs.py  # requeue env-killed jobs
 cd backend && SCINET_MAX_PARSE_PAGES=0 uv run python -m app.workers.runner  # no page cap
 cd backend && uv run scinet-stop                 # stop API, worker, Vite
 ./scripts/stop.sh                                # the same, from anywhere

@@ -228,6 +228,23 @@ Work is only redone when you ask for it: changing the embedding model
 invalidates vectors and projections (but never the extracted Markdown), and a
 full re-projection has to be requested explicitly.
 
+### Jobs that died of something you have since fixed
+
+`dead` means the queue gave up after three attempts. That is right for a
+document nothing can read, and wrong for a stage that failed because a library
+was missing — every attempt hit the same import error, and nothing retries them
+afterwards because being out of retries is exactly what `dead` records.
+
+```bash
+cd backend && uv run python ../scripts/revive_jobs.py           # show
+cd backend && uv run python ../scripts/revive_jobs.py --apply   # requeue
+```
+
+It revives only jobs whose recorded error names a known environmental cause,
+and checks the module actually imports first — so an unreadable book stays
+dead, and you are not handed 449 jobs that are about to fail the same way
+again. Stop the worker first; it is the sole writer.
+
 ### When a file cannot be read
 
 Some files are not readable by anything: a DRM-locked Kindle book, a PDF whose

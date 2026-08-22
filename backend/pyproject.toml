@@ -28,6 +28,15 @@ dependencies = [
     "hdbscan>=0.8.40",
     "joblib>=1.4.0",
     "python-multipart>=0.0.32",
+    # embeddings — not optional. The document vector is what places a paper on
+    # the map, so without this the application's one feature does not work: a
+    # base install parsed 506 documents and then failed 449 embed jobs in a row
+    # with ModuleNotFoundError. It lived in the `gpu` extra because it drags
+    # torch in, which is a real cost (~2.5 GB) but the wrong thing to make
+    # optional — and a distribution that has to unzip and run cannot rely on
+    # anyone remembering an extra.
+    "sentence-transformers>=3.1.0",
+    "torch>=2.4.0",
 ]
 
 [project.scripts]
@@ -36,11 +45,11 @@ dependencies = [
 scinet-stop = "app.cli.stop:main"
 
 [project.optional-dependencies]
-# Heavy GPU stack — installed deliberately at M1 (tier 1) / M2 (embeddings).
-#   uv sync --extra gpu
-gpu = [
-    "torch>=2.4.0",
-    "sentence-transformers>=3.1.0",
+# Tier 1 only (Marker + Surya), which is off by default and saved 3.6 minutes
+# over 300 papers when measured. Genuinely optional, unlike the embedder:
+# nothing stops working without it, the router falls through to tier 2.
+#   uv sync --extra tier1
+tier1 = [
     "marker-pdf>=1.0.0",
 ]
 

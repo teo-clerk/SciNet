@@ -1529,19 +1529,19 @@ dependencies = [
     { name = "python-multipart" },
     { name = "scikit-learn" },
     { name = "scipy" },
+    { name = "sentence-transformers" },
     { name = "sqlalchemy" },
     { name = "sqlite-vec" },
     { name = "sse-starlette" },
+    { name = "torch" },
     { name = "umap-learn" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "watchdog" },
 ]
 
 [package.optional-dependencies]
-gpu = [
+tier1 = [
     { name = "marker-pdf" },
-    { name = "sentence-transformers" },
-    { name = "torch" },
 ]
 
 [package.dev-dependencies]
@@ -1558,7 +1558,7 @@ requires-dist = [
     { name = "hdbscan", specifier = ">=0.8.40" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "joblib", specifier = ">=1.4.0" },
-    { name = "marker-pdf", marker = "extra == 'gpu'", specifier = ">=1.0.0" },
+    { name = "marker-pdf", marker = "extra == 'tier1'", specifier = ">=1.0.0" },
     { name = "numpy", specifier = ">=1.26,<3" },
     { name = "pydantic", specifier = ">=2.9.0" },
     { name = "pydantic-settings", specifier = ">=2.5.0" },
@@ -1568,16 +1568,16 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "scikit-learn", specifier = ">=1.5.0" },
     { name = "scipy", specifier = ">=1.14.0" },
-    { name = "sentence-transformers", marker = "extra == 'gpu'", specifier = ">=3.1.0" },
+    { name = "sentence-transformers", specifier = ">=3.1.0" },
     { name = "sqlalchemy", specifier = ">=2.0.35" },
     { name = "sqlite-vec", specifier = ">=0.1.9" },
     { name = "sse-starlette", specifier = ">=2.1.0" },
-    { name = "torch", marker = "extra == 'gpu'", specifier = ">=2.4.0" },
+    { name = "torch", specifier = ">=2.4.0" },
     { name = "umap-learn", specifier = ">=0.5.7" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
     { name = "watchdog", specifier = ">=5.0.0" },
 ]
-provides-extras = ["gpu"]
+provides-extras = ["tier1"]
 
 [package.metadata.requires-dev]
 dev = [
