@@ -24,6 +24,7 @@ import struct
 from pathlib import Path
 
 from app.services.parse.djvu_bzz import CorruptStream, decompress
+from app.services.parse.limits import append_note
 
 logger = logging.getLogger(__name__)
 
@@ -73,13 +74,18 @@ def _page_text(buffer: bytes, offset: int, length: int, compressed: bool) -> str
     return body.decode("utf-8", errors="replace")
 
 
-def read_djvu_text(path: Path) -> tuple[str, int]:
+def read_djvu_text(path: Path, *, limit: int | None = None) -> tuple[str, int]:
     """Every page's OCR text, and the page count.
 
     Pages are joined by blank lines so the chunker sees them as paragraphs. No
     heading structure is invented: OCR output has none, and guessing one from
     line lengths would put scanning artefacts on the map as chapter titles.
     """
+    if limit is None:
+        from app.core.config import get_settings
+
+        limit = get_settings().max_parse_pages
+
     buffer = Path(path).read_bytes()
     if not buffer.startswith(MAGIC):
         raise NotADjVu(f"{Path(path).name} has no AT&T signature")
@@ -92,9 +98,22 @@ def read_djvu_text(path: Path) -> tuple[str, int]:
     pages = sum(1 for chunk_id, _, _ in chunks if chunk_id == b"INFO")
 
     texts: list[str] = []
+    # Counted separately from ``texts``: a scanned page whose OCR found nothing
+    # is still a page read. Using the length of ``texts`` as the position would
+    # report a book with blank plates as truncated when it was read in full.
+    pages_read = 0
+    stopped_early = False
     for chunk_id, offset, length in chunks:
         if chunk_id not in (b"TXTa", b"TXTz"):
             continue
+        if limit > 0 and pages_read >= limit:
+            # Decoding is cheap here compared with a VLM, but a scanned book
+            # still runs to hundreds of pages and the later ones say no more
+            # about what it is than the first eighty.
+            logger.info("%s: stopping after %d pages", path.name, limit)
+            stopped_early = True
+            break
+        pages_read += 1
         try:
             text = _page_text(buffer, offset, length, chunk_id == b"TXTz")
         except CorruptStream as exc:
@@ -111,4 +130,7 @@ def read_djvu_text(path: Path) -> tuple[str, int]:
             "document instead"
         )
 
-    return "\n\n".join(texts), max(pages, len(texts))
+    body = "\n\n".join(texts)
+    if stopped_early:
+        body = append_note(body, kept=pages_read, total=max(pages, pages_read))
+    return body, max(pages, pages_read)

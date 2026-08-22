@@ -81,6 +81,20 @@ class Settings(BaseSettings):
 
     # ---- pipeline ----
     pipeline_version: int = 1
+
+    #: Pages read from any one document. Above this the Markdown stops and says
+    #: so; the page count recorded for the paper stays truthful.
+    #:
+    #: 80 is chosen from the shape of a real library rather than from a token
+    #: budget — see app/services/parse/limits.py. The reference corpus has a
+    #: median of 24 pages and a longest document of 1,015, with almost nothing
+    #: between 60 and 150, so anywhere in that band truncates the same set of
+    #: books; 80 keeps every paper whole, comfortably covers a book's front
+    #: matter, preface and introduction, and bounds a tier-2 transcription at
+    #: roughly fifteen minutes instead of several hours.
+    #:
+    #: Set to 0 to read everything.
+    max_parse_pages: int = 80
     tier0_workers: int = 4
     umap_min_papers: int = Field(default=20, ge=10)
 

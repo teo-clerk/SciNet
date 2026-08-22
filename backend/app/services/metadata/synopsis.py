@@ -36,6 +36,7 @@ from collections import Counter
 from dataclasses import dataclass
 from enum import StrEnum
 
+from app.services.parse.limits import TRUNCATION_RE, was_truncated
 from app.services.parse.stopwords import STOPWORDS
 
 #: Roughly the length of a journal abstract. See the module docstring.
@@ -152,6 +153,9 @@ def is_furniture(text: str) -> bool:
     """
     if is_boilerplate(text):
         return True
+    if TRUNCATION_RE.match(text):
+        # Our own note about the document, not a piece of it.
+        return True
     if CAPTION_RE.match(text):
         return True
     if TABLE_RE.search(text):
@@ -225,7 +229,13 @@ def labelled_abstract(markdown: str) -> str | None:
 
 def unlabelled_abstract(markdown: str) -> str | None:
     """An abstract with no heading, for documents short enough to have one."""
-    if len(markdown) > MAX_PAPER_CHARS:
+    if len(markdown) > MAX_PAPER_CHARS or was_truncated(markdown):
+        # Truncation is precisely the operation that makes a book short, so the
+        # length test alone stops working the moment a page limit exists: a
+        # 700-page scan cut to eighty pages of sparse OCR comes back under the
+        # threshold and gets read as a preprint, which is the misclassification
+        # this test was added to prevent. A document that was cut short is a
+        # long document by definition.
         return None
 
     from app.services.metadata.extract import extract_abstract_unlabelled

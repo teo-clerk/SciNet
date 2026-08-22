@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.services.parse.html_text import html_to_markdown
+from app.services.parse.limits import append_note, page_budget
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,25 @@ MAX_OPF_BYTES = 4 * 1024 * 1024
 
 _CONTAINER = "META-INF/container.xml"
 _XHTML_SUFFIXES = (".xhtml", ".html", ".htm")
+
+
+#: Characters a printed page holds, measured on this library: three books of
+#: 535, 273 and 260 pages converted at 2,093, 2,073 and 2,244 characters per
+#: page. Used only to turn a page limit into something an EPUB can honour.
+CHARS_PER_PRINTED_PAGE = 2100
+
+
+def _limit(explicit: int | None) -> int:
+    if explicit is not None:
+        return explicit
+    from app.core.config import get_settings
+
+    return get_settings().max_parse_pages
+
+
+def _character_allowance(pages: int) -> int:
+    """A page limit expressed in characters, or 0 for no limit."""
+    return max(0, pages) * CHARS_PER_PRINTED_PAGE
 
 
 @dataclass(frozen=True)
@@ -143,7 +163,7 @@ def epub_metadata(path: Path) -> BookMetadata:
         return BookMetadata()
 
 
-def read_epub(path: Path) -> tuple[str, int]:
+def read_epub(path: Path, *, limit: int | None = None) -> tuple[str, int]:
     """The book as Markdown, and its chapter count.
 
     Chapters are read in spine order — the order the author intended — rather
@@ -165,8 +185,14 @@ def read_epub(path: Path) -> tuple[str, int]:
                 n for n in archive.namelist() if n.lower().endswith(_XHTML_SUFFIXES)
             )
 
+        # An EPUB has no pages — it reflows — so the limit is spent in
+        # characters instead, at the rate a real book measures. Chapters are
+        # kept whole: stopping mid-chapter to hit an exact count would cut a
+        # sentence for no gain, since the limit is a budget and not a boundary.
+        text_allowance = _character_allowance(_limit(limit))
         parts: list[str] = []
         budget = MAX_UNPACKED_BYTES
+        kept_chapters = 0
         for name in names:
             try:
                 raw = _read_capped(archive, name, budget)
@@ -177,16 +203,28 @@ def read_epub(path: Path) -> tuple[str, int]:
             markdown = html_to_markdown(raw.decode("utf-8", errors="replace"))
             if markdown.strip():
                 parts.append(markdown)
+                kept_chapters += 1
             if budget <= 0:
                 logger.warning("%s exceeded the unpack budget; truncated", path.name)
+                break
+            if text_allowance and sum(len(p) for p in parts) >= text_allowance:
+                logger.info(
+                    "%s: stopping after %d of %d chapters",
+                    path.name,
+                    kept_chapters,
+                    len(names),
+                )
                 break
 
     if not parts:
         raise UnreadableBook(f"{path.name} contains no readable chapters")
-    return "\n\n".join(parts), len(parts)
+    body = "\n\n".join(parts)
+    if kept_chapters < len(names):
+        body = append_note(body, kept=kept_chapters, total=len(names))
+    return body, len(names)
 
 
-def read_mobi(path: Path) -> tuple[str, int]:
+def read_mobi(path: Path, *, limit: int | None = None) -> tuple[str, int]:
     """A MOBI or AZW3 as Markdown, via MuPDF, and its page count.
 
     The PalmDB header is checked here rather than trusted from the caller.
@@ -218,14 +256,19 @@ def read_mobi(path: Path) -> tuple[str, int]:
         if document.needs_pass:
             raise UnreadableBook(f"{path.name} is encrypted")
         pages = document.page_count
+        kept = page_budget(pages, _limit(limit))
         try:
-            markdown = pymupdf4llm.to_markdown(document, show_progress=False)
+            markdown = pymupdf4llm.to_markdown(
+                document,
+                pages=list(range(kept)) if kept < pages else None,
+                show_progress=False,
+            )
         except Exception as exc:  # noqa: BLE001
             raise UnreadableBook(f"{path.name} could not be converted: {exc}") from exc
 
     if not markdown.strip():
         raise UnreadableBook(f"{path.name} holds no extractable text")
-    return markdown, pages
+    return append_note(markdown, kept=kept, total=pages), pages
 
 
 def mobi_metadata(path: Path) -> BookMetadata:

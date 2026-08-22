@@ -22,6 +22,7 @@ from pathlib import Path
 
 from app.core.config import get_settings
 from app.core.model_store import configure_environment
+from app.services.parse.limits import append_note, page_budget
 from app.services.parse.router import ParserUnavailable
 from app.services.parse.tier0_pymupdf import ParseResult
 
@@ -141,15 +142,28 @@ class Tier1Timeout(TimeoutError):
     """Tier 1 exceeded its wall-clock budget for one document."""
 
 
-def _convert(path: str) -> str:
+def _convert(path: str, page_range: list[int] | None = None) -> str:
     from marker.output import text_from_rendered
 
-    rendered = _converter()(path)
+    converter = _converter()
+    if page_range is not None:
+        # Marker reads page_range off its own config rather than the call, so
+        # the limit has to be set on the converter it already built. Restored
+        # afterwards because the converter is cached and reused for the next
+        # document, which will have a different length.
+        previous = converter.config.get("page_range")
+        converter.config["page_range"] = page_range
+        try:
+            rendered = converter(path)
+        finally:
+            converter.config["page_range"] = previous
+    else:
+        rendered = converter(path)
     markdown, _metadata, _images = text_from_rendered(rendered)
     return markdown
 
 
-def parse(path: Path | str) -> ParseResult:
+def parse(path: Path | str, *, limit: int | None = None) -> ParseResult:
     settings = get_settings()
     if not settings.tier1_enabled:
         raise ParserUnavailable(
@@ -161,6 +175,13 @@ def parse(path: Path | str) -> ParseResult:
         import marker.output  # noqa: F401
     except ImportError as exc:
         raise ParserUnavailable("marker-pdf is not installed") from exc
+
+    import pymupdf
+
+    with pymupdf.open(path) as doc:
+        pages = doc.page_count
+    kept = page_budget(pages, settings.max_parse_pages if limit is None else limit)
+    page_range = list(range(kept)) if kept < pages else None
 
     budget = settings.tier1_timeout_seconds * settings.tier1_calls_per_document
 
@@ -180,7 +201,7 @@ def parse(path: Path | str) -> ParseResult:
     # exception is raised, hours later.
     pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tier1")
     try:
-        future = pool.submit(_convert, str(path))
+        future = pool.submit(_convert, str(path), page_range)
         try:
             markdown = future.result(timeout=budget)
         except FuturesTimeout as exc:
@@ -190,17 +211,13 @@ def parse(path: Path | str) -> ParseResult:
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
-    import pymupdf
-
-    with pymupdf.open(path) as doc:
-        pages = doc.page_count
-
     return ParseResult(
-        markdown=markdown,
+        markdown=append_note(markdown, kept=kept, total=pages),
         tier=TIER,
         parser=PARSER_NAME,
         parser_version=_marker_version(),
         page_count=pages,
+        pages_parsed=kept,
     )
 
 

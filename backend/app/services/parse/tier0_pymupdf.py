@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pymupdf
 
+from app.core.config import get_settings
+from app.services.parse.limits import append_note, page_budget
 from app.services.parse.quality import TextProbe
 
 PARSER_NAME = "pymupdf"
@@ -24,7 +26,15 @@ class ParseResult:
     tier: int
     parser: str
     parser_version: str
+    #: What the document really is, not what was read. A truncated book is
+    #: still a 731-page book, and the sidebar should say so.
     page_count: int
+    #: Pages actually converted. Equal to page_count unless the limit applied.
+    pages_parsed: int | None = None
+
+    @property
+    def truncated(self) -> bool:
+        return self.pages_parsed is not None and self.pages_parsed < self.page_count
 
 
 def _image_area_ratio(page: pymupdf.Page) -> float:
@@ -44,15 +54,27 @@ def _image_area_ratio(page: pymupdf.Page) -> float:
     return min(covered / page_area, 1.0)
 
 
-def probe_pdf(path: Path | str) -> TextProbe:
-    """Extract raw text plus the signals the quality gate needs."""
+def probe_pdf(path: Path | str, *, limit: int | None = None) -> TextProbe:
+    """Extract raw text plus the signals the quality gate needs.
+
+    Probes only as far as the parse would go. That is not merely a saving: the
+    gate decides which tier reads the document, and judging it on pages nobody
+    will read makes the decision answer a different question than the one being
+    asked. A book whose first eighty pages are clean typeset text should be
+    read by tier 0 even if it ends in two hundred scanned plates.
+    """
+    if limit is None:
+        limit = get_settings().max_parse_pages
+
     with pymupdf.open(path) as doc:
         pages = doc.page_count
+        budget = page_budget(pages, limit)
         text_parts: list[str] = []
         fonts: set[tuple] = set()
         image_ratios: list[float] = []
 
-        for page in doc:
+        for index in range(budget):
+            page = doc[index]
             text_parts.append(page.get_text())
             fonts.update(page.get_fonts())
             image_ratios.append(_image_area_ratio(page))
@@ -60,6 +82,7 @@ def probe_pdf(path: Path | str) -> TextProbe:
     return TextProbe(
         text="\n".join(text_parts),
         page_count=pages,
+        pages_sampled=budget,
         font_count=len(fonts),
         # Mean rather than max: one scanned figure page in an otherwise digital
         # paper should not send the whole document to the GPU.
@@ -69,7 +92,7 @@ def probe_pdf(path: Path | str) -> TextProbe:
     )
 
 
-def parse(path: Path | str) -> ParseResult:
+def parse(path: Path | str, *, limit: int | None = None) -> ParseResult:
     """Convert to Markdown, preserving headings and reading order.
 
     ``use_ocr=False`` is deliberate and load-bearing. pymupdf4llm will happily
@@ -81,14 +104,25 @@ def parse(path: Path | str) -> ParseResult:
     """
     import pymupdf4llm
 
-    markdown = pymupdf4llm.to_markdown(str(path), show_progress=False, use_ocr=False)
+    if limit is None:
+        limit = get_settings().max_parse_pages
+
     with pymupdf.open(path) as doc:
         pages = doc.page_count
+    budget = page_budget(pages, limit)
+
+    markdown = pymupdf4llm.to_markdown(
+        str(path),
+        pages=list(range(budget)) if budget < pages else None,
+        show_progress=False,
+        use_ocr=False,
+    )
 
     return ParseResult(
-        markdown=markdown,
+        markdown=append_note(markdown, kept=budget, total=pages),
         tier=TIER,
         parser=PARSER_NAME,
         parser_version=pymupdf.__doc__ or "unknown",
         page_count=pages,
+        pages_parsed=budget,
     )

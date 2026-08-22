@@ -91,6 +91,33 @@ Target scale 3–4k papers on a single laptop.
   *opening*: a real abstract that runs on into a page footer says "all rights
   reserved" a thousand characters in, and rejecting it for that cost two
   genuine abstracts before the rule was narrowed.
+- **Only the first 80 pages of any document are read** (`max_parse_pages`,
+  `parse/limits.py`). Chosen from the shape of a real library, not a token
+  budget: 465 documents, median 24 pages, longest 1,015, and *almost nothing
+  between 60 and 150* — raising the cut from 60 to 150 changes how many
+  documents are affected by thirteen. Below the gap are papers, read whole;
+  above it are books, where page 400 says nothing new about what the book is.
+  The stated reason for the limit was context-window overflow, and that part
+  was not real — `document_text` caps at 6,000 chars and the tagger's prompt at
+  6,000 against an 8,192 context. The real reason is compute: tier 2 is
+  8-15 s/page, and one 731-page scan was killed after seven hours, unfinished,
+  with 435 documents queued behind it. The same book now takes 39 s.
+- **A truncated document still records its true page count.** Only the Markdown
+  is short, and it carries a note saying so — every later stage reads the file,
+  not the row. `synopsis` needs that note: it decides a document is a book by
+  *length*, and truncation is precisely the operation that makes a book short,
+  so a 700-page scan cut to 80 pages of sparse OCR would come back under the
+  threshold and be read as a preprint.
+- **Per-page metrics divide by pages sampled, not by page count.** Introduced
+  by the page limit itself: the probe reads 80 pages of a 731-page book but
+  reports 731, so `chars_per_page` came out a ninth of the truth and the book
+  failed as "insufficient text".
+- **`page_is_image` needs thin text as well as a big image.** A scanned book
+  someone already OCR'd is every-page-image *and* perfectly readable; 12% of
+  sampled PDFs — all books — were failing on the ratio alone while yielding
+  300-2,900 chars/page, and each was being sent to the VLM to reproduce text
+  that was already correct. Narrowing it took tier-0 acceptance from 83% to
+  98% on the real library. A genuine scan still fails, on five counts.
 - **Chunk vectors were computed and discarded.** Chunks are retrieved by BM25
   over `chunks_fts`; nothing ever read a chunk vector. Invisible at 57 papers,
   not at 550 with books among them, where one book is hundreds of chunks. Only
@@ -202,6 +229,7 @@ cd backend && uv run python ../scripts/backfill.py  # bulk import
 cd backend && uv run python ../scripts/clean_library.py --dry-run  # find junk
 cd backend && uv run python ../scripts/check_portability.py  # models stay local
 cd backend && uv run python ../scripts/fix_abstracts.py  # re-derive bad abstracts
+cd backend && SCINET_MAX_PARSE_PAGES=0 uv run python -m app.workers.runner  # no page cap
 cd backend && uv run scinet-stop                 # stop API, worker, Vite
 ./scripts/stop.sh                                # the same, from anywhere
 cd frontend && bun test                          # frontend unit tests

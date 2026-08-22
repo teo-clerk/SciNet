@@ -31,6 +31,17 @@ MAX_MOJIBAKE_RATIO = 0.004
 MIN_LINES_FOR_WHITESPACE_CHECK = 5
 MIN_ALPHA_RATIO = 0.35
 MAX_IMAGE_AREA_RATIO = 0.80
+#: Text density above which a page-sized image is irrelevant. A scanned book
+#: that was OCR'd carries a full-page scan *and* a good text layer, and on this
+#: library that combination is common: 7 of 60 sampled PDFs — 12%, all of them
+#: books — were failing on the image ratio alone while yielding 300 to 2,900
+#: characters a page. Sending those to the vision model costs eight to fifteen
+#: seconds a page to reproduce text that was already there and correct.
+#:
+#: Deliberately far above MIN_CHARS_PER_PAGE: the point is not "some text
+#: survived" but "this text layer is doing its job", which is the only thing
+#: that makes the image behind it uninteresting.
+AMPLE_CHARS_PER_PAGE = 300
 
 # Soft signals — need two to agree.
 MIN_STOPWORD_HIT_RATE = 0.06
@@ -56,9 +67,20 @@ class TextProbe:
     """What the gate needs to judge a document, independent of how it was read."""
 
     text: str
+    #: What the document really is.
     page_count: int
     font_count: int = 0
     image_area_ratio: float = 0.0
+    #: Pages the text was taken from. Below page_count when a long document was
+    #: sampled rather than read whole. Every per-page metric must divide by
+    #: this and not by page_count, or a 731-page book probed to eighty pages
+    #: reports a ninth of its real text density and fails as "insufficient
+    #: text" — the sample would be judged as though the rest were blank.
+    pages_sampled: int | None = None
+
+    @property
+    def measured_pages(self) -> int:
+        return max(self.pages_sampled or self.page_count, 1)
 
 
 @dataclass(frozen=True)
@@ -71,7 +93,7 @@ class QualityReport:
 
 def _metrics(probe: TextProbe) -> dict[str, float]:
     text = probe.text
-    pages = max(probe.page_count, 1)
+    pages = probe.measured_pages
     n = len(text)
 
     if n == 0:
@@ -141,7 +163,15 @@ def _hard_failures(probe: TextProbe, m: dict[str, float]) -> list[str]:
         reasons.append("double_encoded_text")
     if m["alpha_ratio"] < MIN_ALPHA_RATIO:
         reasons.append("not_word_like")
-    if probe.image_area_ratio > MAX_IMAGE_AREA_RATIO:
+    if (
+        probe.image_area_ratio > MAX_IMAGE_AREA_RATIO
+        and m["chars_per_page"] < AMPLE_CHARS_PER_PAGE
+    ):
+        # The rule is "a page that is one big scan has no usable text layer,
+        # even when a stray caption extracts cleanly". A document yielding
+        # hundreds of characters a page is not a stray caption; it is a scan
+        # somebody already ran through OCR, and the image behind the text says
+        # nothing about whether the text is good.
         reasons.append("page_is_image")
     # No embedded fonts *and* no meaningful text means a pure raster scan.
     if probe.font_count == 0 and m["chars_per_page"] < MIN_CHARS_PER_PAGE:

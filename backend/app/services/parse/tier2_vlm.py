@@ -21,6 +21,7 @@ import pymupdf
 
 from app.core.config import get_settings
 from app.core.model_store import PRIVATE_OLLAMA
+from app.services.parse.limits import append_note, page_budget
 from app.services.parse.router import ParserUnavailable
 from app.services.parse.tier0_pymupdf import ParseResult
 
@@ -114,8 +115,10 @@ def _transcribe(client: httpx.Client, image_b64: str) -> str:
     return response.json().get("response", "").strip()
 
 
-def parse(path: Path | str) -> ParseResult:
+def parse(path: Path | str, *, limit: int | None = None) -> ParseResult:
     settings = get_settings()
+    if limit is None:
+        limit = settings.max_parse_pages
     if not available():
         raise ParserUnavailable(
             f"{settings.vlm_model} is not in the project's model store; "
@@ -128,21 +131,34 @@ def parse(path: Path | str) -> ParseResult:
         httpx.Client(timeout=PAGE_TIMEOUT_SECONDS) as client,
     ):
         total = doc.page_count
-        for index, page in enumerate(doc, start=1):
+        budget = page_budget(total, limit)
+        if budget < total:
+            # The single most valuable line in this file. At 8-15 s/page a
+            # 731-page scan is hours of GPU; one such job was killed after
+            # seven of them, still unfinished, with 435 documents behind it.
             logger.info(
-                "vlm transcribing page %d/%d of %s", index, total, Path(path).name
+                "%s is %d pages; transcribing the first %d",
+                Path(path).name,
+                total,
+                budget,
+            )
+
+        for index in range(1, budget + 1):
+            logger.info(
+                "vlm transcribing page %d/%d of %s", index, budget, Path(path).name
             )
             try:
-                pages_markdown.append(_transcribe(client, _render_page(page)))
+                pages_markdown.append(_transcribe(client, _render_page(doc[index - 1])))
             except Exception as exc:  # noqa: BLE001
                 # One unreadable page must not discard the rest of the paper.
                 logger.warning("vlm failed on page %d: %s", index, exc)
                 pages_markdown.append(f"<!-- page {index}: transcription failed -->")
 
     return ParseResult(
-        markdown="\n\n".join(pages_markdown),
+        markdown=append_note("\n\n".join(pages_markdown), kept=budget, total=total),
         tier=TIER,
         parser=PARSER_NAME,
         parser_version=settings.vlm_model,
         page_count=total,
+        pages_parsed=budget,
     )

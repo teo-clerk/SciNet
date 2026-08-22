@@ -4,6 +4,9 @@ data/markdown/
 data/vectors/
 data/models/
 data/logs/
+# Files cleanup took out of the library. Operator data, not source, and a
+# quarantine run can be tens of megabytes of PDFs.
+data/quarantine/
 data/*.db
 data/*.db-wal
 data/*.db-shm

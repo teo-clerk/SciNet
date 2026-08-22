@@ -151,6 +151,29 @@ Two things are worth knowing:
 - **DRM-protected books cannot be read by anything**, this included. An
   `.azw3` bought from a store will be rejected with a clear message.
 
+### Only the first 80 pages are read
+
+A library is bimodal: papers run to a couple of dozen pages, books to many
+hundreds, and there is almost nothing in between. Reading a 700-page book to
+the end costs a great deal and tells the map nothing it did not already know
+from the title, preface and opening chapters — and if the book is a scan, the
+vision model charges 8-15 seconds a *page* for the privilege.
+
+So parsing stops at 80 pages. Every paper is read whole; a book is read as far
+as its introduction and early chapters, which is what decides where it sits.
+The Markdown ends with a line saying how much was skipped, and the page count
+shown in the sidebar is still the real one — a truncated 731-page book is
+still a 731-page book.
+
+Set `SCINET_MAX_PARSE_PAGES` in `.env` to change it — `0` reads everything:
+
+```bash
+echo "SCINET_MAX_PARSE_PAGES=0" >> .env
+```
+
+Documents already parsed keep whatever they have; the limit applies to the next
+parse.
+
 ### Books have no abstract
 
 A paper says what it is about in its abstract. A book opens with a title page,

@@ -116,6 +116,9 @@ def handle_parse(session: Session, job: Job, settings: Settings) -> None:
                     "metrics": outcome.report.metrics,
                     "degraded": outcome.degraded,
                     "notes": outcome.notes,
+                    # Surfaced so a short book is visibly a policy decision
+                    # rather than a parser that gave up halfway.
+                    "pages_parsed": outcome.result.pages_parsed,
                 }
             ),
         )
