@@ -228,6 +228,25 @@ Work is only redone when you ask for it: changing the embedding model
 invalidates vectors and projections (but never the extracted Markdown), and a
 full re-projection has to be requested explicitly.
 
+### Rebuilding the map by hand
+
+The map refits itself when the stored fit stops describing the corpus. To force
+it — after changing the embedding model, or a large import:
+
+```bash
+cd backend && uv run python ../scripts/force_project.py            # what it would do
+cd backend && uv run python ../scripts/force_project.py --apply    # enqueue it
+```
+
+`--apply` only enqueues, which is safe with the worker running: it picks the job
+up like any other. Add `--run` to do the work in this process instead, which
+refuses to start if a worker is already alive.
+
+A refit is not destructive. It computes a whole new layout into an inactive
+run, aligns it onto the current one so the map settles rather than scrambling,
+and swaps in a single statement — so you see the old map or the new one, never
+a mixture, and a refit that dies leaves the previous map intact.
+
 ### Jobs that died of something you have since fixed
 
 `dead` means the queue gave up after three attempts. That is right for a

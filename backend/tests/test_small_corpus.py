@@ -13,14 +13,17 @@ import numpy as np
 import pytest
 
 from app.services.project.cluster import (
-    ABSOLUTE_MIN_CLUSTER_SIZE,
-    MAX_FLOOR_CANDIDATES,
-    _floor_candidates,
-    _neighbours_for,
     choose_min_cluster_size,
     cluster_embeddings,
 )
 from app.services.project.reducer import ProjectionModel, ProjectionParams
+from app.services.project.scaling import (
+    ABSOLUTE_MIN_CLUSTER_SIZE,
+    MAX_FLOOR_CANDIDATES,
+    MAX_NEIGHBOURS,
+    floor_candidates,
+    neighbours_for,
+)
 
 
 def blobs(n_per, groups, dim=32, seed=0, spread=0.5):
@@ -38,18 +41,21 @@ def blobs(n_per, groups, dim=32, seed=0, spread=0.5):
 
 def test_a_small_corpus_gets_a_small_neighbourhood():
     """Fifteen neighbours is a quarter of a sixty-paper library."""
-    assert _neighbours_for(60) < 15
-    assert _neighbours_for(60) >= 5
+    assert neighbours_for(60) < 15
+    assert neighbours_for(60) >= 5
 
 
 def test_a_large_corpus_keeps_the_full_neighbourhood():
-    assert _neighbours_for(300) == 15
-    assert _neighbours_for(4000) == 15
+    # Grows with the corpus rather than stopping at 15: a fixed
+    # neighbourhood smooths over a shrinking fraction of a growing library.
+    assert neighbours_for(300) > neighbours_for(60)
+    assert neighbours_for(4000) > neighbours_for(300)
+    assert neighbours_for(4000) <= MAX_NEIGHBOURS
 
 
 def test_the_neighbourhood_never_collapses_to_nothing():
     for rows in (10, 20, 30):
-        assert _neighbours_for(rows) >= 5
+        assert neighbours_for(rows) >= 5
 
 
 # --- the candidate band ---------------------------------------------------
@@ -57,26 +63,26 @@ def test_the_neighbourhood_never_collapses_to_nothing():
 
 def test_the_floor_band_starts_at_a_meaningful_group():
     """Two papers together is a coincidence; three is a theme."""
-    assert min(_floor_candidates(63)) == ABSOLUTE_MIN_CLUSTER_SIZE
+    assert min(floor_candidates(63)) == ABSOLUTE_MIN_CLUSTER_SIZE
 
 
 def test_the_band_lets_a_small_library_show_many_regions():
     """With a floor of eight, no topic in a 63-paper library can exist."""
-    assert min(_floor_candidates(63)) <= 6
+    assert min(floor_candidates(63)) <= 6
 
 
 def test_the_band_scales_with_the_corpus():
-    assert max(_floor_candidates(1000)) > max(_floor_candidates(63))
+    assert max(floor_candidates(1000)) > max(floor_candidates(63))
 
 
 def test_the_search_stays_cheap_on_a_large_corpus():
     """Each candidate costs an HDBSCAN fit."""
-    assert len(_floor_candidates(4000)) <= MAX_FLOOR_CANDIDATES
+    assert len(floor_candidates(4000)) <= MAX_FLOOR_CANDIDATES
 
 
 def test_the_band_is_never_empty():
     for rows in (10, 30, 63, 300, 4000):
-        assert _floor_candidates(rows)
+        assert floor_candidates(rows)
 
 
 # --- the adaptive floor ---------------------------------------------------
@@ -88,14 +94,14 @@ def test_a_floor_is_chosen_for_a_small_corpus():
     matrix, _ = blobs(n_per=6, groups=10)
     dense = umap.UMAP(
         n_components=5,
-        n_neighbors=_neighbours_for(60),
+        n_neighbors=neighbours_for(60),
         min_dist=0.0,
         metric="cosine",
         random_state=42,
     ).fit_transform(matrix)
     floor = choose_min_cluster_size(dense, matrix.shape[0])
 
-    assert ABSOLUTE_MIN_CLUSTER_SIZE <= floor <= max(_floor_candidates(60))
+    assert ABSOLUTE_MIN_CLUSTER_SIZE <= floor <= max(floor_candidates(60))
 
 
 def test_a_degenerate_matrix_falls_back_rather_than_raising():

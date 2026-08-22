@@ -25,13 +25,17 @@ from pathlib import Path
 import joblib
 import numpy as np
 
+from app.services.project.scaling import neighbours_for
+
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class ProjectionParams:
     n_components: int = 3
-    n_neighbors: int = 15
+    #: Only an override. Left None the neighbourhood is derived from the
+    #: corpus size — see services.project.scaling.
+    n_neighbors: int | None = None
     min_dist: float = 0.05
     metric: str = "cosine"
     #: Fixed so the same corpus always produces the same map. This makes UMAP
@@ -113,8 +117,12 @@ class ProjectionModel:
             # 15 is a quarter of a sixty-paper library, and smoothing over a
             # quarter of the collection averages away the local structure the
             # map is made of.
-            scaled = max(5, min(self.params.n_neighbors, round(rows / 8)))
-            neighbors = min(scaled, max(2, rows - 1))
+            # The display projection scales with the corpus for the same
+            # reason the clustering one does: 15 neighbours is a quarter of a
+            # 60-paper library and a three-hundredth of a 5,000-paper one, and
+            # a map that smooths over a fixed *number* of papers smooths over a
+            # shrinking *fraction* of them as the library grows.
+            neighbors = max(2, self.params.n_neighbors or neighbours_for(rows))
             reducer = umap.UMAP(
                 n_components=self.params.n_components,
                 n_neighbors=neighbors,

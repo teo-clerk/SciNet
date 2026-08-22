@@ -25,6 +25,28 @@ Target scale 3–4k papers on a single laptop.
 - **Dual embeddings.** A *document* vector (title + abstract + summary + section
   headings) drives the map; *chunk* vectors drive search. Mean-pooling a whole
   paper collapses the clusters toward a generic-academic-prose centroid.
+- **Every projection parameter is a function of N** (`project/scaling.py`).
+  The neighbourhood law is `min(N/8, sqrt(N))`: the two halves cross at 64, so
+  it reproduces the hand-measured small-corpus rule below that and scales as
+  the square root above. Fixed at 15 it was a quarter of a 60-paper library and
+  a thirtieth of a 500-paper one — a map that smooths over a fixed *number* of
+  papers smooths over a shrinking *fraction* as the library grows, which is how
+  506 nodes became one cloud. Floors, `min_samples` and the dominant-cluster
+  share scale the same way. Square root, not linear: a library ten times larger
+  does not have ten times as many meaningful regions.
+- **`should_refit` is evaluated again after incremental placement.** Taken only
+  beforehand it cannot see the thing it exists to detect — placing the new
+  papers is what makes the fit stale. And nothing comes back to look: `enqueue`
+  collapses duplicate corpus-wide jobs, so one import produces exactly one
+  projection job. A 57-paper fit absorbed 449 documents in a single pass (89%
+  against a 20% trigger) and stayed active, leaving 449 of 506 unclustered.
+- **The map's chrome is rationed by the viewport, not the corpus**
+  (`frontend/src/lib/density.ts`). A screen holds ~12 readable labels however
+  many nodes are beneath them; 40 names over 40 regions is a wall of text with
+  the map behind it. Labels go to the largest regions, bridges to the strongest
+  — faded rather than cut, so a weak relationship reads as weak instead of as a
+  missing one. Nothing is lost: clicking still names any region, and the
+  inspector lists every bridge.
 - **Cluster on a separate 10-D UMAP**, not the 3-D display coordinates, which
   over-fragment under HDBSCAN.
 - **Node data never enters React state.** Positions and per-node visuals are
@@ -260,6 +282,7 @@ cd backend && uv run python ../scripts/clean_library.py --dry-run  # find junk
 cd backend && uv run python ../scripts/check_portability.py  # models stay local
 cd backend && uv run python ../scripts/fix_abstracts.py  # re-derive bad abstracts
 cd backend && uv run python ../scripts/revive_jobs.py  # requeue env-killed jobs
+cd backend && uv run python ../scripts/force_project.py --apply  # rebuild the map
 cd backend && SCINET_MAX_PARSE_PAGES=0 uv run python -m app.workers.runner  # no page cap
 cd backend && uv run scinet-stop                 # stop API, worker, Vite
 ./scripts/stop.sh                                # the same, from anywhere

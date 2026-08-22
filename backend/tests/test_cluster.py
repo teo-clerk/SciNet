@@ -126,7 +126,6 @@ def test_a_floor_producing_one_giant_cluster_is_rejected() -> None:
     import numpy as np
 
     from app.services.project.cluster import (
-        MAX_CLUSTER_SHARE,
         choose_min_cluster_size,
         cluster_embeddings,
     )
@@ -144,5 +143,7 @@ def test_a_floor_producing_one_giant_cluster_is_rejected() -> None:
     )
     assert len(clusters) >= 3
     largest = max(c.size for c in clusters)
-    assert largest / dense.shape[0] <= MAX_CLUSTER_SHARE
+    from app.services.project.scaling import max_cluster_share
+
+    assert largest / dense.shape[0] <= max_cluster_share(dense.shape[0])
     assert len(assignments) == dense.shape[0]

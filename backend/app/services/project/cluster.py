@@ -15,26 +15,18 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from app.services.project.scaling import (
+    ABSOLUTE_MIN_CLUSTER_SIZE,
+    MIN_ROWS_TO_CLUSTER,
+    floor_candidates,
+    max_cluster_share,
+    min_samples_for,
+    neighbours_for,
+)
+
 logger = logging.getLogger(__name__)
 
 CLUSTER_UMAP_COMPONENTS = 10
-MIN_CLUSTER_SIZE = 8
-
-#: Smallest group that counts as a region of the library. Three papers on one
-#: subject is a theme; two is a coincidence.
-ABSOLUTE_MIN_CLUSTER_SIZE = 3
-#: The largest floor considered, expressed as a share of the corpus, so that a
-#: library of any size can still resolve about ten regions.
-CLUSTER_FLOOR_DIVISOR = 10
-#: How many floors to evaluate. Each costs one HDBSCAN fit over the reduced
-#: matrix — cheap, but not free on a large corpus.
-MAX_FLOOR_CANDIDATES = 8
-#: A cluster should be a recognisable region of the library, not a handful of
-#: papers, so the floor scales with the corpus — capped, because past a few
-#: thousand papers the useful number of regions stops growing with the count.
-MAX_MIN_CLUSTER_SIZE = 25
-ROWS_PER_CLUSTER_FLOOR = 25
-MIN_ROWS_TO_CLUSTER = 30
 NOISE_LABEL = -1
 
 #: Excess-of-mass, HDBSCAN's default. "leaf" scored better on one real corpus
@@ -62,43 +54,6 @@ class Cluster:
     @property
     def size(self) -> int:
         return len(self.paper_ids)
-
-
-def _neighbours_for(rows: int) -> int:
-    """UMAP neighbourhood size, scaled to the corpus.
-
-    n_neighbors sets how much global structure UMAP smooths over. Fifteen is a
-    fair default for a few hundred papers and destructive for sixty, where it
-    is a quarter of the entire library — the local structure a small map is
-    made of gets averaged away, and ten distinct topics collapse into three.
-    """
-    return max(5, min(15, round(rows / 8)))
-
-
-def _floor_candidates(rows: int) -> list[int]:
-    """Plausible minimum cluster sizes for a corpus this big.
-
-    Bounded rather than open-ended: an unconstrained search will happily pick a
-    floor so large that a small library shows two regions, which scores well on
-    density and tells the reader nothing.
-    """
-    upper = max(ABSOLUTE_MIN_CLUSTER_SIZE + 1, round(rows / CLUSTER_FLOOR_DIVISOR))
-    span = list(range(ABSOLUTE_MIN_CLUSTER_SIZE, upper + 1))
-    if len(span) <= MAX_FLOOR_CANDIDATES:
-        return span
-    step = (len(span) - 1) / (MAX_FLOOR_CANDIDATES - 1)
-    return sorted({span[round(i * step)] for i in range(MAX_FLOOR_CANDIDATES)})
-
-
-# A single cluster may not hold more than this share of the corpus. The
-# validity index measures separation, not usefulness, and it will happily rank
-# "one tight region plus one bag holding everything else" above a genuine
-# decomposition — on the 57-paper corpus it scored a 35-paper catch-all
-# (0.654) as the best available split, having preferred eight real regions
-# (0.732) one run earlier, after two vectors changed. A region covering most of
-# the map is the unclustered state wearing a label, so candidates that produce
-# one are only used when nothing else clusters at all.
-MAX_CLUSTER_SHARE = 0.5
 
 
 def _dominant_share(labels: np.ndarray, rows: int) -> float:
@@ -135,10 +90,11 @@ def choose_min_cluster_size(dense: np.ndarray, rows: int) -> int:
     fallback_floor: int | None = None
     fallback_validity = float("-inf")
 
-    for floor in _floor_candidates(rows):
+    share_limit = max_cluster_share(rows)
+    for floor in floor_candidates(rows):
         clusterer = hdbscan.HDBSCAN(
             min_cluster_size=floor,
-            min_samples=1,
+            min_samples=min_samples_for(rows, floor),
             metric="euclidean",
             cluster_selection_method=CLUSTER_SELECTION_METHOD,
             gen_min_span_tree=True,
@@ -152,7 +108,7 @@ def choose_min_cluster_size(dense: np.ndarray, rows: int) -> int:
             validity = float(clusterer.relative_validity_)
         except Exception:  # noqa: BLE001 - a degenerate tree is just unusable
             continue
-        if _dominant_share(clusterer.labels_, rows) > MAX_CLUSTER_SHARE:
+        if _dominant_share(clusterer.labels_, rows) > share_limit:
             if validity > fallback_validity:
                 fallback_validity, fallback_floor = validity, floor
             continue
@@ -205,7 +161,7 @@ def cluster_embeddings(
     import hdbscan
     import umap
 
-    neighbors = min(_neighbours_for(rows), max(2, rows - 1))
+    neighbors = max(2, neighbours_for(rows))
     components = min(CLUSTER_UMAP_COMPONENTS, max(2, rows - 2), matrix.shape[1])
     reducer = umap.UMAP(
         n_components=components,
@@ -221,13 +177,10 @@ def cluster_embeddings(
         if min_cluster_size is None
         else min_cluster_size
     )
+    effective_floor = max(2, min(floor, rows // 4))
     clusterer = hdbscan.HDBSCAN(
-        min_cluster_size=max(2, min(floor, rows // 4)),
-        # min_samples=1 keeps the mutual-reachability smoothing minimal. Raising
-        # it was measured to be strictly worse here: with eom it collapsed the
-        # corpus to four clusters, and with leaf it discarded up to a quarter of
-        # the library as noise.
-        min_samples=1,
+        min_cluster_size=effective_floor,
+        min_samples=min_samples_for(rows, effective_floor),
         metric="euclidean",
         cluster_selection_method=CLUSTER_SELECTION_METHOD,
     )

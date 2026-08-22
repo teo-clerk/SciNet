@@ -169,20 +169,43 @@ def test_reprojecting_with_nothing_new_is_a_noop(db, settings, store):
 # --- refit triggers -------------------------------------------------------
 
 
-def test_refit_fires_once_too_much_was_placed_incrementally(db, settings, store):
+def test_refit_fires_in_the_same_pass_that_placed_too_much(db, settings, store):
+    """The decision has to be re-taken after the new papers are placed.
+
+    Taken only beforehand it cannot see the thing it exists to detect, and
+    nothing comes back to look again: ``enqueue`` collapses duplicate
+    corpus-wide jobs, so one import produces exactly one projection job. On the
+    real library that stranded 449 of 506 papers unclustered around a fit made
+    for 57 — the map as a white cloud with the old corpus still coloured in it.
+    """
     make_corpus(db, store, n=40)
-    project_corpus(db, settings, store)
+    first = project_corpus(db, settings, store)
     db.commit()
 
     # 20 more against 40 fitted is well past the 20% threshold.
     make_corpus(db, store, n=20, seed=7, start=2000)
-    project_corpus(db, settings, store)  # places them incrementally
+    outcome = project_corpus(db, settings, store)
     db.commit()
 
-    outcome = project_corpus(db, settings, store)  # now the trigger fires
-    db.commit()
-    assert outcome.refitted
+    assert outcome.refitted, "one job must bring the map fully up to date"
     assert "incrementally" in outcome.reason
+    assert outcome.run_id != first.run_id
+    assert outcome.total == 60
+
+
+def test_a_small_addition_still_takes_the_cheap_path(db, settings, store):
+    """Refitting on every insert would defeat the point of transform()."""
+    make_corpus(db, store, n=60)
+    first = project_corpus(db, settings, store)
+    db.commit()
+
+    make_corpus(db, store, n=2, seed=9, start=3000)
+    outcome = project_corpus(db, settings, store)
+    db.commit()
+
+    assert not outcome.refitted
+    assert outcome.run_id == first.run_id
+    assert outcome.placed == 2
 
 
 def test_force_refit_is_honoured(db, settings, store):

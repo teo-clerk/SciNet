@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
 
 import { fetchClusterLinks, type ClusterLink } from '@/api/clusters'
+import { visibleBridges } from '@/lib/density'
 import { useGraphStore } from '@/state/graphStore'
 
 const CURVE_SEGMENTS = 32
@@ -25,6 +26,9 @@ type Drawn = {
   geometry: THREE.BufferGeometry
   /** Where the hover card sits: the apex of the bow, not the chord midpoint. */
   apex: [number, number, number]
+  /** How strong this relationship is relative to the others being drawn,
+   *  0.35 to 1. Carried into opacity so the map shows the difference. */
+  weight: number
 }
 
 export function BridgeCurves() {
@@ -43,7 +47,11 @@ export function BridgeCurves() {
 
   const drawn = useMemo<Drawn[]>(() => {
     const out: Drawn[] = []
-    for (const link of links) {
+    // Each bridge is a curve across the whole map, so they cross rather than
+    // tile: past a dozen the map is behind a net. The weakest drawn one is
+    // faint rather than absent, so a weak relationship still reads as weak
+    // instead of as a missing one — and the inspector lists all of them.
+    for (const { link, weight } of visibleBridges(links)) {
       const a = centroids.get(link.source_id)
       const b = centroids.get(link.target_id)
       if (!a || !b) continue
@@ -59,7 +67,7 @@ export function BridgeCurves() {
         curve.getPoints(CURVE_SEGMENTS),
       )
       const apex = curve.getPoint(0.5)
-      out.push({ link, geometry, apex: [apex.x, apex.y, apex.z] })
+      out.push({ link, geometry, apex: [apex.x, apex.y, apex.z], weight })
     }
     return out
   }, [links, centroids])
@@ -71,7 +79,7 @@ export function BridgeCurves() {
 
   return (
     <>
-      {drawn.map(({ link, geometry }, i) => {
+      {drawn.map(({ link, geometry, weight }, i) => {
         const active = hovered === i
         return (
           <line key={`${link.source_id}-${link.target_id}`}>
@@ -79,7 +87,7 @@ export function BridgeCurves() {
             <lineBasicMaterial
               color={active ? '#9fd0ff' : '#4a6fa5'}
               transparent
-              opacity={active ? 0.85 : 0.32}
+              opacity={active ? 0.85 : 0.32 * weight}
               blending={THREE.AdditiveBlending}
               depthWrite={false}
             />

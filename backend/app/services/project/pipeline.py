@@ -113,13 +113,30 @@ def project_corpus(
     # --- incremental path: place only what is missing --------------------
     if not refit and run is not None:
         placed = _place_new(session, settings, store, run, matrix, paper_ids)
-        return ProjectionOutcome(
-            run_id=run.id,
-            method=run.method,
-            refitted=False,
-            placed=placed,
-            total=len(paper_ids),
-            clusters=session.query(Cluster).filter(Cluster.run_id == run.id).count(),
+
+        # Re-decide, now that the new papers are in the count. Placing them is
+        # precisely what makes the stored fit stale, so a decision taken before
+        # they existed cannot see the thing it is meant to detect. This was not
+        # theoretical: a 57-paper fit absorbed 449 new documents in one pass —
+        # 89% of the corpus placed by transform(), against a 20% trigger — and
+        # because ``enqueue`` collapses duplicate corpus-wide jobs, no second
+        # projection was ever queued to notice. The map stayed as it was fitted,
+        # with 449 of 506 papers unclustered: a white cloud around eight
+        # coloured regions belonging to the old corpus.
+        refit, reason = should_refit(session, run)
+        if not refit:
+            return ProjectionOutcome(
+                run_id=run.id,
+                method=run.method,
+                refitted=False,
+                placed=placed,
+                total=len(paper_ids),
+                clusters=(
+                    session.query(Cluster).filter(Cluster.run_id == run.id).count()
+                ),
+            )
+        logger.info(
+            "%d papers placed incrementally; refitting because %s", placed, reason
         )
 
     # --- full refit into a new, inactive run -----------------------------
