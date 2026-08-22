@@ -44,6 +44,9 @@ MAX_UNPACKED_BYTES = 40 * 1024 * 1024
 #: The package document is a manifest, not content.
 MAX_OPF_BYTES = 4 * 1024 * 1024
 
+#: Amazon's DRM wrapper, at byte zero, ahead of an otherwise valid PalmDB.
+DRM_MAGIC = b"CR!"
+
 _CONTAINER = "META-INF/container.xml"
 _XHTML_SUFFIXES = (".xhtml", ".html", ".htm")
 
@@ -239,6 +242,20 @@ def read_mobi(path: Path, *, limit: int | None = None) -> tuple[str, int]:
 
     with open(path, "rb") as handle:
         header = handle.read(PALM_TYPE_OFFSET + 8)
+    if header.startswith(DRM_MAGIC):
+        # Amazon's encrypted container. The PalmDB header behind it is intact,
+        # so every structural check passes and MuPDF then fails with a generic
+        # "could not open" — which reads like a bug in the parser rather than
+        # a book nothing can read. 3 of 10 MOBI-family files in the reference
+        # library are these, so the distinction is worth one branch.
+        # Diagnosis first, filename last. Books from an archive carry
+        # hundred-character names, and every consumer of this string truncates
+        # — the sidebar, the log line, the job's last_error column — so a
+        # message that opens with the name says nothing in the space it gets.
+        raise UnreadableBook(
+            "DRM-protected (Amazon encrypted container); no tool can read it. "
+            f"A DRM-free copy would ingest normally. File: {path.name}"
+        )
     if header[PALM_TYPE_OFFSET : PALM_TYPE_OFFSET + 8] not in MOBI_TYPES:
         raise UnreadableBook(
             f"{path.name} has no PalmDB header; the extension is a lie"

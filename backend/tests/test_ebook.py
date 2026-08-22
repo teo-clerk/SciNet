@@ -12,6 +12,7 @@ from app.services.parse.ebook import (
     UnreadableBook,
     epub_metadata,
     read_epub,
+    read_mobi,
 )
 from app.services.parse.html_text import html_to_markdown
 from app.services.parse.text_documents import UnreadableDocument, parse_text_document
@@ -162,3 +163,23 @@ def test_html_conversion_keeps_structure_and_drops_presentation():
     assert "- one" in markdown
     assert "color:red" not in markdown
     assert "alert" not in markdown
+
+
+def test_a_drm_protected_book_says_so_plainly(tmp_path, mobi):
+    """3 of 10 MOBI-family files in the reference library are encrypted.
+
+    The DRM wrapper sits ahead of an intact PalmDB header, so every structural
+    check passes and MuPDF fails with a generic "could not open" — which reads
+    like a broken parser rather than a book nothing can read.
+    """
+    locked = tmp_path / "antifragile.azw3"
+    locked.write_bytes(b"CR!" + mobi.read_bytes()[3:])
+
+    with pytest.raises(UnreadableBook, match="DRM-protected"):
+        read_mobi(locked)
+
+
+def test_a_drm_free_book_of_the_same_shape_still_reads(mobi):
+    text, _pages = read_mobi(mobi)
+
+    assert "Eternal Golden Braid" in text

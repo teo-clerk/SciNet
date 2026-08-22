@@ -24,7 +24,7 @@ from app.core.db import session_scope
 from app.core.events import BROKER
 from app.core.gpu import free_all_models
 from app.core.model_store import configure_environment
-from app.models import PRIORITY, JobKind, PaperStatus
+from app.models import PRIORITY, Job, JobKind, PaperStatus
 from app.workers.handlers import HANDLERS
 from app.workers.queue import claim_next, complete, fail, requeue_stale
 
@@ -112,13 +112,48 @@ class Worker:
                 except Exception as exc:  # noqa: BLE001 - one bad paper must not
                     # stop the batch; the queue decides whether to retry.
                     logger.exception("%s job %d failed", kind.value, job.id)
-                    session.rollback()
-                    fail(session, job, f"{type(exc).__name__}: {exc}")
-                    self._mark_paper_failed(session, job.paper_id, str(exc))
-                    BROKER.publish(
-                        "job.failed", job_id=job.id, kind=kind.value, error=str(exc)
-                    )
+                    self._record_failure(session, job, kind, exc)
         return done
+
+    def _record_failure(
+        self, session: Session, job: Job, kind: JobKind, exc: BaseException
+    ) -> None:
+        """Write down that a job failed, without ever failing to do so.
+
+        This runs inside ``session_scope``, so anything raised here reaches its
+        ``except`` clause and rolls the transaction back — including the rows
+        that record the failure. That is not hypothetical. A payload key named
+        ``kind`` collided with the publisher's own parameter and raised
+        TypeError on the line *after* ``fail()``: the job was rolled back to
+        ``running``, the worker exited, and several hundred queued documents
+        waited on a thirty-minute stale timeout for a worker that was gone.
+
+        One unreadable document must cost that document and nothing else, so
+        each step here is contained. The identifiers are read before the
+        rollback, which expires the ORM objects.
+        """
+        job_id, paper_id = job.id, job.paper_id
+        detail = f"{type(exc).__name__}: {exc}"
+
+        try:
+            session.rollback()
+            fail(session, job, detail)
+            self._mark_paper_failed(session, paper_id, detail)
+            session.commit()
+        except Exception:  # noqa: BLE001 - nothing here may stop the batch
+            logger.exception("could not record the failure of job %d", job_id)
+            session.rollback()
+            return
+
+        # Committed first, then announced. The notification is disposable
+        # telemetry for a progress drawer; it must never be able to undo the
+        # record above, and it is the thing that broke last time.
+        try:
+            BROKER.publish(
+                "job.failed", job_id=job_id, job_kind=kind.value, error=detail
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("could not announce the failure of job %d", job_id)
 
     @staticmethod
     def _mark_paper_failed(session: Session, paper_id: int | None, error: str) -> None:

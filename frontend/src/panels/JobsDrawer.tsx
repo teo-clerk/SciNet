@@ -38,7 +38,7 @@ function describe(event: PipelineEvent): string {
     case 'paper.duplicate':
       return `duplicate work key on #${d.paper_id}`
     case 'job.failed':
-      return `FAILED ${d.kind} #${d.job_id}: ${String(d.error).slice(0, 80)}`
+      return `FAILED ${d.job_kind} #${d.job_id}: ${String(d.error).slice(0, 80)}`
     default:
       return event.kind
   }

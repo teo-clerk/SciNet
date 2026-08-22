@@ -43,7 +43,18 @@ class EventBroker:
     def __init__(self) -> None:
         self._subscribers: set[asyncio.Queue[Event]] = set()
 
-    def publish(self, kind: str, **payload: Any) -> None:
+    def publish(self, kind: str, /, **payload: Any) -> None:
+        """Announce ``kind`` with an arbitrary payload.
+
+        ``kind`` is positional-only, and the slash is load-bearing. Without it
+        any caller whose payload happens to carry a key called ``kind`` — which
+        is a natural name for one, since jobs have kinds too — binds it twice
+        and raises TypeError from inside the publisher. That happened in the
+        worker's failure handler, where the exception escaped into the
+        surrounding transaction, rolled back the rows recording the failure,
+        and stopped the process. Positional-only makes the whole class of
+        collision impossible: any ``kind=`` a caller passes is payload.
+        """
         event = Event(kind=kind, payload=payload)
         for queue in list(self._subscribers):
             if queue.full():
