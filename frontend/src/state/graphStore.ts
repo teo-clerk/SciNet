@@ -16,7 +16,7 @@ import type { DecodedGraph, GraphCluster, GraphNode } from '@/api/graph'
 import type { SearchMode } from '@/lib/search'
 
 export type ColorMode = 'cluster' | 'year' | 'provisional'
-export type ViewMode = 'map' | 'list'
+export type ViewMode = 'map' | 'list' | 'quarantine'
 export type SortKey = 'title' | 'year' | 'cluster' | 'confidence'
 
 export interface GraphBuffers {

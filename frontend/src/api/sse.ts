@@ -17,6 +17,7 @@ const WATCHED = [
   'upload.received', 'upload.batch',
   'paper.added', 'parse.start', 'parse.done', 'metadata.done',
   'embed.done', 'project.done', 'tag.done', 'job.failed', 'paper.duplicate',
+  'paper.quarantined', 'paper.restored',
 ]
 
 export function subscribeToEvents(onEvent: EventHandler): () => void {

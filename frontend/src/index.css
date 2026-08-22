@@ -316,3 +316,112 @@ body {
   color: var(--muted, #8b93a7);
   font-style: italic;
 }
+
+/* --- quarantine ------------------------------------------------------- */
+
+.quarantine-view {
+  height: 100%;
+  overflow-y: auto;
+  padding: 1rem 1.25rem 3rem;
+}
+
+.quarantine-view.empty {
+  display: grid;
+  place-items: center;
+}
+
+.quarantine-intro {
+  max-width: 62ch;
+  margin: 0 0 1rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.quarantine-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.quarantine-table th {
+  text-align: left;
+  font-weight: 500;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--line, #2a3040);
+  color: var(--muted, #8b93a7);
+}
+
+.quarantine-table td {
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid var(--line, #2a3040);
+  vertical-align: top;
+}
+
+/* The filename is the only handle the reader has on the file, so it wraps
+   rather than truncating — archive downloads run to a hundred characters and
+   the distinguishing part is usually at the end. */
+.q-name {
+  max-width: 34ch;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.74rem;
+}
+
+.q-reason {
+  max-width: 60ch;
+  line-height: 1.45;
+}
+
+.q-when {
+  white-space: nowrap;
+  font-size: 0.74rem;
+}
+
+.badge {
+  display: inline-block;
+  margin-right: 0.5rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.66rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+/* Two different actions for the reader: find a DRM-free copy, or start the
+   worker and restore. Worth telling apart at a glance. */
+.badge.fatal {
+  background: rgba(220, 90, 90, 0.16);
+  color: #e88;
+}
+
+.badge.transient {
+  background: rgba(220, 170, 70, 0.16);
+  color: #d9a75a;
+}
+
+.badge.count {
+  margin: 0 0 0 0.35rem;
+  background: rgba(220, 90, 90, 0.2);
+  color: #e88;
+}
+
+.quarantine-table button.ghost {
+  background: transparent;
+  border: 1px solid var(--line, #2a3040);
+  color: var(--fg, #c9d1e0);
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.quarantine-table button.ghost:hover:not(:disabled) {
+  border-color: var(--accent, #5b8cff);
+}
+
+.quarantine-table button.ghost:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -17,6 +17,10 @@ class PaperStatus(StrEnum):
     TAGGED = "tagged"
     READY = "ready"
     FAILED = "failed"
+    #: Unreadable, and its file has been moved out of the library. Distinct
+    #: from FAILED, which leaves the file where it is: this one says the
+    #: library on disk no longer matches what the row describes.
+    QUARANTINED = "quarantined"
 
 
 class JobKind(StrEnum):

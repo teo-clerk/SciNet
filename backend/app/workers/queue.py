@@ -131,10 +131,17 @@ def complete(session: Session, job: Job) -> Job:
     return job
 
 
-def fail(session: Session, job: Job, error: str) -> Job:
-    """Record a failure: requeue if attempts remain, otherwise mark it dead."""
+def fail(session: Session, job: Job, error: str, *, fatal: bool = False) -> Job:
+    """Record a failure: requeue if attempts remain, otherwise mark it dead.
+
+    ``fatal`` skips the remaining attempts. Retrying is worth it for a model
+    server that was restarting; for a DRM-locked book the second and third
+    attempts re-render the same pages to reach the same conclusion, and because
+    a requeued job is re-claimed ahead of the ones behind it, that delay is
+    paid by its neighbours too. See ``services.parse.errors``.
+    """
     job.last_error = error[:4000]
-    if job.attempts >= job.max_attempts:
+    if fatal or job.attempts >= job.max_attempts:
         job.state = JobState.DEAD
         job.finished_at = utcnow()
     else:

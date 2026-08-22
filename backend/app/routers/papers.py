@@ -27,9 +27,11 @@ from app.core.paths import (
 )
 from app.models import (
     Cluster,
+    JobKind,
     MarkdownDoc,
     Paper,
     PaperMeta,
+    PaperStatus,
     PaperTag,
     Projection,
     ProjectionRun,
@@ -40,11 +42,15 @@ from app.schemas.paper import (
     PaperPage,
     PaperSummary,
     ParseInfo,
+    QuarantinedPaper,
+    QuarantineList,
     UploadAccepted,
     UploadRejected,
     UploadResponse,
 )
+from app.services.ingest.quarantine import restore
 from app.services.ingest.registrar import register_document
+from app.workers.queue import enqueue
 
 router = APIRouter(prefix="/api/papers", tags=["papers"])
 
@@ -270,6 +276,112 @@ async def upload_papers(
         queued=queued,
         total=len(files),
     )
+
+
+#: Reasons that mean the document itself is unreadable, rather than a stage
+#: having run out of retries. Matched on the recorded diagnosis because the
+#: exception is long gone by the time anyone reads this.
+FATAL_MARKERS = ("UnreadableDocument", "UnreadableBook", "NotADjVu", "FileDataError")
+
+
+@router.get("/quarantine/list", response_model=QuarantineList)
+def list_quarantined(
+    db: Session = Depends(get_db),
+    limit: int = Query(200, ge=1, le=1000),
+) -> QuarantineList:
+    """Documents taken out of the library, newest first.
+
+    Its own route rather than a filter on the paper list: these are not papers
+    the reader can open, sort or place on the map, and mixing them into the
+    library listing would put rows there that every other column is blank for.
+    """
+    stmt = select(Paper).where(Paper.status == PaperStatus.QUARANTINED)
+    total = (
+        db.scalar(
+            select(func.count())
+            .select_from(Paper)
+            .where(Paper.status == PaperStatus.QUARANTINED)
+        )
+        or 0
+    )
+    rows = db.scalars(stmt.order_by(Paper.updated_at.desc()).limit(limit)).all()
+
+    return QuarantineList(
+        items=[
+            QuarantinedPaper(
+                id=paper.id,
+                filename=Path(paper.pdf_path).name,
+                reason=_readable_reason(paper.last_error, Path(paper.pdf_path).name),
+                fatal=any(m in (paper.last_error or "") for m in FATAL_MARKERS),
+                quarantined_at=paper.updated_at,
+            )
+            for paper in rows
+        ],
+        total=total,
+    )
+
+
+#: Parsers append the filename to their messages so a truncated log line still
+#: says which file it was about. Here the filename has its own column.
+_TRAILING_FILENAME = re.compile(r"\s*File:\s*\S.*$")
+
+
+def _readable_reason(error: str | None, filename: str | None = None) -> str:
+    """The diagnosis, as a sentence a reader can act on.
+
+    Two things are stripped. The exception type, which is useful in a log and
+    noise in front of a sentence explaining why somebody's book was rejected.
+    And a trailing "File: ..." clause, which the parsers add so a truncated log
+    line still identifies its subject — worth having there, redundant next to a
+    column that already shows the name.
+    """
+    if not error:
+        return "no diagnosis was recorded"
+    _, separator, rest = error.partition(": ")
+    reason = (rest if separator and rest.strip() else error).strip()
+
+    if filename and filename in reason:
+        trimmed = _TRAILING_FILENAME.sub("", reason).strip()
+        # Only if something is left: for a message that is *only* the filename,
+        # a blank cell would be worse than the redundancy.
+        if trimmed:
+            reason = trimmed
+    return reason
+
+
+@router.post("/{paper_id}/restore")
+def restore_from_quarantine(
+    paper_id: int,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, str]:
+    """Put a quarantined file back in the library and queue it again.
+
+    Auto-quarantine acts on one parser's verdict, which is a weaker claim than
+    the content checks in cleanup make — and a stage that exhausted its retries
+    because a model server was down has taken a perfectly good document out of
+    the library. This makes that one click to undo rather than a hunt through
+    a timestamped folder.
+    """
+    paper = db.get(Paper, paper_id)
+    if paper is None:
+        raise HTTPException(404, "paper not found")
+    if paper.status != PaperStatus.QUARANTINED:
+        raise HTTPException(409, "that paper is not in quarantine")
+
+    returned = restore(Path(paper.pdf_path), settings.library_dir)
+    if returned is None:
+        raise HTTPException(500, "the file could not be moved back")
+
+    paper.pdf_path = str(returned)
+    paper.status = PaperStatus.PENDING
+    paper.last_error = None
+    db.add(paper)
+    enqueue(db, JobKind.PARSE, paper_id=paper.id)
+    db.commit()
+
+    BROKER.publish("paper.restored", paper_id=paper.id, name=returned.name)
+    return {"status": "restored", "path": returned.name}
 
 
 @router.get("/{paper_id}", response_model=PaperDetail)

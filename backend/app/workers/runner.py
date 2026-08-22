@@ -16,6 +16,7 @@ import logging
 import signal
 import sys
 import time
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -24,7 +25,9 @@ from app.core.db import session_scope
 from app.core.events import BROKER
 from app.core.gpu import free_all_models
 from app.core.model_store import configure_environment
-from app.models import PRIORITY, Job, JobKind, PaperStatus
+from app.models import PRIORITY, Job, JobKind, JobState, Paper, PaperStatus
+from app.services.ingest.quarantine import quarantine_document
+from app.services.parse.errors import is_fatal
 from app.workers.handlers import HANDLERS
 from app.workers.queue import claim_next, complete, fail, requeue_stale
 
@@ -134,11 +137,14 @@ class Worker:
         """
         job_id, paper_id = job.id, job.paper_id
         detail = f"{type(exc).__name__}: {exc}"
+        fatal = is_fatal(exc)
 
         try:
             session.rollback()
-            fail(session, job, detail)
+            given_up = fail(session, job, detail, fatal=fatal).state == JobState.DEAD
             self._mark_paper_failed(session, paper_id, detail)
+            if given_up and kind is JobKind.PARSE:
+                self._quarantine(session, paper_id, detail)
             session.commit()
         except Exception:  # noqa: BLE001 - nothing here may stop the batch
             logger.exception("could not record the failure of job %d", job_id)
@@ -150,10 +156,49 @@ class Worker:
         # record above, and it is the thing that broke last time.
         try:
             BROKER.publish(
-                "job.failed", job_id=job_id, job_kind=kind.value, error=detail
+                "job.failed",
+                job_id=job_id,
+                job_kind=kind.value,
+                error=detail,
+                fatal=fatal,
             )
         except Exception:  # noqa: BLE001
             logger.exception("could not announce the failure of job %d", job_id)
+
+    def _quarantine(self, session: Session, paper_id: int | None, reason: str) -> None:
+        """Move an unreadable document out of the library and say where it went.
+
+        Only for the parse stage, and only once the queue has given up. A paper
+        that parsed and then failed to embed is not an unreadable file — the
+        model was busy — and moving it would take a perfectly good document out
+        of the library to fix a problem it does not have.
+        """
+        if paper_id is None:
+            return
+        paper = session.get(Paper, paper_id)
+        if paper is None or paper.status == PaperStatus.QUARANTINED:
+            return
+
+        moved = quarantine_document(
+            Path(paper.pdf_path), self.settings.library_dir, reason
+        )
+        if moved is None:
+            # The file could not be moved; the row keeps FAILED, which is the
+            # truthful description of what happened.
+            return
+
+        # The row follows the file. Leaving pdf_path pointing into the library
+        # would make every later "has this disappeared?" check say yes.
+        paper.pdf_path = str(moved.destination)
+        paper.status = PaperStatus.QUARANTINED
+        paper.last_error = reason[:2000]
+        session.add(paper)
+        BROKER.publish(
+            "paper.quarantined",
+            paper_id=paper.id,
+            name=moved.original.name,
+            reason=reason,
+        )
 
     @staticmethod
     def _mark_paper_failed(session: Session, paper_id: int | None, error: str) -> None:

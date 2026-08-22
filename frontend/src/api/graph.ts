@@ -208,3 +208,31 @@ export async function fetchNeighbours(id: number, k = 5): Promise<Neighbour[]> {
   if (!res.ok) return []
   return (await res.json()) as Neighbour[]
 }
+
+
+/** A document the pipeline could not read, and why. */
+export interface QuarantinedPaper {
+  id: number
+  /** The name the reader gave it, not where the pipeline moved it to. */
+  filename: string
+  reason: string
+  /** The format itself is unreadable, as opposed to a stage running out of
+   *  retries — which is the difference between "get a DRM-free copy" and
+   *  "start the worker and try again". */
+  fatal: boolean
+  quarantined_at: string
+}
+
+export async function fetchQuarantine(): Promise<{
+  items: QuarantinedPaper[]
+  total: number
+}> {
+  const res = await fetch('/api/papers/quarantine/list')
+  if (!res.ok) throw new Error(`/api/papers/quarantine/list -> ${res.status}`)
+  return (await res.json()) as { items: QuarantinedPaper[]; total: number }
+}
+
+export async function restorePaper(id: number): Promise<void> {
+  const res = await fetch(`/api/papers/${id}/restore`, { method: 'POST' })
+  if (!res.ok) throw new Error(`could not restore paper ${id} (${res.status})`)
+}

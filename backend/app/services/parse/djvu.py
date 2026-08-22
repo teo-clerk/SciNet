@@ -24,6 +24,7 @@ import struct
 from pathlib import Path
 
 from app.services.parse.djvu_bzz import CorruptStream, decompress
+from app.services.parse.errors import FatalDocument
 from app.services.parse.limits import append_note
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ _CHUNK_HEADER = 8
 _TEXT_LENGTH_BYTES = 3
 
 
-class NotADjVu(ValueError):
+class NotADjVu(FatalDocument, ValueError):
     """The file is not a DjVu document."""
 
 

@@ -9,6 +9,7 @@ import { SearchBox } from '@/panels/SearchBox'
 import { UploadButton } from '@/panels/UploadButton'
 import { useGraphStore, type ColorMode } from '@/state/graphStore'
 import { useVisibleSet } from '@/lib/filtering'
+import { useQuarantineCount } from '@/lib/useQuarantineCount'
 
 const MODES: Array<[ColorMode, string]> = [
   ['cluster', 'Cluster'],
@@ -26,6 +27,7 @@ export function FilterBar() {
   const count = useGraphStore((s) => s.count)
   const view = useGraphStore((s) => s.view)
   const setView = useGraphStore((s) => s.setView)
+  const quarantined = useQuarantineCount()
 
   const visible = useVisibleSet()
   const shown = visible === null ? count : visible.size
@@ -48,6 +50,18 @@ export function FilterBar() {
         >
           List
         </button>
+        {/* Only shown once something is in it. An always-visible tab reading
+            "Quarantine 0" trains the reader to ignore it, which is the one
+            thing it must not do on the day it says 12. */}
+        {quarantined > 0 && (
+          <button
+            className={view === 'quarantine' ? 'active warn' : 'warn'}
+            onClick={() => setView('quarantine')}
+            title="Files the pipeline could not read"
+          >
+            Quarantine <span className="badge count">{quarantined}</span>
+          </button>
+        )}
       </div>
 
       {view === 'map' && (

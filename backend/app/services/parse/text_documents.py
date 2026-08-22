@@ -19,6 +19,7 @@ import logging
 from pathlib import Path
 
 from app.core.paths import DocumentKind
+from app.services.parse.errors import FatalDocument
 from app.services.parse.tier0_pymupdf import ParseResult
 
 logger = logging.getLogger(__name__)
@@ -29,8 +30,8 @@ PARSER_VERSION = "1"
 CHARS_PER_PAGE = 1800
 
 
-class UnreadableDocument(Exception):
-    """The file cannot be turned into text at all."""
+class UnreadableDocument(FatalDocument):
+    """The file cannot be turned into text at all, now or later."""
 
 
 def _page_count(text: str) -> int:

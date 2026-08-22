@@ -122,6 +122,24 @@ Target scale 3–4k papers on a single laptop.
   over `chunks_fts`; nothing ever read a chunk vector. Invisible at 57 papers,
   not at 550 with books among them, where one book is hundreds of chunks. Only
   the document vector is embedded now.
+- **Retrying is for a bad minute, not a bad file.** `parse/errors.py` splits
+  failures in two: a property of the *document* (encryption, no text layer, a
+  container that will not open) fails its job immediately; a property of the
+  *moment* (a timed-out call, an unreachable model server) keeps all three
+  attempts. This is not just wasted work — `fail()` requeues and `claim_next`
+  orders by id, so a retried document is re-claimed *ahead* of the one behind
+  it and its neighbour waits too. The classification is deliberately
+  conservative: anything unrecognised is transient, because retrying a broken
+  file wastes minutes while giving up on a good one loses it until somebody
+  notices.
+- **A file the parser gives up on leaves the library** (`ingest/quarantine.py`),
+  and the Paper row follows it — otherwise every later "has this disappeared?"
+  check reports a file sitting safely in quarantine. Only the *parse* stage
+  quarantines: a paper that parsed and then failed to embed is a good document
+  whose model was busy, and moving it would fix a problem it does not have.
+  Filed by day rather than by run, since a batch import trickles failures over
+  hours. Reversible from the UI, because this acts on one parser's verdict —
+  a much weaker claim than the content checks in `cleanup` make.
 - **Cleanup deletes.** Broken files and byte-identical duplicates are removed
   from disk; `--quarantine` moves them to `data/quarantine/<timestamp>/` with a
   manifest instead, and `--dry-run` is the right first run on an unfamiliar

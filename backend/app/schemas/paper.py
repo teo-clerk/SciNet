@@ -56,6 +56,29 @@ class PaperDetail(PaperSummary):
     provisional: bool = False
 
 
+class QuarantinedPaper(BaseModel):
+    """A document the pipeline could not read, and where it went.
+
+    The filename is the original one. By the time this is shown the file is in
+    ``data/quarantine/``, but the reader recognises it by what they put in the
+    library, not by where the pipeline moved it.
+    """
+
+    id: int
+    filename: str
+    #: Why, in the words of whatever gave up on it.
+    reason: str
+    #: True when the format itself is unreadable — encryption, a corrupt
+    #: container — as opposed to a stage that ran out of retries.
+    fatal: bool
+    quarantined_at: datetime
+
+
+class QuarantineList(BaseModel):
+    items: list[QuarantinedPaper] = []
+    total: int = 0
+
+
 class PaperPage(BaseModel):
     items: list[PaperSummary]
     total: int

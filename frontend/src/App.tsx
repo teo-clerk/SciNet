@@ -6,6 +6,7 @@ import { ClusterInspector } from '@/panels/ClusterInspector'
 import { DetailPanel } from '@/panels/DetailPanel'
 import { FilterBar } from '@/panels/FilterBar'
 import { ListView } from '@/panels/ListView'
+import { QuarantineView } from '@/panels/QuarantineView'
 import { JobsDrawer } from '@/panels/JobsDrawer'
 import { StatusBar } from '@/panels/StatusBar'
 import { useGraphStore } from '@/state/graphStore'
@@ -33,6 +34,8 @@ export default function App() {
         {status === 'ready' ? (
           view === 'map' ? (
             <Scene />
+          ) : view === 'quarantine' ? (
+            <QuarantineView />
           ) : (
             <ListView />
           )

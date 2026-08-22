@@ -77,16 +77,14 @@ def test_one_unreadable_document_does_not_stop_the_batch(
 
     drained = worker.drain_stage(JobKind.PARSE)
 
-    assert set(seen) == {1, 2, 3}, "every document was attempted"
     assert drained == 2, "both readable documents completed"
 
-    # The exact order is worth pinning, because it is not the obvious one.
-    # fail() requeues, and claim_next orders by id, so the unreadable document
-    # is re-claimed ahead of the one behind it and exhausts its three attempts
-    # before anything else moves. Bounded and harmless at max_attempts=3 — but
-    # it does mean a bad document delays its neighbour rather than being set
-    # aside, which is worth knowing before max_attempts is ever raised.
-    assert seen == [1, 2, 2, 2, 3]
+    # One attempt each, in queue order. An encrypted book is fatal, so it is
+    # not retried — which matters more than it looks: fail() requeues, and
+    # claim_next orders by id, so a retried document is re-claimed *ahead* of
+    # the one behind it. Before fail-fast this read [1, 2, 2, 2, 3]: three
+    # attempts at a file that could never be read, paid for by its neighbour.
+    assert seen == [1, 2, 3]
 
 
 def test_the_failed_job_is_recorded_not_left_running(
@@ -104,7 +102,8 @@ def test_the_failed_job_is_recorded_not_left_running(
     with sf() as s:
         job = s.get(Job, three_jobs[1])
         assert job.state != JobState.RUNNING, "the bug left it here"
-        assert job.state == JobState.DEAD, "retries exhausted inside the pass"
+        assert job.state == JobState.DEAD
+        assert job.attempts == 1, "fatal, so it never came back for more"
         assert "encrypted" in job.last_error
         assert "UnreadableDocument" in job.last_error
 
@@ -134,22 +133,30 @@ def test_the_failure_survives_a_broken_notification(
         assert "encrypted" in job.last_error
 
 
-def test_a_job_that_keeps_failing_eventually_dies(worker, sf, monkeypatch):
-    """Contained, not retried forever — the queue still gets to give up."""
+def test_a_transient_failure_is_still_retried_to_the_ceiling(worker, sf, monkeypatch):
+    """Fail-fast must not become fail-always.
+
+    A model server that was restarting is exactly what the retries are for, and
+    the classification is deliberately conservative: anything unrecognised is
+    treated as transient, because retrying a broken file wastes minutes while
+    giving up on a good one loses it from the library until somebody notices.
+    """
     with sf() as s:
-        paper = _paper(s, "drm-locked.azw3")
-        job = enqueue(s, JobKind.PARSE, paper_id=paper.id)
-        job_id = job.id
+        paper = _paper(s, "fine.pdf")
+        job_id = enqueue(s, JobKind.PARSE, paper_id=paper.id).id
         s.commit()
 
-    def always_fails(session, job, settings):
-        raise UnreadableDocument("still encrypted")
+    attempts: list[int] = []
 
-    _install_handler(monkeypatch, always_fails)
-    for _ in range(5):
-        worker.drain_stage(JobKind.PARSE)
+    def ollama_is_down(session, job, settings):
+        attempts.append(job.id)
+        raise ConnectionError("connection refused")
 
+    _install_handler(monkeypatch, ollama_is_down)
+    worker.drain_stage(JobKind.PARSE)
+
+    assert len(attempts) == 3, "retried to the ceiling, not given up on"
     with sf() as s:
         job = s.get(Job, job_id)
         assert job.state == JobState.DEAD
-        assert s.get(Paper, job.paper_id).status == PaperStatus.FAILED
+        assert job.attempts == 3

@@ -228,6 +228,30 @@ Work is only redone when you ask for it: changing the embedding model
 invalidates vectors and projections (but never the extracted Markdown), and a
 full re-projection has to be requested explicitly.
 
+### When a file cannot be read
+
+Some files are not readable by anything: a DRM-locked Kindle book, a PDF whose
+container is corrupt, a DjVu nobody ever ran through OCR. These look like
+ordinary documents from the outside — nothing says otherwise until something
+tries to read them.
+
+When that happens the file is **moved out of the library** into
+`data/quarantine/`, and a **Quarantine** tab appears next to *3D Map* and
+*List* with a count. It shows each file's name and exactly why it was rejected
+— "DRM-protected (Amazon encrypted container); no tool can read it" rather than
+a stack trace — and a **Restore** button that puts it back and queues it again.
+
+Two kinds are distinguished, because they call for different actions:
+
+| badge | meaning | what to do |
+|---|---|---|
+| `unreadable` | the format itself cannot be read | find a DRM-free or non-scanned copy |
+| `gave up` | a stage ran out of retries | start the worker or the model server, then restore |
+
+Nothing is deleted, and the reason is written to a `manifest.json` beside the
+files as well. A `gave up` file is very often fine — if the model server was
+down when it was parsed, restoring it is all that is needed.
+
 ### Broken files and duplicates
 
 Libraries accumulate things that are not papers: HTML paywall pages saved with a

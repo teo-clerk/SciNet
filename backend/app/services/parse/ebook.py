@@ -27,14 +27,15 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from app.services.parse.errors import FatalDocument
 from app.services.parse.html_text import html_to_markdown
 from app.services.parse.limits import append_note, page_budget
 
 logger = logging.getLogger(__name__)
 
 
-class UnreadableBook(Exception):
-    """The book cannot be turned into text."""
+class UnreadableBook(FatalDocument):
+    """The book cannot be turned into text, now or later."""
 
 
 #: Ceiling on what one book may expand to. A zip can claim to hold far more
