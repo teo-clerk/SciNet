@@ -18,7 +18,9 @@ export const BASE_POINT_SIZE = 5.0
 // enough to stay visible when the camera pulls back.
 export const CORE_RADIUS = 0.3
 
-/** Per-node additive contribution; the picture is built by accumulation. */
+/** Per-node additive contribution at the reference density. */
 // High enough that a lone node is solid, low enough that thirty overlapping
-// sprites in a cluster core do not saturate to white.
-export const POINT_INTENSITY = 0.72
+// sprites in a cluster core do not saturate to white. Scaled down as the
+// corpus grows — see nodeIntensityFor — because at 500 nodes in the volume
+// that held 57, the accumulation and not the value is what decides brightness.
+export const POINT_INTENSITY = 0.6

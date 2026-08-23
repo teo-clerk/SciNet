@@ -46,6 +46,7 @@ interface GraphState {
 
   colorMode: ColorMode
   view: ViewMode
+  autoRotate: boolean
   sortKey: SortKey
   sortAscending: boolean
   hoveredIndex: number | null
@@ -67,6 +68,7 @@ interface GraphState {
   setGraph: (graph: DecodedGraph) => void
   setColorMode: (mode: ColorMode) => void
   setView: (view: ViewMode) => void
+  toggleAutoRotate: () => void
   setSort: (key: SortKey) => void
   setHovered: (index: number | null) => void
   setSelected: (index: number | null) => void
@@ -147,6 +149,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   clusterCentroids: new Map(),
   colorMode: 'cluster',
   view: 'map',
+  autoRotate: false,
   sortKey: 'title',
   sortAscending: true,
   hoveredIndex: null,
@@ -184,6 +187,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   setColorMode: (colorMode) => set({ colorMode }),
   setView: (view) => set({ view }),
+  toggleAutoRotate: () => set((state) => ({ autoRotate: !state.autoRotate })),
   setSort: (key) =>
     set((state) =>
       // Clicking the active column reverses it; a different column starts

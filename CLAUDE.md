@@ -283,6 +283,7 @@ cd backend && uv run python ../scripts/check_portability.py  # models stay local
 cd backend && uv run python ../scripts/fix_abstracts.py  # re-derive bad abstracts
 cd backend && uv run python ../scripts/revive_jobs.py  # requeue env-killed jobs
 cd backend && uv run python ../scripts/force_project.py --apply  # rebuild the map
+cd backend && uv run python ../scripts/prepare_export.py  # clean before zipping
 cd backend && SCINET_MAX_PARSE_PAGES=0 uv run python -m app.workers.runner  # no page cap
 cd backend && uv run scinet-stop                 # stop API, worker, Vite
 ./scripts/stop.sh                                # the same, from anywhere

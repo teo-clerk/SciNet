@@ -475,7 +475,71 @@ harmless and disappears when R3F updates. Nothing in `src/` references it.
 
 ---
 
-## 7. Windows notes
+## 7. Sending this to someone else
+
+The whole point of keeping the models inside `data/` is that a copy of this
+folder runs on a machine that has never seen the project and never goes online.
+That works — but the archive is large, so decide first which of the two you are
+sending.
+
+First, clear out what regenerates:
+
+```bash
+cd backend && uv run python ../scripts/prepare_export.py            # report
+cd backend && uv run python ../scripts/prepare_export.py --apply    # clean
+```
+
+It prints the size of each part and never deletes anything the recipient
+cannot rebuild — the library, the database, the extracted Markdown, the vectors
+and the models all stay.
+
+### What to leave out
+
+| leave out | why | they rebuild it with |
+|---|---|---|
+| `backend/.venv` | a Linux virtualenv does not work on Windows | `uv sync` |
+| `frontend/node_modules` | same, and it is in the lockfile | `bun install` |
+| `frontend/dist` | build output | `bun run build` |
+| `.git` | history is not needed to run it | — |
+
+Those four are the difference between an archive that works and one that fails
+confusingly on the other machine. The lockfiles (`uv.lock`, `bun.lock`) *are*
+included, so both rebuild to the same versions.
+
+### The models are the archive
+
+On this library the split is roughly:
+
+- `data/models` — **~20 GB**, the embedder and the local LLMs
+- `data/library` — ~4 GB, the documents
+- everything else — under 200 MB
+
+**With the models** the recipient unzips and runs, offline, with nothing to
+download. It is also past what email and most upload services accept, so it
+means a hard drive or a self-hosted transfer.
+
+**Without them** the archive is around 4 GB, and the recipient runs this once,
+online:
+
+```bash
+cd backend && uv run python ../scripts/download_models.py
+```
+
+Everything else — their papers, the map, the clusters, the tags — is already in
+the archive either way. Only the weights are missing, and only until that
+command finishes.
+
+### On the other machine
+
+```bash
+cd backend && uv sync --group dev
+cd frontend && bun install
+cd backend && uv run python ../scripts/check_portability.py   # confirms it is self-contained
+```
+
+---
+
+## 8. Windows notes
 
 SciNet runs on Windows without changes. Use PowerShell and the same commands;
 these are the only places behaviour actually differs.

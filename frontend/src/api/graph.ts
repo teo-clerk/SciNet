@@ -236,3 +236,18 @@ export async function restorePaper(id: number): Promise<void> {
   const res = await fetch(`/api/papers/${id}/restore`, { method: 'POST' })
   if (!res.ok) throw new Error(`could not restore paper ${id} (${res.status})`)
 }
+
+/** Ask the worker to rebuild the layout, clusters and bridges from scratch. */
+export async function requestReprojection(): Promise<{
+  job_id: number
+  state: string
+  already_queued: boolean
+}> {
+  const res = await fetch('/api/graph/reproject', { method: 'POST' })
+  if (!res.ok) throw new Error(`could not request a rebuild (${res.status})`)
+  return (await res.json()) as {
+    job_id: number
+    state: string
+    already_queued: boolean
+  }
+}

@@ -26,6 +26,8 @@ from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.models import (
     Cluster,
+    JobKind,
+    JobState,
     Paper,
     PaperMeta,
     PaperTag,
@@ -34,6 +36,7 @@ from app.models import (
     Tag,
 )
 from app.services.project.skeleton import load as load_skeleton
+from app.workers.queue import enqueue
 
 
 def _projection_base(settings: Settings, run_id: int):
@@ -162,6 +165,33 @@ def get_graph(
         media_type="application/json",
         headers={"ETag": etag, "Cache-Control": "no-cache"},
     )
+
+
+@router.post("/reproject")
+def request_reprojection(db: Session = Depends(get_db)) -> dict[str, object]:
+    """Ask for the map to be rebuilt from scratch.
+
+    Enqueues rather than computes. A refit over a few thousand vectors is tens
+    of seconds of UMAP followed by clustering and a round of LLM naming — far
+    past what a request should hold open, and it belongs to the worker anyway,
+    which is the sole writer of paper data.
+
+    Idempotent by construction: ``enqueue`` collapses onto an outstanding job
+    of the same kind, so a reader who presses the button four times gets one
+    refit rather than four.
+    """
+    job = enqueue(db, JobKind.PROJECT, paper_id=None, payload={"force_refit": True})
+    db.commit()
+
+    running = job.state == JobState.RUNNING
+    return {
+        "job_id": job.id,
+        "state": str(job.state),
+        # So the interface can say "already under way" rather than implying it
+        # started something, which is the difference between a button that
+        # works and one the reader presses again.
+        "already_queued": running or job.attempts > 0,
+    }
 
 
 @router.get("/similar/{paper_id}")

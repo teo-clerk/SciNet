@@ -19,11 +19,14 @@ import pickVertex from './shaders/pick.vert.glsl?raw'
 /**
  * Width of the neighbourhood sampled under the cursor, in device pixels.
  *
- * Odd so it has a true centre. Nine gives roughly a four-pixel margin in every
- * direction, which is forgiving enough for a small node without letting a
- * click reach past a neighbouring one.
+ * Odd so it has a true centre. Fifteen gives a seven-pixel margin in every
+ * direction. Widening it costs nothing in precision, because ``nearestHit``
+ * resolves ties by distance from the cursor: a larger window only ever helps
+ * when the exact pixel under the cursor hit *nothing*, which at 500 nodes —
+ * where a sprite is a few pixels across and the gaps between them are smaller
+ * than the pointer — is most of the time.
  */
-export const PICK_WINDOW = 9
+export const PICK_WINDOW = 15
 
 /**
  * The node nearest the centre of a pick window, or null if it hit nothing.

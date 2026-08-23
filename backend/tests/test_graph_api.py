@@ -231,3 +231,38 @@ def test_similar_requires_an_embedding(env):
     client, factory, _ = env
     seed_map(factory)
     assert client.get("/api/graph/similar/1").status_code == 404
+
+
+def test_reproject_enqueues_one_job(env):
+    client, _factory, _settings = env
+
+    body = client.post("/api/graph/reproject").json()
+
+    assert body["state"] == "queued"
+    assert isinstance(body["job_id"], int)
+
+
+def test_pressing_reproject_repeatedly_does_not_pile_up_refits(env):
+    """A refit is tens of seconds of UMAP; four presses must not mean four."""
+    client, _factory, _settings = env
+
+    first = client.post("/api/graph/reproject").json()
+    second = client.post("/api/graph/reproject").json()
+    third = client.post("/api/graph/reproject").json()
+
+    assert first["job_id"] == second["job_id"] == third["job_id"]
+
+
+def test_the_queued_job_actually_asks_for_a_refit(env):
+    """Without the payload it takes the cheap path and changes nothing."""
+    import json
+
+    from app.models import Job
+
+    client, factory, _settings = env
+    job_id = client.post("/api/graph/reproject").json()["job_id"]
+
+    with factory() as session:
+        assert json.loads(session.get(Job, job_id).payload_json) == {
+            "force_refit": True
+        }

@@ -5,6 +5,7 @@
  * tells you what matched but not where it sits, which is the whole point of
  * having a map.
  */
+import { MapControls } from '@/panels/MapControls'
 import { SearchBox } from '@/panels/SearchBox'
 import { UploadButton } from '@/panels/UploadButton'
 import { useGraphStore, type ColorMode } from '@/state/graphStore'
@@ -63,6 +64,8 @@ export function FilterBar() {
           </button>
         )}
       </div>
+
+      {view === 'map' && <MapControls />}
 
       {view === 'map' && (
       <div className="modes">

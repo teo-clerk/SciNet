@@ -9,6 +9,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 
+import { nodeIntensityFor } from '@/lib/density'
 import { BASE_POINT_SIZE, CORE_RADIUS, POINT_INTENSITY } from './pointStyle'
 import fragmentShader from './shaders/point.frag.glsl?raw'
 import vertexShader from './shaders/point.vert.glsl?raw'
@@ -69,9 +70,8 @@ export function PointCloud() {
           uFogColor: { value: FOG_COLOR },
           uFogNear: { value: 70.0 },
           uFogFar: { value: 260.0 },
-          // Raised from 0.42: the solid core no longer relies on many
-          // overlapping sprites to become visible, so each node can carry more
-          // of its own weight without the dense regions blowing out.
+          // Set here for the first frame and kept current below: what a node
+          // may contribute depends on how many are stacked behind it.
           uIntensity: { value: POINT_INTENSITY },
           uCoreRadius: { value: CORE_RADIUS },
         },
@@ -88,6 +88,17 @@ export function PointCloud() {
       }),
     [gl],
   )
+
+  // --- brightness follows density ---------------------------------------
+  // A value tuned so one paper reads as solid makes thirty overlapping papers
+  // saturate to flat white, which is exactly what a cluster core is: the
+  // densest part of the map rendered as the part carrying no information.
+  useEffect(() => {
+    material.uniforms.uIntensity!.value = nodeIntensityFor(
+      nodes.length,
+      POINT_INTENSITY,
+    )
+  }, [material, nodes.length])
 
   // --- colour mode: rewrite the colour attribute, nothing else -----------
   useEffect(() => {

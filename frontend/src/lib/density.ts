@@ -90,3 +90,26 @@ export function nodeScaleFor(count: number): number {
   // shrinks with the cube root of how many are sharing it.
   return Math.max(0.45, Math.cbrt(100 / count))
 }
+
+/**
+ * How brightly each node contributes, given how many are sharing the volume.
+ *
+ * The point cloud is drawn additively, so brightness is not a property of a
+ * node — it is a property of how many nodes are behind it. A value tuned so
+ * that one paper reads as solid makes thirty overlapping papers saturate to
+ * flat white, which is exactly what a cluster core is: the densest and most
+ * interesting part of the map, rendered as the part carrying no information.
+ *
+ * So the per-node contribution falls as the corpus grows. Square root, because
+ * what accumulates along a view ray through a fixed volume grows roughly with
+ * the linear density, not with the count.
+ */
+export function nodeIntensityFor(count: number, base: number): number {
+  if (count <= REFERENCE_NODES) return base
+  // Floored: below this a sparse region of a large map disappears entirely,
+  // and the outliers are often the interesting ones.
+  return Math.max(base * 0.45, base * Math.sqrt(REFERENCE_NODES / count))
+}
+
+/** The corpus the point styling was tuned against by eye. */
+export const REFERENCE_NODES = 120

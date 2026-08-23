@@ -425,3 +425,49 @@ body {
   opacity: 0.5;
   cursor: default;
 }
+
+/* --- map controls ------------------------------------------------------ */
+
+.map-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.map-controls button {
+  background: transparent;
+  border: 1px solid var(--line, #2a3040);
+  color: var(--muted, #8b93a7);
+  padding: 0.22rem 0.55rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+
+.map-controls button:hover:not(:disabled) {
+  border-color: var(--accent, #5b8cff);
+  color: var(--fg, #c9d1e0);
+}
+
+/* Rotating is a state the map is *in*, not an action taken once, so the
+   control stays lit for as long as it lasts. */
+.map-controls button.active {
+  border-color: var(--accent, #5b8cff);
+  color: var(--accent, #5b8cff);
+}
+
+.map-controls button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* A rebuild takes tens of seconds and finishes somewhere else — in the worker
+   — so the outcome has to come back to the button that asked for it. */
+.control-note {
+  font-size: 0.7rem;
+  max-width: 26ch;
+  line-height: 1.3;
+}

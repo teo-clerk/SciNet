@@ -43,14 +43,15 @@ void main() {
   // way — a broad halo carrying most of the alpha — every node reads as a
   // smudge and a cluster as one continuous glow, which is what the first
   // version did. The halo's job is only to show where nodes overlap.
-  float weight = core + aura * 0.22 * (1.0 - core);
+  float weight = core + aura * 0.16 * (1.0 - core);
 
   // The core is solid in *alpha*, not in colour. Pushing it toward white made
   // every node read as a white dot and destroyed the cluster hue that tells
-  // the reader what region they are looking at — the same wash-out that an
-  // over-bright earlier version produced. A slight lift keeps it looking lit
-  // without discarding the colour.
-  vec3  color  = vColor * (1.0 + core * 0.35);
+  // the reader what region they are looking at. The lift is small: at 57 nodes
+  // a generous one looked lit, and at 506 the same value turned every dense
+  // region into a white blob, because the lift accumulates along the view ray
+  // exactly as the alpha does.
+  vec3  color  = vColor * (1.0 + core * 0.18);
 
   // A selected node gets a bright ring just outside its core, which stays
   // legible even where surrounding accumulation is high.
