@@ -12,7 +12,6 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 
-import { prominentClusters } from '@/lib/density'
 import { useGraphStore } from '@/state/graphStore'
 
 /** Apparent height of a label, as a fraction of the viewport height. */
@@ -52,10 +51,12 @@ export function ClusterLabels() {
   const inspect = useGraphStore((s) => s.inspectCluster)
   const [hovered, setHovered] = useState<number | null>(null)
 
-  // Names are rationed by what a viewport can hold, not by what the corpus
-  // has. Forty names over forty regions is a wall of text with the map behind
-  // it; the regions without one are still named on click.
-  const named = useMemo(() => prominentClusters(clusters), [clusters])
+  // Every named region gets a label. There used to be a cap here — the
+  // twelve largest — and it was wrong in a way the collision pass below is
+  // not: a cap removes a name at *every* zoom, so four regions on this corpus
+  // were unreachable no matter how far the reader flew in. Rationing has to be
+  // something the reader can undo by moving, and the only test that satisfies
+  // that is whether the labels actually overlap right now.
 
   // Ranked once: the collision pass runs every frame and must not re-sort.
   const priority = useMemo(
@@ -108,7 +109,7 @@ export function ClusterLabels() {
     <>
       {clusters.map((cluster) => {
         const centre = centroids.get(cluster.id)
-        if (!centre || !cluster.label || !named.has(cluster.id)) return null
+        if (!centre || !cluster.label) return null
         return (
           <ClusterLabel
             key={cluster.id}

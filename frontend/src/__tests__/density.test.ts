@@ -7,42 +7,22 @@
  */
 import { describe, expect, test } from 'bun:test'
 
-import {
-  MAX_BRIDGES,
-  MAX_LABELS,
-  nodeScaleFor,
-  prominentClusters,
-  visibleBridges,
-} from '../lib/density'
+import { MAX_BRIDGES, nodeScaleFor, visibleBridges } from '../lib/density'
 
-const clusters = (sizes: number[]) => sizes.map((size, id) => ({ id, size }))
 const links = (sims: number[]) => sims.map((similarity) => ({ similarity }))
 
-describe('label rationing', () => {
-  test('a small map shows every name', () => {
-    const shown = prominentClusters(clusters([9, 4, 12, 3]))
+describe('labels are not rationed by count', () => {
+  test('density exports no label cap', async () => {
+    // Regression. A count cap removed a name at *every* zoom: on the 16-region
+    // corpus the four smallest — Cognitive Neuroscience, Epithelial Mechanics,
+    // Neuroscience, Epigenetic Development — had labels in the database and in
+    // the API payload, and no way to reach them in the map however far the
+    // reader flew in. Labels are culled against where they actually project
+    // instead, which the reader can undo by moving.
+    const density = await import('../lib/density')
 
-    expect(shown.size).toBe(4)
-  })
-
-  test('a crowded map keeps the largest regions', () => {
-    const sizes = Array.from({ length: 40 }, (_, i) => i + 1)
-    const shown = prominentClusters(clusters(sizes))
-
-    expect(shown.size).toBe(MAX_LABELS)
-    // Ids are indices, so the largest are the last.
-    expect(shown.has(39)).toBe(true)
-    expect(shown.has(0)).toBe(false)
-  })
-
-  test('size decides, not order', () => {
-    const shown = prominentClusters(clusters([80, 1, 1, 1]), 1)
-
-    expect([...shown]).toEqual([0])
-  })
-
-  test('an empty map is not an error', () => {
-    expect(prominentClusters([]).size).toBe(0)
+    expect('MAX_LABELS' in density).toBe(false)
+    expect('prominentClusters' in density).toBe(false)
   })
 })
 

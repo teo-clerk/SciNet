@@ -7,46 +7,19 @@
  * forty names over forty regions is a wall of overlapping text with the map
  * behind it, and the reader loses both.
  *
- * So the budget is fixed by the *viewport*, not by the corpus. A screen holds
- * roughly a dozen readable labels however many nodes are under them, and what
- * changes with the corpus is which dozen earn the space. Everything else is
- * still there — clicking a node still names its region, and the inspector
- * still lists every bridge — it is only the always-on overlay that is rationed.
+ * So the budget is fixed by the *viewport*, not by the corpus. Bridges are
+ * capped by count, because each one crosses the whole map and a dozen of them
+ * put the map behind a net however far you fly out.
+ *
+ * Labels are *not* capped here, and used to be. A count cap removes a name at
+ * every zoom, so on a 16-region corpus four regions had no label the reader
+ * could ever reach. Labels are culled against where they actually project
+ * instead (see Labels.tsx), which is rationing the reader can undo by moving.
  */
-
-/** Labels a viewport can carry before they start colliding. Measured by eye
- *  against the 3D map at 1600x800, where the eight-cluster corpus reads
- *  comfortably and a synthetic twenty already overlaps at the edges. */
-export const MAX_LABELS = 12
 
 /** Bridges drawn at once. Each is a curve across the whole map, so they cross
  *  each other rather than tiling: past a dozen the map is behind a net. */
 export const MAX_BRIDGES = 10
-
-/**
- * The clusters whose names are worth the screen space.
- *
- * Ranked by size, because a region's size is what makes its name useful: the
- * name of a two-paper cluster tells the reader about two papers, and the name
- * of an eighty-paper one tells them where they are. Returns the ids to draw,
- * so callers keep their own ordering and keys.
- */
-export function prominentClusters<T extends { id: number; size: number }>(
-  clusters: T[],
-  limit: number = MAX_LABELS,
-): Set<number> {
-  // A map with room for all its names keeps them: rationing a sparse map
-  // hides structure the reader could otherwise have seen for free.
-  if (clusters.length <= limit) {
-    return new Set(clusters.map((c) => c.id))
-  }
-  return new Set(
-    [...clusters]
-      .sort((a, b) => b.size - a.size)
-      .slice(0, limit)
-      .map((c) => c.id),
-  )
-}
 
 /**
  * The strongest bridges, and how faintly to draw each one.
