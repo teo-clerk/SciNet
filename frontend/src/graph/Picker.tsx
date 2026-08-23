@@ -70,6 +70,7 @@ export function Picker() {
       hovered.current = null
       dragging.current = false
       setHovered(null)
+      canvas.style.cursor = ''
     }
     const onDown = (event: PointerEvent) => {
       dragging.current = true
@@ -121,6 +122,7 @@ export function Picker() {
       canvas.removeEventListener('pointerdown', onDown)
       window.removeEventListener('pointerup', onUp)
       canvas.removeEventListener('click', onClick)
+      canvas.style.cursor = ''
     }
   }, [gl, setHovered, setSelected])
 
@@ -140,8 +142,10 @@ export function Picker() {
     if (now - lastPick.current < PICK_INTERVAL_MS) return
     lastPick.current = now
 
-    // Same sprite size as the visible cloud, or the clickable area stops
-    // matching what is on screen.
+    // Deliberately *not* the same disc as the visible cloud. The picker
+    // inflates it and floors it in pixels, which is what makes a three-pixel
+    // node at the far side of the map as easy to hit as one under the nose.
+    // See PICK_INFLATE and MIN_PICK_SIZE_PX.
     picker.setPointScale(BASE_POINT_SIZE, Math.min(gl.getPixelRatio(), 2))
     const index = picker.pick(
       gl,
@@ -154,6 +158,10 @@ export function Picker() {
     if (index !== hovered.current) {
       hovered.current = index
       setHovered(index)
+      // The hand is the only thing that tells the reader a node is a target.
+      // Without it the enlarged hitbox is invisible: they still aim at the
+      // dot, still miss, and have no way to know they did not have to.
+      gl.domElement.style.cursor = index === null ? '' : 'pointer'
     }
   })
 

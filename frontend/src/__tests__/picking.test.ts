@@ -11,7 +11,13 @@
  */
 import { describe, expect, test } from 'bun:test'
 
-import { nearestHit, PICK_WINDOW } from '../graph/picking'
+import {
+  MIN_PICK_SIZE_PX,
+  nearestHit,
+  PICK_INFLATE,
+  PICK_RADIUS_CSS,
+  pickWindowFor,
+} from '../graph/picking'
 import { BASE_POINT_SIZE, CORE_RADIUS } from '../graph/pointStyle'
 
 const CLICK_SLOP_PX = 5
@@ -141,71 +147,115 @@ describe('pick alignment', () => {
 
 
 describe('pick tolerance', () => {
-  /** A pick window with a node encoded at one position. */
-  function windowWith(hits: Array<[number, number, number]>, size = PICK_WINDOW) {
+  const WINDOW = pickWindowFor(1)
+  const CENTRE = (WINDOW - 1) / 2
+
+  /** A pick window with nodes encoded at given positions.
+   *  `depth` is 0 (against the camera) to 255 (far); the shader writes
+   *  gl_FragCoord.z there. */
+  function windowWith(
+    hits: Array<[number, number, number, number?]>,
+    size = WINDOW,
+  ) {
     const pixels = new Uint8Array(size * size * 4)
-    for (const [col, row, index] of hits) {
+    for (const [col, row, index, depth] of hits) {
       const encoded = index + 1
       const o = (row * size + col) * 4
       pixels[o] = encoded & 0xff
       pixels[o + 1] = (encoded >> 8) & 0xff
       pixels[o + 2] = (encoded >> 16) & 0xff
-      pixels[o + 3] = 255
+      pixels[o + 3] = depth ?? 128
     }
     return pixels
   }
 
   test('the window is odd so it has a true centre', () => {
-    expect(PICK_WINDOW % 2).toBe(1)
+    for (const dpr of [1, 1.5, 2, 3]) {
+      expect(pickWindowFor(dpr) % 2).toBe(1)
+    }
   })
 
-  test('the window is forgiving enough for a small node', () => {
-    // A single pixel means the cursor must land inside the drawn disc exactly.
-    expect(PICK_WINDOW).toBeGreaterThanOrEqual(5)
+  test('the window is measured in CSS pixels, not device pixels', () => {
+    // The bug this replaces was invisible: a 15-device-pixel window is 7.5 CSS
+    // pixels on a retina display, so the forgiveness the constant claimed was
+    // halved by the hardware it happened to run on.
+    expect(pickWindowFor(2)).toBeGreaterThan(pickWindowFor(1))
+    expect(pickWindowFor(2)).toBe(PICK_RADIUS_CSS * 2 * 2 + 1)
+  })
+
+  test('the target is large enough to be aimed at casually', () => {
+    expect(PICK_RADIUS_CSS).toBeGreaterThanOrEqual(10)
+  })
+
+  test('the pick disc is drawn larger than the visible node', () => {
+    // The GPU-picking equivalent of raising a raycaster threshold: the target
+    // grows while what the reader sees does not move.
+    expect(PICK_INFLATE).toBeGreaterThan(1)
+  })
+
+  test('a distant node never shrinks out of reach', () => {
+    // Perspective divides by distance, so without a floor the far side of the
+    // map costs far more effort to click than the near side.
+    expect(MIN_PICK_SIZE_PX).toBeGreaterThanOrEqual(8)
   })
 
   test('an empty window hits nothing', () => {
-    expect(nearestHit(windowWith([]))).toBeNull()
+    expect(nearestHit(windowWith([]), WINDOW)).toBeNull()
   })
 
   test('a node dead centre is picked', () => {
-    const c = (PICK_WINDOW - 1) / 2
-    expect(nearestHit(windowWith([[c, c, 42]]))).toBe(42)
+    expect(nearestHit(windowWith([[CENTRE, CENTRE, 42]]), WINDOW)).toBe(42)
   })
 
   test('a node near the edge of the window is still picked', () => {
     // This is the whole point: the cursor missed the node but landed close.
-    expect(nearestHit(windowWith([[0, 0, 7]]))).toBe(7)
+    expect(nearestHit(windowWith([[0, 0, 7]]), WINDOW)).toBe(7)
   })
 
   test('the nearest node wins when two are in range', () => {
-    const c = (PICK_WINDOW - 1) / 2
     const pixels = windowWith([
-      [0, 0, 11],       // far corner
-      [c, c - 1, 22],   // one pixel from centre
+      [0, 0, 11],
+      [CENTRE, CENTRE - 1, 22],
     ])
-    expect(nearestHit(pixels)).toBe(22)
+    expect(nearestHit(pixels, WINDOW)).toBe(22)
   })
 
   test('nearest beats first in scan order', () => {
     // Row-order scanning would bias every ambiguous click toward whichever
     // node happened to sit higher on screen.
-    const c = (PICK_WINDOW - 1) / 2
     const pixels = windowWith([
-      [c, 0, 99],   // top row, far
-      [c, c, 100],  // centre
+      [CENTRE, 0, 99],
+      [CENTRE, CENTRE, 100],
     ])
-    expect(nearestHit(pixels)).toBe(100)
+    expect(nearestHit(pixels, WINDOW)).toBe(100)
+  })
+
+  test('among nodes equally close to the cursor, the front one wins', () => {
+    // The inflated disc makes overlaps normal rather than exceptional, and the
+    // node the reader believes they are pointing at is the one they can see.
+    const pixels = windowWith([
+      [CENTRE - 1, CENTRE, 5, 240], // same ring, far away
+      [CENTRE + 1, CENTRE, 6, 20], // same ring, near the camera
+    ])
+    expect(nearestHit(pixels, WINDOW)).toBe(6)
+  })
+
+  test('depth does not override being under the cursor', () => {
+    // A node against the camera at the far edge of the window must not beat
+    // one directly beneath the pointer; the hand aims, depth only breaks ties.
+    const pixels = windowWith([
+      [CENTRE, CENTRE, 8, 250],
+      [0, 0, 9, 0],
+    ])
+    expect(nearestHit(pixels, WINDOW)).toBe(8)
   })
 
   test('node index zero is distinguishable from empty space', () => {
     // Indices are stored offset by one precisely so 0 can mean "background".
-    const c = (PICK_WINDOW - 1) / 2
-    expect(nearestHit(windowWith([[c, c, 0]]))).toBe(0)
+    expect(nearestHit(windowWith([[CENTRE, CENTRE, 0]]), WINDOW)).toBe(0)
   })
 
   test('a high index round-trips through the window', () => {
-    const c = (PICK_WINDOW - 1) / 2
-    expect(nearestHit(windowWith([[c, c, 70000]]))).toBe(70000)
+    expect(nearestHit(windowWith([[CENTRE, CENTRE, 70000]]), WINDOW)).toBe(70000)
   })
 })

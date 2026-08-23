@@ -17,28 +17,65 @@ import pickFragment from './shaders/pick.frag.glsl?raw'
 import pickVertex from './shaders/pick.vert.glsl?raw'
 
 /**
- * Width of the neighbourhood sampled under the cursor, in device pixels.
+ * How far from the cursor a node may be and still be picked, in **CSS**
+ * pixels — the unit the reader's hand works in.
  *
- * Odd so it has a true centre. Fifteen gives a seven-pixel margin in every
- * direction. Widening it costs nothing in precision, because ``nearestHit``
- * resolves ties by distance from the cursor: a larger window only ever helps
- * when the exact pixel under the cursor hit *nothing*, which at 500 nodes —
- * where a sprite is a few pixels across and the gaps between them are smaller
- * than the pointer — is most of the time.
+ * Device pixels were the wrong unit and the bug was invisible: a 15-device-
+ * pixel window is 7.5 CSS pixels on a retina display, so the forgiveness the
+ * constant claimed was halved by the hardware it ran on.
+ *
+ * Widening costs nothing in precision. ``nearestHit`` ranks by distance from
+ * the cursor first, so a larger window only ever changes the answer where the
+ * smaller one returned *nothing*.
  */
-export const PICK_WINDOW = 15
+export const PICK_RADIUS_CSS = 12
+
+/** Window width for a given device pixel ratio. Odd, so it has a true centre. */
+export function pickWindowFor(pixelRatio: number): number {
+  return Math.round(PICK_RADIUS_CSS * pixelRatio) * 2 + 1
+}
 
 /**
- * The node nearest the centre of a pick window, or null if it hit nothing.
+ * How much larger the pick disc is than the drawn one.
  *
- * Nearest rather than first, so that when the cursor sits between two nodes
- * the one it is actually closest to wins — scanning in row order would bias
- * every ambiguous click toward whichever happened to be higher on screen.
+ * The direct analogue of a raycaster's Points threshold. Generous: a click
+ * that lands on the node beside the intended one is recoverable in a moment,
+ * where a click that lands on nothing at all makes the map feel broken.
  */
-export function nearestHit(pixels: Uint8Array, window = PICK_WINDOW): number | null {
+export const PICK_INFLATE = 1.7
+
+/**
+ * Smallest pick disc, in device pixels, however far away the node is.
+ *
+ * Perspective shrinks a distant node toward a point, and no amount of
+ * inflation rescues something multiplied by 300/-z at z = 300. This is the
+ * floor that makes the far side of the map cost the same effort as the near
+ * side. Overlap at extreme zoom-out is expected and is what the depth
+ * tie-break below is for.
+ */
+export const MIN_PICK_SIZE_PX = 13
+
+/**
+ * The node under a pick window, or null if it hit nothing.
+ *
+ * Two rankings, in order.
+ *
+ * **Distance from the cursor, in whole-pixel rings.** Nearest rather than
+ * first: scanning in row order would bias every ambiguous click toward
+ * whichever node happened to be higher on screen. Rings rather than exact
+ * distance so the second ranking gets to matter — two nodes a pixel apart are
+ * both "under the cursor" as far as the hand is concerned.
+ *
+ * **Then depth: the node closest to the camera wins.** Within a ring the front
+ * one is the one the reader believes they are pointing at, and it is the one
+ * they can see. Depth testing already resolves overlap per pixel; this
+ * resolves it across the several pixels a cursor actually covers.
+ */
+export function nearestHit(pixels: Uint8Array, window: number): number | null {
   const centre = (window - 1) / 2
   let best: number | null = null
-  let bestDistance = Infinity
+  let bestRing = Infinity
+  let bestDepth = Infinity
 
   for (let row = 0; row < window; row++) {
     for (let column = 0; column < window; column++) {
@@ -50,11 +87,14 @@ export function nearestHit(pixels: Uint8Array, window = PICK_WINDOW): number | n
 
       const dx = column - centre
       const dy = row - centre
-      const distance = dx * dx + dy * dy
-      if (distance < bestDistance) {
-        bestDistance = distance
-        best = encoded - 1
-      }
+      const ring = Math.round(Math.sqrt(dx * dx + dy * dy))
+      const depth = pixels[offset + 3]!
+
+      if (ring > bestRing) continue
+      if (ring === bestRing && depth >= bestDepth) continue
+      bestRing = ring
+      bestDepth = depth
+      best = encoded - 1
     }
   }
   return best
@@ -66,10 +106,12 @@ export class GpuPicker {
   private scene: THREE.Scene
   private points: THREE.Points | null = null
   private material: THREE.ShaderMaterial
-  private buffer = new Uint8Array(PICK_WINDOW * PICK_WINDOW * 4)
+  /** Sized for the current pixel ratio; both are rebuilt when it changes. */
+  private window = 0
+  private buffer = new Uint8Array(0)
 
   constructor() {
-    this.target = new THREE.WebGLRenderTarget(PICK_WINDOW, PICK_WINDOW, {
+    this.target = new THREE.WebGLRenderTarget(1, 1, {
       minFilter: THREE.NearestFilter,
       magFilter: THREE.NearestFilter,
       format: THREE.RGBAFormat,
@@ -82,6 +124,8 @@ export class GpuPicker {
       uniforms: {
         uPixelRatio: { value: 1 },
         uBaseSize: { value: BASE_POINT_SIZE },
+        uInflate: { value: PICK_INFLATE },
+        uMinPickSize: { value: MIN_PICK_SIZE_PX },
       },
       transparent: false,
       depthWrite: true,
@@ -100,6 +144,17 @@ export class GpuPicker {
   setPointScale(baseSize: number, pixelRatio: number): void {
     this.material.uniforms.uBaseSize!.value = baseSize
     this.material.uniforms.uPixelRatio!.value = pixelRatio
+  }
+
+  /** Grow the render target and readback buffer to match the pixel ratio. */
+  private resizeFor(pixelRatio: number): number {
+    const window = pickWindowFor(pixelRatio)
+    if (window !== this.window) {
+      this.window = window
+      this.target.setSize(window, window)
+      this.buffer = new Uint8Array(window * window * 4)
+    }
+    return window
   }
 
   /**
@@ -124,12 +179,13 @@ export class GpuPicker {
     // neighbourhood and taking the nearest hit gives a forgiving target
     // without enlarging the nodes themselves or distorting what is on screen.
     const dpr = renderer.getPixelRatio()
-    const half = (PICK_WINDOW - 1) / 2
+    const window = this.resizeFor(dpr)
+    const half = (window - 1) / 2
     const pickCamera = camera.clone()
     pickCamera.setViewOffset(
       width * dpr, height * dpr,
       Math.floor(x * dpr) - half, Math.floor(y * dpr) - half,
-      PICK_WINDOW, PICK_WINDOW,
+      window, window,
     )
 
     const previousTarget = renderer.getRenderTarget()
@@ -141,14 +197,14 @@ export class GpuPicker {
     renderer.clear()
     renderer.render(this.scene, pickCamera)
     renderer.readRenderTargetPixels(
-      this.target, 0, 0, PICK_WINDOW, PICK_WINDOW, this.buffer,
+      this.target, 0, 0, window, window, this.buffer,
     )
 
     renderer.setRenderTarget(previousTarget)
     renderer.setClearColor(previousClear, previousAlpha)
     pickCamera.clearViewOffset()
 
-    return nearestHit(this.buffer)
+    return nearestHit(this.buffer, window)
   }
 
   dispose(): void {
