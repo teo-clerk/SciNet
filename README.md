@@ -15,10 +15,13 @@ Working end to end on a real 300-paper library. Papers are watched or uploaded,
 deduplicated, parsed, embedded, positioned in 3D, clustered, named and tagged;
 the map persists and updates incrementally, and renders at 60 fps.
 
-The full suite — 634 backend tests and 82 frontend tests — runs in CI on every
-push, on a runner with no GPU, no model weights, and no network access to
-models: the pipeline's seams are designed to be testable without the hardware
-they orchestrate.
+The full suite — 650+ backend tests and 86 frontend tests — runs in CI on
+every push, on a runner with no GPU, no model weights, and no network access
+to models: the pipeline's seams are designed to be testable without the
+hardware they orchestrate.
+
+![The time scrubber replaying a 506-document library year by year — press
+play and fields fade up as their years arrive](docs/media/time-scrubber.gif)
 
 **[USAGE.md](USAGE.md) is the guide** — setup, the three commands to run it,
 how to get papers in, and how to read the map.
