@@ -199,6 +199,7 @@ def handle_enrich(session: Session, job: Job, settings: Settings) -> None:
 
 
 from app.services.models.measure import handle_measure  # noqa: E402
+from app.services.quantities.adjudicate import handle_adjudicate  # noqa: E402
 from app.workers.embed_handlers import (  # noqa: E402
     handle_embed,
     handle_project,
@@ -215,4 +216,5 @@ HANDLERS = {
     JobKind.ENRICH: handle_enrich,
     JobKind.MEASURE: handle_measure,
     JobKind.EXTRACT: handle_extract,
+    JobKind.ADJUDICATE: handle_adjudicate,
 }
