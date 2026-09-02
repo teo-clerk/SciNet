@@ -344,3 +344,43 @@ async def test_library_overview_surveys_the_map(mcp_server) -> None:
     assert body["papers_on_map"] == 2
     assert len(body["regions"]) == 2
     assert isinstance(body["tags"], list)
+
+
+# --- the api being down ------------------------------------------------------
+
+
+@pytest.fixture
+def down_server():
+    """Every request is refused at the transport, as a stopped API would."""
+
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    return build_server(
+        base_url="http://scinet.test",
+        client_factory=lambda: httpx.AsyncClient(transport=httpx.MockTransport(refuse)),
+    )
+
+
+@pytest.mark.parametrize(
+    ("tool", "args"),
+    [
+        ("search_library", {"query": "x"}),
+        ("get_paper", {"paper_id": 1}),
+        ("read_paper", {"paper_id": 1}),
+        ("similar_papers", {"paper_id": 1}),
+        ("list_regions", {}),
+        ("region_details", {"cluster_id": 1}),
+        ("library_overview", {}),
+    ],
+)
+async def test_every_tool_says_how_to_start_the_api(down_server, tool, args) -> None:
+    """An MCP tool's failure text is its whole UX: a bare ConnectError tells
+    the agent nothing it can relay; naming the command gives the user a fix."""
+    async with create_connected_server_and_client_session(
+        down_server._mcp_server
+    ) as session:
+        result = await session.call_tool(tool, args)
+    assert result.isError
+    text = result.content[0].text
+    assert "not answering" in text and "scinet-up" in text
