@@ -23,6 +23,18 @@ hardware they orchestrate.
 ![The time scrubber replaying a 506-document library year by year — press
 play and fields fade up as their years arrive](docs/media/time-scrubber.gif)
 
+Because every refit is Procrustes-aligned and old runs are kept, the map can
+hold **two embedding models' opinions of the same library** and morph between
+them — the nodes that travel farthest are the papers the models disagree
+about:
+
+![Morphing 506 papers between SciNCL's and SPECTER2's layouts — the chrome
+steps aside and the disagreement moves](docs/media/embedding-morph.gif)
+
+```bash
+cd backend && uv run python ../scripts/build_alt_projection.py allenai/specter2_base --apply
+```
+
 **[USAGE.md](USAGE.md) is the guide** — setup, the three commands to run it,
 how to get papers in, and how to read the map.
 
@@ -35,6 +47,7 @@ Measured on 300 arXiv papers across 10 fields:
 | map render, 293 nodes | 60 fps, p95 17.3 ms |
 | semantic query | 0.25 s warm |
 | clustering vs known fields | ARI 0.697, 10 regions, 1 unclustered |
+| embedder A/B, 506 papers (SciNCL vs SPECTER2) | mean node shift 1.90 of radius 40 |
 | abstract coverage | 287 of 293 |
 
 ## How the map stays fast
