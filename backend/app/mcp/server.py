@@ -30,6 +30,8 @@ MAX_SEARCH_LIMIT = 40
 DEFAULT_READ_WINDOW = 4_000
 MAX_READ_WINDOW = 20_000
 MAX_SIMILAR = 25
+MAX_REGION_MEMBERS = 15
+MAX_OVERVIEW_TAGS = 40
 
 INSTRUCTIONS = (
     "SciNet is the user's local, private library of scientific papers and "
@@ -209,6 +211,83 @@ def build_server(
                 for hit in body
             ],
         }
+
+    @server.tool()
+    async def list_regions() -> dict[str, Any]:
+        """The map's named regions (clusters): id, name, size, top terms.
+
+        A library with no computed map yet answers with a note, not an
+        error — that state is normal while the pipeline is still working.
+        """
+        status, body = await api.get_json("/api/graph")
+        if status == 409 and isinstance(body, dict):
+            return {"regions": [], "note": body.get("detail", "no map yet")}
+        if status != 200:
+            raise ValueError(f"the graph endpoint answered {status}: {body}")
+        regions = sorted(
+            (
+                {
+                    "id": c["id"],
+                    "name": c.get("label"),
+                    "size": c.get("size", 0),
+                    "terms": (c.get("terms") or [])[:8],
+                }
+                for c in body.get("clusters", [])
+            ),
+            key=lambda r: -r["size"],
+        )
+        return {"papers_on_map": body.get("count"), "regions": regions}
+
+    @server.tool()
+    async def region_details(cluster_id: int) -> dict[str, Any]:
+        """One region: name, overview, terms, and its most representative
+        members (highest cluster confidence first)."""
+        status, body = await api.get_json(f"/api/clusters/{cluster_id}")
+        if status == 404:
+            raise ValueError(f"no region {cluster_id} — list_regions has the ids")
+        if status != 200:
+            raise ValueError(f"the clusters endpoint answered {status}: {body}")
+        members = body.get("members", [])
+        return {
+            "id": body.get("id"),
+            "name": body.get("label"),
+            "overview": body.get("overview"),
+            "size": body.get("size"),
+            "terms": body.get("terms", []),
+            "member_count": len(members),
+            "members": [
+                {
+                    "paper_id": m["paper_id"],
+                    "title": m.get("title"),
+                    "year": m.get("year"),
+                    "confidence": m.get("confidence"),
+                }
+                for m in members[:MAX_REGION_MEMBERS]
+            ],
+        }
+
+    @server.tool()
+    async def library_overview() -> dict[str, Any]:
+        """Counts, regions, and tags — the survey to start a session with."""
+        status, sys_body = await api.get_json("/api/system")
+        overview: dict[str, Any] = {}
+        if status == 200 and isinstance(sys_body, dict):
+            overview["papers"] = sys_body.get("paper_count")
+
+        gstatus, graph = await api.get_json("/api/graph")
+        if gstatus == 200 and isinstance(graph, dict):
+            overview["papers_on_map"] = graph.get("count")
+            overview["regions"] = sorted(
+                (
+                    {"id": c["id"], "name": c.get("label"), "size": c.get("size", 0)}
+                    for c in graph.get("clusters", [])
+                ),
+                key=lambda r: -r["size"],
+            )
+            overview["tags"] = graph.get("tag_vocabulary", [])[:MAX_OVERVIEW_TAGS]
+        elif gstatus == 409 and isinstance(graph, dict):
+            overview["note"] = graph.get("detail", "no map yet")
+        return overview
 
     return server
 

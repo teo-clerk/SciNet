@@ -25,6 +25,7 @@ from app.main import create_app
 from app.mcp.server import build_server
 from app.models.enums import PaperStatus
 from app.models.paper import MarkdownDoc, Paper, PaperMeta
+from app.models.projection import Cluster, Projection, ProjectionRun
 from app.workers.embed_handlers import open_store
 
 
@@ -84,6 +85,55 @@ def api_app(tmp_path, monkeypatch):
         md_path.write_text("0123456789" * 100, encoding="utf-8")
         session.add(
             MarkdownDoc(paper_id=1, md_path=str(md_path), tier=0, parser="test")
+        )
+        # A minimal active map: two one-paper regions, so the region tools
+        # exercise the same rows the UI reads.
+        run = ProjectionRun(
+            model_id="test-embed",
+            params_json="{}",
+            n_fit=2,
+            method="pca",
+            is_active=True,
+        )
+        session.add(run)
+        session.flush()
+        gravity = Cluster(
+            run_id=run.id,
+            hdbscan_label=0,
+            llm_label="Gravitational Astronomy",
+            size=1,
+            top_terms_json=json.dumps(["waves", "mergers"]),
+        )
+        sar = Cluster(
+            run_id=run.id,
+            hdbscan_label=1,
+            llm_label="SAR Learning",
+            size=1,
+            top_terms_json=json.dumps(["sar", "classification"]),
+        )
+        session.add_all([gravity, sar])
+        session.flush()
+        session.add_all(
+            [
+                Projection(
+                    run_id=run.id,
+                    paper_id=1,
+                    x=0.0,
+                    y=0.0,
+                    z=0.0,
+                    cluster_id=gravity.id,
+                    cluster_probability=0.9,
+                ),
+                Projection(
+                    run_id=run.id,
+                    paper_id=2,
+                    x=1.0,
+                    y=0.0,
+                    z=0.0,
+                    cluster_id=sar.id,
+                    cluster_probability=0.8,
+                ),
+            ]
         )
         session.commit()
 
@@ -250,3 +300,47 @@ async def test_similarity_without_an_embedding_is_a_clear_error(mcp_server) -> N
         result = await session.call_tool("similar_papers", {"paper_id": 999})
     assert result.isError
     assert "no embedding" in result.content[0].text
+
+
+# --- regions and the overview ------------------------------------------------
+
+
+async def test_regions_are_listed_and_inspectable_by_the_ids_given(mcp_server) -> None:
+    """The id an agent gets from list_regions must be the id region_details
+    accepts — the tools are a conversation, not two endpoints."""
+    async with create_connected_server_and_client_session(
+        mcp_server._mcp_server
+    ) as session:
+        listed = _payload(await session.call_tool("list_regions", {}))
+        assert listed["papers_on_map"] == 2
+        names = {r["name"] for r in listed["regions"]}
+        assert names == {"Gravitational Astronomy", "SAR Learning"}
+
+        sar_id = next(r["id"] for r in listed["regions"] if r["name"] == "SAR Learning")
+        details = _payload(
+            await session.call_tool("region_details", {"cluster_id": sar_id})
+        )
+    assert details["name"] == "SAR Learning"
+    assert details["member_count"] == 1
+    member = details["members"][0]
+    assert member["paper_id"] == 2 and member["confidence"] == 0.8
+
+
+async def test_an_unknown_region_points_at_list_regions(mcp_server) -> None:
+    async with create_connected_server_and_client_session(
+        mcp_server._mcp_server
+    ) as session:
+        result = await session.call_tool("region_details", {"cluster_id": 424242})
+    assert result.isError
+    assert "list_regions" in result.content[0].text
+
+
+async def test_library_overview_surveys_the_map(mcp_server) -> None:
+    async with create_connected_server_and_client_session(
+        mcp_server._mcp_server
+    ) as session:
+        body = _payload(await session.call_tool("library_overview", {}))
+    assert body["papers"] == 2
+    assert body["papers_on_map"] == 2
+    assert len(body["regions"]) == 2
+    assert isinstance(body["tags"], list)
