@@ -72,6 +72,21 @@ class TagStatus(StrEnum):
     MERGED = "merged"
 
 
+class ModelVerdict(StrEnum):
+    """What a measurement concluded — the outcome, not a fit prediction."""
+
+    GPU = "gpu"  # fully resident on the card when warmed
+    PARTIAL = "partial"  # split between VRAM and system RAM
+    CPU_ONLY = "cpu-only"  # served from system RAM: ~20x slower, silently
+    UNPROVEN = "unproven"  # never measured; the house rule: not assumed to fit
+
+
+class ProfileSource(StrEnum):
+    BUILTIN = "builtin"  # seeded from the shipped registry
+    DISCOVERED = "discovered"  # found installed in an Ollama store
+    USER = "user"  # added by hand in the Model Lab
+
+
 # Job priority — lower runs first. Tagging is deliberately last so the map is
 # navigable long before tags finish (see roadmap M2).
 PRIORITY = {

@@ -9,10 +9,13 @@ from app.models.enums import (
     JobKind,
     JobState,
     MetaSource,
+    ModelVerdict,
     PaperStatus,
+    ProfileSource,
     TagKind,
     TagStatus,
 )
+from app.models.model_profile import ModelProfile
 from app.models.paper import Chunk, DocVector, MarkdownDoc, Paper, PaperMeta
 from app.models.projection import (
     Cluster,
@@ -35,10 +38,13 @@ __all__ = [
     "JobState",
     "MarkdownDoc",
     "MetaSource",
+    "ModelProfile",
+    "ModelVerdict",
     "Paper",
     "PaperMeta",
     "PaperStatus",
     "PaperTag",
+    "ProfileSource",
     "Projection",
     "ProjectionRun",
     "Setting",
