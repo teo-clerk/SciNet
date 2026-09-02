@@ -43,6 +43,10 @@ dependencies = [
 # `uv run scinet-stop` from backend/. The logic lives in the package so it is
 # importable and testable; scripts/stop.sh and scripts/stop.py wrap it.
 scinet-stop = "app.cli.stop:main"
+# `uv run scinet-up` — API + worker + UI in one terminal, logs multiplexed.
+# The complement of scinet-stop: up owns the children it spawned, stop hunts
+# the ones nobody owns.
+scinet-up = "app.cli.up:main"
 
 [project.optional-dependencies]
 # Tier 1 only (Marker + Surya), which is off by default and saved 3.6 minutes
