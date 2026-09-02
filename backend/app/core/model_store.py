@@ -31,6 +31,7 @@ import subprocess
 import time
 from contextlib import closing
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -213,7 +214,20 @@ class PrivateOllama:
 
     @property
     def url(self) -> str:
-        return f"http://{self.host}:{self.port}"
+        """Where generation actually goes — the override included.
+
+        This used to ignore ``ollama_url_override``, which split the brain:
+        with an override set, ``tag_paper`` generated against the override
+        server while ``available()`` checked the private one's tags — and
+        ``free_all_models`` unloaded from a server nothing was loaded on.
+        Availability, generation, measurement and unloading must all mean
+        the same server, so they all read this property.
+        """
+        return self.settings.ollama_url_override or f"http://{self.host}:{self.port}"
+
+    @property
+    def is_override(self) -> bool:
+        return bool(self.settings.ollama_url_override)
 
     @property
     def binary(self) -> str | None:
@@ -234,10 +248,23 @@ class PrivateOllama:
         }
 
     def is_running(self) -> bool:
+        if self.is_override:
+            # The override names a server somebody else runs; ask its port.
+            parsed = urlsplit(self.url)
+            return _port_is_open(parsed.hostname or "127.0.0.1", parsed.port or 80)
         return _port_is_open(self.host, self.port)
 
     def start(self) -> None:
-        """Start the private server, unless one is already listening."""
+        """Start the private server, unless one is already listening.
+
+        Under an override this is a no-op: the whole point of
+        ``SCINET_OLLAMA_URL_OVERRIDE`` is "use that server, not ours", and an
+        availability probe that spawned a private instance anyway (as
+        tier 2's once did) leaves two servers fighting over one card.
+        """
+        if self.is_override:
+            logger.debug("ollama override set; not starting a private server")
+            return
         if self.is_running():
             logger.debug("private ollama already listening on %s", self.url)
             return
@@ -307,6 +334,24 @@ class PrivateOllama:
                 on_progress(line.rstrip())
         if process.wait() != 0:
             raise RuntimeError(f"failed to pull {reference}")
+
+    def resident_models(self) -> list[str]:
+        """Names of every model the server currently holds in memory.
+
+        This is what ``free_all_models`` unloads — the models that are
+        actually resident, not a hardcoded guess at which settings fields
+        might have been used since the last free.
+        """
+        try:
+            response = httpx.get(f"{self.url}/api/ps", timeout=10.0)
+            response.raise_for_status()
+        except Exception:  # noqa: BLE001 - a down server holds nothing
+            return []
+        return [
+            name
+            for model in response.json().get("models", [])
+            if (name := model.get("name"))
+        ]
 
     def resident_footprint_mib(self, reference: str) -> tuple[int, int]:
         """(total_mib, vram_mib) for a currently-loaded model.

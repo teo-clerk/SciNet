@@ -140,10 +140,6 @@ def free_all_models() -> None:
     Skipping it is not a slow path, it is an out-of-memory error: tier 1's
     server holds ~3.2 GiB and the tagging model wants 5.5 GiB on an 8 GiB card.
     """
-    from app.core.config import get_settings
-
-    settings = get_settings()
-
     try:
         from app.services.parse import tier1_marker
 
@@ -154,7 +150,9 @@ def free_all_models() -> None:
     try:
         from app.core.model_store import PRIVATE_OLLAMA
 
-        for reference in (settings.vlm_model, settings.llm_model):
+        # Whatever /api/ps says is resident — not a hardcoded pair of settings
+        # fields, which missed anything the router loaded under another name.
+        for reference in PRIVATE_OLLAMA.resident_models():
             PRIVATE_OLLAMA.unload(reference)
     except Exception:  # noqa: BLE001
         logger.debug("ollama unload skipped", exc_info=True)
