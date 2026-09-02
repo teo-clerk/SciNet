@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import func, select, text
@@ -26,9 +25,6 @@ from sqlalchemy.orm import Session
 
 from app.core.types import to_storage, utcnow
 from app.models import PRIORITY, Job, JobKind, JobState
-
-# A job still 'running' after this long belongs to a worker that died.
-STALE_AFTER_SECONDS = 30 * 60
 
 
 def enqueue(
@@ -151,22 +147,21 @@ def fail(session: Session, job: Job, error: str, *, fatal: bool = False) -> Job:
     return job
 
 
-def requeue_stale(
-    session: Session, older_than_seconds: int = STALE_AFTER_SECONDS
-) -> int:
-    """Return jobs abandoned by a dead worker to the queue.
+def requeue_stale(session: Session) -> int:
+    """Return every job abandoned by a dead worker to the queue.
 
-    Called on worker startup. Without it, a ``kill -9`` mid-batch strands those
-    rows in ``running`` and the papers never finish.
+    Called on worker startup, and deliberately unconditional: this process is
+    the only claimer, and at its own startup it holds nothing — so any row
+    still ``running`` belongs to a worker that no longer exists. An age
+    threshold here looks prudent and is exactly wrong twice over: a claim's
+    age says how long ago it was made, not whether its claimer is alive, and
+    the one process that could hold a fresh legitimate claim is the one doing
+    the sweeping. The threshold this replaced stranded a live adjudication
+    batch for half an hour because the supervisor restarted the worker eight
+    minutes after the claim — a fast restart being precisely the case the
+    sweep exists to clean up after.
     """
-    cutoff = utcnow() - timedelta(seconds=older_than_seconds)
-    stale = session.scalars(
-        select(Job).where(
-            Job.state == JobState.RUNNING,
-            Job.started_at.isnot(None),
-            Job.started_at <= cutoff,
-        )
-    ).all()
+    stale = session.scalars(select(Job).where(Job.state == JobState.RUNNING)).all()
 
     for job in stale:
         # Attempts already counted at claim time, so a job that reliably kills

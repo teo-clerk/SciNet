@@ -155,7 +155,7 @@ def test_requeue_stale_recovers_jobs_from_a_killed_worker(sf):
         s.commit()  # worker dies here, never completes
 
     with sf() as s:
-        n = requeue_stale(s, older_than_seconds=0)
+        n = requeue_stale(s)
         s.commit()
         assert n == 1
 
@@ -163,16 +163,43 @@ def test_requeue_stale_recovers_jobs_from_a_killed_worker(sf):
         assert claim_next(s) is not None
 
 
-def test_requeue_stale_leaves_fresh_running_jobs_alone(sf):
+def test_startup_sweep_reclaims_even_a_seconds_old_claim(sf):
+    """A fast supervisor restart must not strand a fresh claim.
+
+    The sweeping worker holds nothing at its own startup, so a running row's
+    age is irrelevant — the previous version waited 30 minutes and left a
+    just-claimed batch unclaimable across a quick restart.
+    """
     with sf() as s:
         enqueue(s, JobKind.PARSE, paper_id=1)
         s.commit()
     with sf() as s:
         claim_next(s)
-        s.commit()
+        s.commit()  # supervisor restarts the worker immediately
 
     with sf() as s:
-        assert requeue_stale(s, older_than_seconds=3600) == 0
+        assert requeue_stale(s) == 1
+        s.commit()
+    with sf() as s:
+        assert claim_next(s) is not None
+
+
+def test_startup_sweep_sends_an_exhausted_job_to_dead(sf):
+    """Dying on the final attempt must not buy a fourth one."""
+    with sf() as s:
+        enqueue(s, JobKind.PARSE, paper_id=1, max_attempts=1)
+        s.commit()
+    with sf() as s:
+        claim_next(s)
+        s.commit()  # the only attempt, and the worker dies in it
+
+    with sf() as s:
+        assert requeue_stale(s) == 1
+        s.commit()
+    with sf() as s:
+        assert claim_next(s) is None
+        job = s.query(Job).one()
+        assert job.state == JobState.DEAD
 
 
 def test_enqueue_is_idempotent_per_paper_and_kind(sf):

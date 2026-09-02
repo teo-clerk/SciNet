@@ -15,7 +15,7 @@ import pytest
 
 from app.core.types import SQLITE_DATETIME_FORMAT, to_storage, utcnow
 from app.models import JobKind
-from app.workers.queue import claim_next, enqueue, requeue_stale
+from app.workers.queue import claim_next, enqueue
 
 
 def test_utcnow_is_timezone_aware():
@@ -68,22 +68,6 @@ def test_columns_are_mutually_comparable(sf):
         job = claim_next(s)
         assert job.started_at >= job.created_at
         assert (utcnow() - job.started_at) < timedelta(seconds=60)
-
-
-def test_sql_comparison_against_a_cutoff_is_correct(sf):
-    """requeue_stale relies on SQL comparing stored text to a bound datetime."""
-    with sf() as s:
-        enqueue(s, JobKind.PARSE, paper_id=1)
-        s.commit()
-    with sf() as s:
-        claim_next(s)
-        s.commit()
-
-    with sf() as s:
-        assert requeue_stale(s, older_than_seconds=3600) == 0, "too new to be stale"
-    with sf() as s:
-        assert requeue_stale(s, older_than_seconds=0) == 1, "cutoff in the past"
-        s.commit()
 
 
 @pytest.mark.parametrize(
