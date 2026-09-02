@@ -7,6 +7,8 @@
 import { useEffect, useState } from 'react'
 
 import { fetchNeighbours, fetchPaper, type Neighbour, type PaperDetail } from '@/api/graph'
+import { fetchPaperQuantities, type QuantityRow } from '@/api/quantities'
+import { formatQuantity } from '@/lib/quantities'
 import { useGraphStore } from '@/state/graphStore'
 
 export function DetailPanel() {
@@ -16,6 +18,7 @@ export function DetailPanel() {
 
   const [paper, setPaper] = useState<PaperDetail | null>(null)
   const [neighbours, setNeighbours] = useState<Neighbour[]>([])
+  const [quantities, setQuantities] = useState<QuantityRow[]>([])
   const [opening, setOpening] = useState(false)
 
   const node = selectedIndex === null ? null : nodes[selectedIndex]
@@ -24,11 +27,15 @@ export function DetailPanel() {
     if (!node) {
       setPaper(null)
       setNeighbours([])
+      setQuantities([])
       return
     }
     let cancelled = false
     setPaper(null)
     void fetchPaper(node.id).then((p) => !cancelled && setPaper(p)).catch(() => {})
+    void fetchPaperQuantities(node.id)
+      .then((rows) => !cancelled && setQuantities(rows))
+      .catch(() => {})
     void fetchNeighbours(node.id, 5).then((n) => !cancelled && setNeighbours(n)).catch(() => {})
     return () => {
       cancelled = true
@@ -147,6 +154,29 @@ export function DetailPanel() {
                 </dd>
               </>
             )}
+          </dl>
+        </section>
+      )}
+
+      {quantities.length > 0 && (
+        <section>
+          <h3>Measured values</h3>
+          {/* The sentence is the provenance; the tooltip carries it whole. */}
+          <dl className="placement quantities">
+            {quantities.slice(0, 8).map((q) => (
+              <div key={q.id} title={q.context_sentence}>
+                <dt>
+                  {q.quantity_kind}
+                  {q.status !== 'auto' && q.status !== 'confirmed' && (
+                    <span className="dim"> ({q.status.replace('_', ' ')})</span>
+                  )}
+                </dt>
+                <dd>
+                  {formatQuantity(q.value_si, q.unit_si, q.quantity_kind)}
+                  <span className="dim"> · “{q.value_original} {q.unit_original}”</span>
+                </dd>
+              </div>
+            ))}
           </dl>
         </section>
       )}

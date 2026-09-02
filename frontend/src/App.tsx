@@ -8,6 +8,7 @@ import { FilterBar } from '@/panels/FilterBar'
 import { LibrarianPanel } from '@/panels/LibrarianPanel'
 import { ListView } from '@/panels/ListView'
 import { ModelLab } from '@/panels/ModelLab'
+import { QuantityReview } from '@/panels/QuantityReview'
 import { QuarantineView } from '@/panels/QuarantineView'
 import { JobsDrawer } from '@/panels/JobsDrawer'
 import { StatusBar } from '@/panels/StatusBar'
@@ -40,6 +41,8 @@ export default function App() {
             <QuarantineView />
           ) : view === 'models' ? (
             <ModelLab />
+          ) : view === 'review' ? (
+            <QuantityReview />
           ) : (
             <ListView />
           )
