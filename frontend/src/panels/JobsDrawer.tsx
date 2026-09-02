@@ -7,7 +7,16 @@
  */
 import { useEffect, useRef, useState } from 'react'
 
-import { fetchJobCounts, subscribeToEvents, type JobCounts, type PipelineEvent } from '@/api/sse'
+import {
+  fetchJobCounts,
+  fetchPauseState,
+  pauseWorker,
+  resumeWorker,
+  subscribeToEvents,
+  type JobCounts,
+  type PauseState,
+  type PipelineEvent,
+} from '@/api/sse'
 
 const MAX_LOG = 40
 const POLL_INTERVAL_MS = 4000
@@ -48,6 +57,7 @@ export function JobsDrawer() {
   const [open, setOpen] = useState(false)
   const [log, setLog] = useState<PipelineEvent[]>([])
   const [counts, setCounts] = useState<JobCounts | null>(null)
+  const [pause, setPause] = useState<PauseState | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -63,7 +73,11 @@ export function JobsDrawer() {
     let alive = true
     const tick = async () => {
       const next = await fetchJobCounts()
-      if (alive) setCounts(next)
+      const paused = await fetchPauseState()
+      if (alive) {
+        setCounts(next)
+        setPause(paused)
+      }
     }
     void tick()
     const timer = setInterval(tick, POLL_INTERVAL_MS)
@@ -75,6 +89,14 @@ export function JobsDrawer() {
 
   const outstanding = (counts?.queued ?? 0) + (counts?.running ?? 0)
   const busy = outstanding > 0
+  const paused = pause?.paused ?? false
+
+  const togglePause = async (event: React.MouseEvent) => {
+    // The toggle sits inside the drawer's header button; stop the click
+    // from also opening the log.
+    event.stopPropagation()
+    setPause(await (paused ? resumeWorker() : pauseWorker()))
+  }
 
   // "X of Y" from the durable job table rather than from the event stream:
   // events are advisory and dropped under load, so counting them would drift.
@@ -89,12 +111,26 @@ export function JobsDrawer() {
   return (
     <div className={`jobs-drawer ${open ? 'open' : ''}`}>
       <button className="jobs-toggle" onClick={() => setOpen((v) => !v)}>
-        <span className={`pulse ${busy ? 'busy' : ''}`} />
-        {busy
-          ? parseTotal > 0
-            ? `${parseDone} of ${parseTotal} papers · ${outstanding} jobs queued`
-            : `${outstanding} queued`
-          : 'pipeline idle'}
+        <span className={`pulse ${paused ? 'paused' : busy ? 'busy' : ''}`} />
+        {paused
+          ? `paused (${pause?.reason ?? 'user'})`
+          : busy
+            ? parseTotal > 0
+              ? `${parseDone} of ${parseTotal} papers · ${outstanding} jobs queued`
+              : `${outstanding} queued`
+            : 'pipeline idle'}
+        <span
+          className="pause-toggle"
+          role="button"
+          title={
+            paused
+              ? 'Resume the pipeline'
+              : 'Pause the pipeline at the next job boundary'
+          }
+          onClick={togglePause}
+        >
+          {paused ? '▶' : '⏸'}
+        </span>
         {counts?.dead ? <span className="warn"> · {counts.dead} dead</span> : null}
         <span className="chevron">{open ? '▾' : '▴'}</span>
       </button>

@@ -57,6 +57,10 @@ body {
 .filter-bar .morph input[type='range'] { width: 120px; accent-color: var(--warn); }
 .filter-bar .morph .mover { font-size: 11px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.jobs-toggle .pulse.paused { background: var(--warn); animation: none; }
+.jobs-toggle .pause-toggle { margin-left: 8px; padding: 0 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--dim); cursor: pointer; }
+.jobs-toggle .pause-toggle:hover { color: var(--warn); border-color: var(--warn); }
+
 /* --- librarian ----------------------------------------------------------- */
 .librarian-panel { position: absolute; left: 50%; transform: translateX(-50%); bottom: 14px; width: 620px; max-width: calc(100vw - 28px); max-height: 46vh; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; z-index: 21; backdrop-filter: blur(8px); }
 .librarian-panel header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px 0; }

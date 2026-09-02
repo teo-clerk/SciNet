@@ -62,3 +62,33 @@ export async function fetchJobCounts(): Promise<JobCounts | null> {
     return null
   }
 }
+
+
+export interface PauseState {
+  paused: boolean
+  reason?: string
+  until?: string
+  acked?: boolean
+}
+
+export async function fetchPauseState(): Promise<PauseState> {
+  try {
+    const res = await fetch('/api/jobs/pause')
+    if (!res.ok) return { paused: false }
+    return (await res.json()) as PauseState
+  } catch {
+    return { paused: false }
+  }
+}
+
+export async function pauseWorker(): Promise<PauseState> {
+  const res = await fetch('/api/jobs/pause', { method: 'POST' })
+  if (!res.ok) return { paused: false }
+  const body = (await res.json()) as { paused_until: string; reason: string }
+  return { paused: true, reason: body.reason, until: body.paused_until }
+}
+
+export async function resumeWorker(): Promise<PauseState> {
+  await fetch('/api/jobs/pause', { method: 'DELETE' })
+  return { paused: false }
+}

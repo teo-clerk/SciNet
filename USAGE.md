@@ -417,6 +417,22 @@ rejections, kept visible so nobody re-downloads a 13 GiB mistake. Pinning a
 task to a model is the only way routing changes; recommendations never act
 on their own.
 
+### The Librarian
+
+**✦ Librarian** opens a drawer under the map. Ask a question; a local model
+plans its own searches (three tool calls at most), then streams an answer
+whose citations are checked *while they stream* — a `[#id]` naming a paper
+the searches never returned is stripped mid-flight, and the answer says how
+many were removed. The camera flies to the evidence, cited papers pulse,
+and a dashed trail walks them in order; the citation chips under the answer
+open each paper on the map.
+
+The worker yields politely: the librarian takes a short pause lease the
+worker honours at its next job boundary, keeps the model warm when both
+want the same one, and if the worker is mid-write the librarian proceeds
+without the pause — slower, never wrong. The ⏸ in the jobs drawer is the
+same lease with a human on the button.
+
 ## 5. Privacy
 
 Everything runs locally. Parsing, embedding, tagging and search all happen on
