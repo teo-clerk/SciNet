@@ -26,7 +26,7 @@ import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
-from app.core.models_registry import TOTAL_VRAM_MIB, ModelEntry
+from app.core.models_registry import ModelEntry
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +38,22 @@ class GpuSlot:
     exactly enough VRAM for one large model.
     """
 
-    def __init__(self, total_vram_mib: int = TOTAL_VRAM_MIB) -> None:
+    def __init__(self, total_vram_mib: int | None = None) -> None:
         self._lock = threading.RLock()
-        self._total = total_vram_mib
+        # None = resolve from the probed card on first use. Resolving here
+        # would run nvidia-smi at import time — ``GPU = GpuSlot()`` below
+        # executes when this module loads, in every process, tests included.
+        self._configured = total_vram_mib
         self._resident: ModelEntry | None = None
         self._unload: Callable[[], None] | None = None
+
+    @property
+    def total(self) -> int:
+        if self._configured is not None:
+            return self._configured
+        from app.core import hardware
+
+        return hardware.total_vram_mib()
 
     @property
     def resident(self) -> ModelEntry | None:
@@ -54,7 +65,7 @@ class GpuSlot:
         An unmeasured model returns False. Refusing to guess is deliberate: the
         alternative is a job that appears to hang for six minutes a page.
         """
-        return entry.vram_mib is not None and entry.vram_mib <= self._total
+        return entry.vram_mib is not None and entry.vram_mib <= self.total
 
     @contextmanager
     def hold(
@@ -70,10 +81,10 @@ class GpuSlot:
         a *different* model needs the slot, not on every release, so consecutive
         jobs using the same model keep it warm.
         """
-        if entry.vram_mib is not None and entry.vram_mib > self._total:
+        if entry.vram_mib is not None and entry.vram_mib > self.total:
             raise RuntimeError(
                 f"{entry.reference} needs ~{entry.vram_mib} MiB but only "
-                f"{self._total} MiB exists; it would be served from RAM"
+                f"{self.total} MiB exists; it would be served from RAM"
             )
         if entry.vram_mib is None and not allow_unmeasured:
             raise RuntimeError(

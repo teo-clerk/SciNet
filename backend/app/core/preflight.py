@@ -26,14 +26,21 @@ class ModelStatus:
     entry: ModelEntry
     installed: bool
     note: str
+    #: The budget this verdict was made against — the *probed* card's, not the
+    #: reference machine's constant. An earlier version delegated to
+    #: entry.fits_vram, which is pinned to the constant, so a 24 GB card was
+    #: told its models were CPU-only.
+    vram_budget_mib: int = VRAM_BUDGET_MIB
 
     @property
     def fits_vram(self) -> bool | None:
-        return self.entry.fits_vram
+        if self.entry.vram_mib is None:
+            return None
+        return self.entry.vram_mib <= self.vram_budget_mib
 
     @property
     def ok(self) -> bool:
-        return self.installed and self.entry.fits_vram is not False
+        return self.installed and self.fits_vram is not False
 
 
 def _hf_present(reference: str) -> bool:
@@ -52,8 +59,14 @@ def _hf_present(reference: str) -> bool:
 
 
 def check_models(
-    settings: Settings, vram_budget_mib: int = VRAM_BUDGET_MIB
+    settings: Settings, vram_budget_mib: int | None = None
 ) -> list[ModelStatus]:
+    if vram_budget_mib is None:
+        # The probed card's budget; falls back to the reference machine's
+        # constant on boxes with no NVIDIA GPU. Cached after the first call.
+        from app.core import hardware
+
+        vram_budget_mib = hardware.vram_budget_mib()
     server = PrivateOllama(settings)
     # Never starts a server just to look: an unreachable one simply means the
     # project's store has nothing loaded yet.
@@ -82,7 +95,7 @@ def check_models(
                 "usable; it will be served from RAM and be ~20x slower"
             )
 
-        statuses.append(ModelStatus(entry, installed, note))
+        statuses.append(ModelStatus(entry, installed, note, vram_budget_mib))
     return statuses
 
 
