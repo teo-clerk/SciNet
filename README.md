@@ -214,6 +214,19 @@ is on is recorded in the `egress_log` table:
 sqlite3 data/scinet.db "SELECT ts, service, url FROM egress_log ORDER BY ts DESC LIMIT 20"
 ```
 
+## Use it from your AI tools
+
+SciNet is an MCP server: any Model Context Protocol client — Claude Code,
+Claude Desktop, an IDE — can search your library, read your papers, and walk
+the map's regions while you work.
+
+```bash
+claude mcp add scinet -- uv --directory /path/to/SciNet/backend run scinet-mcp
+```
+
+Read-only, localhost-only, and the API must be running (`uv run scinet-up`).
+Details and the full tool table: [docs/MCP.md](docs/MCP.md).
+
 ## Health checks
 
 ```bash

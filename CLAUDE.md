@@ -286,6 +286,7 @@ cd backend && uv run python ../scripts/force_project.py --apply  # rebuild the m
 cd backend && uv run python ../scripts/prepare_export.py  # clean before zipping
 cd backend && SCINET_MAX_PARSE_PAGES=0 uv run python -m app.workers.runner  # no page cap
 cd backend && uv run scinet-up                   # API + worker + UI, one terminal
+cd backend && uv run scinet-mcp                  # MCP server (stdio; needs the API up)
 cd backend && uv run scinet-stop                 # stop API, worker, Vite
 ./scripts/stop.sh                                # the same, from anywhere
 bun scripts/record_demo.mjs scripts/scenarios/smoke.mjs  # record a scripted demo
