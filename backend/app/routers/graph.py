@@ -53,13 +53,42 @@ def _active_run(db: Session) -> ProjectionRun:
     return run
 
 
+@router.get("/runs")
+def list_runs(db: Session = Depends(get_db)) -> list[dict]:
+    """Every retained projection run — the morph view's picker.
+
+    Inactive runs are kept on purpose (rollback, and A/B-ing two embedding
+    models); this is where keeping them starts paying rent.
+    """
+    runs = db.scalars(select(ProjectionRun).order_by(ProjectionRun.id.desc())).all()
+    return [
+        {
+            "id": r.id,
+            "model_id": r.model_id,
+            "method": r.method,
+            "is_active": r.is_active,
+            "n_fit": r.n_fit,
+            "fitted_at": r.fitted_at.isoformat() if r.fitted_at else None,
+        }
+        for r in runs
+    ]
+
+
 @router.get("")
 def get_graph(
     request: Request,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    run_id: int | None = Query(
+        None, description="serve a retained run instead of the active one"
+    ),
 ) -> Response:
-    run = _active_run(db)
+    if run_id is None:
+        run = _active_run(db)
+    else:
+        run = db.get(ProjectionRun, run_id)
+        if run is None:
+            raise HTTPException(404, "no such projection run")
 
     rows = db.execute(
         select(

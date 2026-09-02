@@ -143,6 +143,10 @@ def api_app(tmp_path, monkeypatch):
     store.add(2, np.array([0.9, 0.1, 0, 0, 0, 0, 0, 0], dtype=np.float32))
     store.flush()
 
+    # reset() recovers the COLD state if an earlier test poisoned the
+    # process-global singleton to FAILED; start stays a no-op so the
+    # semantic route reports "warming" deterministically.
+    warmup.WARMER.reset()
     monkeypatch.setattr(warmup.WARMER, "start", lambda: None)
 
     app = create_app()
