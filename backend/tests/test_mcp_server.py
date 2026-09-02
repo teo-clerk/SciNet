@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 
 import httpx
+import numpy as np
 import pytest
 from mcp.shared.memory import create_connected_server_and_client_session
 from sqlalchemy.orm import sessionmaker
@@ -23,7 +24,8 @@ from app.core.db import Base, build_engine, get_db
 from app.main import create_app
 from app.mcp.server import build_server
 from app.models.enums import PaperStatus
-from app.models.paper import Paper, PaperMeta
+from app.models.paper import MarkdownDoc, Paper, PaperMeta
+from app.workers.embed_handlers import open_store
 
 
 @pytest.fixture
@@ -41,7 +43,10 @@ def api_app(tmp_path, monkeypatch):
         models_dir=tmp_path / "models",
         db_path=tmp_path / "api.db",
         enrichment_enabled=False,
+        embed_model="test-embed",
+        embed_dim=8,
     )
+    settings.vectors_dir.mkdir(parents=True, exist_ok=True)
     engine = build_engine(f"sqlite+pysqlite:///{settings.db_path}")
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
@@ -72,7 +77,21 @@ def api_app(tmp_path, monkeypatch):
                     authors_json=json.dumps(["A. Author", "B. Author"]),
                 )
             )
+        # Paper 1 has parsed markdown on disk — a known 1,000-character text so
+        # the read_paper windowing arithmetic is checkable to the character.
+        md_path = tmp_path / "markdown" / "000" / "000001.md"
+        md_path.parent.mkdir(parents=True, exist_ok=True)
+        md_path.write_text("0123456789" * 100, encoding="utf-8")
+        session.add(
+            MarkdownDoc(paper_id=1, md_path=str(md_path), tier=0, parser="test")
+        )
         session.commit()
+
+    # A real (tiny) vector store: similarity runs the actual cosine path.
+    store = open_store(settings)
+    store.add(1, np.array([1, 0, 0, 0, 0, 0, 0, 0], dtype=np.float32))
+    store.add(2, np.array([0.9, 0.1, 0, 0, 0, 0, 0, 0], dtype=np.float32))
+    store.flush()
 
     monkeypatch.setattr(warmup.WARMER, "start", lambda: None)
 
@@ -177,3 +196,57 @@ async def test_an_invalid_mode_is_refused_with_the_valid_ones(mcp_server) -> Non
         )
     assert result.isError
     assert "semantic" in result.content[0].text
+
+
+# --- reading -----------------------------------------------------------------
+
+
+async def test_read_paper_pages_by_window(mcp_server) -> None:
+    async with create_connected_server_and_client_session(
+        mcp_server._mcp_server
+    ) as session:
+        first = _payload(
+            await session.call_tool(
+                "read_paper", {"paper_id": 1, "offset": 0, "window": 300}
+            )
+        )
+        last = _payload(
+            await session.call_tool(
+                "read_paper", {"paper_id": 1, "offset": 900, "window": 300}
+            )
+        )
+    assert first["total_chars"] == 1000
+    assert len(first["text"]) == 300 and first["next_offset"] == 300
+    assert len(last["text"]) == 100 and last["next_offset"] is None
+
+
+async def test_reading_an_unparsed_paper_says_so(mcp_server) -> None:
+    async with create_connected_server_and_client_session(
+        mcp_server._mcp_server
+    ) as session:
+        result = await session.call_tool("read_paper", {"paper_id": 2})
+    assert result.isError
+    assert "not been parsed" in result.content[0].text
+
+
+# --- similarity --------------------------------------------------------------
+
+
+async def test_similar_papers_ranks_by_real_cosine(mcp_server) -> None:
+    async with create_connected_server_and_client_session(
+        mcp_server._mcp_server
+    ) as session:
+        body = _payload(await session.call_tool("similar_papers", {"paper_id": 1}))
+    assert [s["paper_id"] for s in body["similar"]] == [2]
+    hit = body["similar"][0]
+    assert hit["title"] == "Deep Learning for SAR Image Classification"
+    assert hit["similarity"] > 0.9
+
+
+async def test_similarity_without_an_embedding_is_a_clear_error(mcp_server) -> None:
+    async with create_connected_server_and_client_session(
+        mcp_server._mcp_server
+    ) as session:
+        result = await session.call_tool("similar_papers", {"paper_id": 999})
+    assert result.isError
+    assert "no embedding" in result.content[0].text

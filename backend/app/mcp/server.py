@@ -25,6 +25,11 @@ from app.mcp.client import ApiClient
 SEARCH_MODES = ("semantic", "fulltext", "title")
 DEFAULT_SEARCH_LIMIT = 10
 MAX_SEARCH_LIMIT = 40
+#: read_paper pages in windows: a book is hundreds of thousands of characters,
+#: and an agent that asks for all of them at once has usually made a mistake.
+DEFAULT_READ_WINDOW = 4_000
+MAX_READ_WINDOW = 20_000
+MAX_SIMILAR = 25
 
 INSTRUCTIONS = (
     "SciNet is the user's local, private library of scientific papers and "
@@ -147,6 +152,63 @@ def build_server(
         if status != 200:
             raise ValueError(f"the papers endpoint answered {status}: {body}")
         return _trim_paper(body)
+
+    @server.tool()
+    async def read_paper(
+        paper_id: int, offset: int = 0, window: int = DEFAULT_READ_WINDOW
+    ) -> dict[str, Any]:
+        """Read a window of a paper's parsed full text (markdown).
+
+        total_chars reports the document's size up front; page forward by
+        calling again with next_offset until it comes back null. Windows are
+        capped — a book is read in passes, not swallowed.
+        """
+        status, body = await api.get_json(f"/api/papers/{paper_id}/markdown")
+        if status in (404, 410):
+            detail = body.get("detail") if isinstance(body, dict) else body
+            raise ValueError(f"paper {paper_id}: {detail}")
+        if status != 200:
+            raise ValueError(f"the markdown endpoint answered {status}: {body}")
+        text = body if isinstance(body, str) else str(body)
+        offset = max(0, int(offset))
+        window = max(1, min(int(window), MAX_READ_WINDOW))
+        piece = text[offset : offset + window]
+        end = offset + len(piece)
+        return {
+            "paper_id": paper_id,
+            "total_chars": len(text),
+            "offset": offset,
+            "text": piece,
+            "next_offset": end if end < len(text) else None,
+        }
+
+    @server.tool()
+    async def similar_papers(paper_id: int, k: int = 5) -> dict[str, Any]:
+        """Papers nearest to this one in embedding space — "more like this".
+
+        Similarity is computed on the full document vectors, not the map's
+        3D coordinates, which distort global distance on purpose.
+        """
+        k = max(1, min(int(k), MAX_SIMILAR))
+        status, body = await api.get_json(
+            f"/api/graph/similar/{paper_id}", params={"k": k}
+        )
+        if status == 404:
+            detail = body.get("detail") if isinstance(body, dict) else body
+            raise ValueError(f"paper {paper_id}: {detail}")
+        if status != 200:
+            raise ValueError(f"the graph endpoint answered {status}: {body}")
+        return {
+            "paper_id": paper_id,
+            "similar": [
+                {
+                    "paper_id": hit["id"],
+                    "title": hit["title"],
+                    "similarity": hit["similarity"],
+                }
+                for hit in body
+            ],
+        }
 
     return server
 
