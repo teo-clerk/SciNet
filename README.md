@@ -1,5 +1,7 @@
 # SciNet
 
+[![ci](https://github.com/teo-clerk/SciNet/actions/workflows/ci.yml/badge.svg)](https://github.com/teo-clerk/SciNet/actions/workflows/ci.yml)
+
 A local, privacy-first map of your scientific paper library.
 
 SciNet watches a folder of PDFs, parses them to Markdown with local models,
@@ -12,6 +14,11 @@ turn enrichment on.
 Working end to end on a real 300-paper library. Papers are watched or uploaded,
 deduplicated, parsed, embedded, positioned in 3D, clustered, named and tagged;
 the map persists and updates incrementally, and renders at 60 fps.
+
+The full suite — 634 backend tests and 82 frontend tests — runs in CI on every
+push, on a runner with no GPU, no model weights, and no network access to
+models: the pipeline's seams are designed to be testable without the hardware
+they orchestrate.
 
 **[USAGE.md](USAGE.md) is the guide** — setup, the three commands to run it,
 how to get papers in, and how to read the map.

@@ -1,0 +1,45 @@
+# The suite needs no GPU, no network, and no model weights: Ollama is faked by
+# duck-typed clients, torch is installed but never loads a model, and fixtures
+# are generated in code. That is a deliberate property of the tests, and this
+# workflow exists to keep it true — a test that quietly grows a model download
+# or a GPU assumption dies here first, on a runner that has neither.
+
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      # uv reads backend/.python-version and provisions 3.12 itself; torch is a
+      # base dependency (the embedder is not optional), so the first run is a
+      # large download and every later run comes from the cache above.
+      - run: uv sync --group dev
+      - run: uv run ruff check . ../scripts
+      - run: uv run ruff format --check . ../scripts
+      - run: uv run pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
