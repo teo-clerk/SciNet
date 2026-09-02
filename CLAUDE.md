@@ -200,7 +200,7 @@ backend/app/
   routers/   thin HTTP; no business logic
   services/  ingest · parse · metadata · embed · tagging · project
   workers/   queue (SQLite-backed) · runner · handlers
-  cli/       console entry points (scinet-stop)
+  cli/       console entry points (scinet-up, scinet-stop)
 frontend/src/
   graph/     Scene · PointCloud (one THREE.Points, one draw call) · shaders
   panels/    sidebar, filters, search, status
@@ -285,8 +285,10 @@ cd backend && uv run python ../scripts/revive_jobs.py  # requeue env-killed jobs
 cd backend && uv run python ../scripts/force_project.py --apply  # rebuild the map
 cd backend && uv run python ../scripts/prepare_export.py  # clean before zipping
 cd backend && SCINET_MAX_PARSE_PAGES=0 uv run python -m app.workers.runner  # no page cap
+cd backend && uv run scinet-up                   # API + worker + UI, one terminal
 cd backend && uv run scinet-stop                 # stop API, worker, Vite
 ./scripts/stop.sh                                # the same, from anywhere
+bun scripts/record_demo.mjs scripts/scenarios/smoke.mjs  # record a scripted demo
 cd frontend && bun test                          # frontend unit tests
 bun scripts/verify_render.mjs http://localhost:5173  # 3D render gate
 cd backend && uv run python ../scripts/eval_clustering.py  # cluster quality

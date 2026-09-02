@@ -58,7 +58,19 @@ A model reported as `CPU-ONLY` will work but roughly twenty times slower.
 
 ## 2. Running it
 
-SciNet is three processes. Each wants its own terminal.
+One command starts everything:
+
+```bash
+cd backend && uv run scinet-up          # API + worker + UI, logs in one terminal
+```
+
+Ctrl+C stops all three. `--no-worker` serves the existing map without
+processing anything; `--dry-run` prints what would start. `uv run scinet-stop`
+still works from anywhere and stops whatever is running, however it was
+started.
+
+Prefer separate terminals — for keeping the worker's log apart, or for
+restarting one piece without the others? SciNet is three processes:
 
 ```bash
 # 1 — the API. Binds to 127.0.0.1 and nothing else.
