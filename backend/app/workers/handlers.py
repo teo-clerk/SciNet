@@ -198,6 +198,7 @@ def handle_enrich(session: Session, job: Job, settings: Settings) -> None:
         BROKER.publish("enrich.done", paper_id=paper.id)
 
 
+from app.services.models.measure import handle_measure  # noqa: E402
 from app.workers.embed_handlers import (  # noqa: E402
     handle_embed,
     handle_project,
@@ -211,4 +212,5 @@ HANDLERS = {
     JobKind.PROJECT: handle_project,
     JobKind.TAG: handle_tag,
     JobKind.ENRICH: handle_enrich,
+    JobKind.MEASURE: handle_measure,
 }

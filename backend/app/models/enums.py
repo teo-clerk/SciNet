@@ -30,6 +30,7 @@ class JobKind(StrEnum):
     TAG = "tag"
     PROJECT = "project"
     ENRICH = "enrich"
+    MEASURE = "measure"
 
 
 class JobState(StrEnum):
@@ -88,12 +89,15 @@ class ProfileSource(StrEnum):
 
 
 # Job priority — lower runs first. Tagging is deliberately last so the map is
-# navigable long before tags finish (see roadmap M2).
+# navigable long before tags finish (see roadmap M2). MEASURE sits just ahead
+# of the LLM era: a measurement is a human waiting at the Model Lab panel,
+# and it must never preempt the pipeline that makes the map itself.
 PRIORITY = {
     JobKind.PARSE: 10,
     JobKind.METADATA: 20,
     JobKind.EMBED: 30,
     JobKind.PROJECT: 40,
     JobKind.ENRICH: 50,
+    JobKind.MEASURE: 90,
     JobKind.TAG: 100,
 }

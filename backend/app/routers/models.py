@@ -75,6 +75,10 @@ class PinRequest(BaseModel):
     reference: str
 
 
+class MeasureRequest(BaseModel):
+    reference: str
+
+
 @router.get("", response_model=ModelsOverview)
 def models_overview(
     db: Session = Depends(get_db),
@@ -130,6 +134,28 @@ def models_overview(
         pinnable=[task.value for task in PINNABLE],
         resident=PRIVATE_OLLAMA.resident_models(),
     )
+
+
+@router.post("/measure")
+def request_measurement(
+    body: MeasureRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Queue a measurement; the worker runs it when the card is free.
+
+    Idempotent per reference — mashing the button queues one job, exactly
+    like the reproject button. (The API writing a job row is precedented:
+    that is how reproject works too.)
+    """
+    from app.services.models.measure import enqueue_measure
+
+    job, created = enqueue_measure(db, body.reference.strip())
+    db.commit()
+    return {
+        "job_id": job.id,
+        "reference": body.reference.strip(),
+        "already_queued": not created,
+    }
 
 
 def _task_or_404(task_value: str) -> TaskKind:

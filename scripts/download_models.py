@@ -245,7 +245,18 @@ def main() -> int:
                 f"    {reference:<28} resident={human(total)} vram={human(vram)} "
                 f"{'FITS' if fits else 'DOES NOT FIT'}"
             )
-        print("\n  update vram_mib in app/core/models_registry.py with these numbers")
+
+        # Persist through the same path the Model Lab uses. This line used to
+        # read "update vram_mib in models_registry.py with these numbers" —
+        # a loop closed by hand, which is to say usually not closed.
+        from app.core.db import session_scope
+        from app.services.models.profiles import record_measurement, seed_profiles
+
+        with session_scope() as session:
+            seed_profiles(session)
+            for reference, total, vram in results:
+                record_measurement(session, reference, total_mib=total, vram_mib=vram)
+        print("\n  recorded in the model catalog (see the Model Lab, /api/models)")
 
     print()
     if args.check and not ok:
