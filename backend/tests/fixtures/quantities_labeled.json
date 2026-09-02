@@ -244,6 +244,18 @@
       "pending": [
         "Gy"
       ]
+    },
+    {
+      "sentence": "Let the matrix elements satisfy -7 A < i,j < n for the bound to hold cleanly.",
+      "expect": []
+    },
+    {
+      "sentence": "Panels are compared at 0 A B in the flow configuration <br> shown above the axis.",
+      "expect": []
+    },
+    {
+      "sentence": "The payload lifts 5 t to the reference orbit in the heavy configuration.",
+      "expect": []
     }
   ]
 }

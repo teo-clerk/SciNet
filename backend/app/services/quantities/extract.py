@@ -45,7 +45,6 @@ UNITS: dict[str, tuple[str, str]] = {
     "mg": ("milligram", "mass"),
     "g": ("gram", "mass"),
     "kg": ("kilogram", "mass"),
-    "t": ("metric_ton", "mass"),
     # time
     "ns": ("nanosecond", "time"),
     "µs": ("microsecond", "time"),
@@ -79,12 +78,14 @@ UNITS: dict[str, tuple[str, str]] = {
     "W": ("watt", "power"),
     "kW": ("kilowatt", "power"),
     "MW": ("megawatt", "power"),
-    # electromagnetism
+    # electromagnetism — bare "A" is deliberately absent: on a real corpus
+    # it matched matrix indices and figure-panel labels a thousand times
+    # ("-7 A < i,j", "0 A B") and amperes not once. Bare "t" (tonnes)
+    # left for the same reason. mA and the compounds carry the load.
     "mV": ("millivolt", "voltage"),
     "V": ("volt", "voltage"),
     "kV": ("kilovolt", "voltage"),
     "mA": ("milliampere", "current"),
-    "A": ("ampere", "current"),
     "nT": ("nanotesla", "magnetic_field"),
     "mT": ("millitesla", "magnetic_field"),
     "T": ("tesla", "magnetic_field"),
@@ -196,12 +197,19 @@ def _looks_like_a_unit(token: str) -> bool:
     return any(c.isupper() or c in "°µ/%" for c in token)
 
 
+#: Markup and table debris that reads as text and is not prose — the same
+#: furniture lesson the abstract ladder learned: converted tables and figure
+#: text carry numbers that describe layout, not measurements.
+_NOT_PROSE = ("<br>", "<!--", "|")
+
+
 def sentences_of(text: str) -> list[str]:
     return [
         piece.strip()
         for piece in _SENTENCE_SPLIT.split(text)
         if MIN_SENTENCE_CHARS <= len(piece.strip()) <= MAX_SENTENCE_CHARS
         and " " in piece
+        and not any(marker in piece for marker in _NOT_PROSE)
     ]
 
 
