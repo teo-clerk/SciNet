@@ -40,6 +40,7 @@ dependencies = [
     # mcp server — the library as context for any MCP client. Pinned below 2:
     # the SDK has moved import paths within major versions before.
     "mcp>=1.2,<2",
+    "pint>=0.25.3",
 ]
 
 [project.scripts]

@@ -12,6 +12,7 @@ from app.models.enums import (
     ModelVerdict,
     PaperStatus,
     ProfileSource,
+    QuantityStatus,
     TagKind,
     TagStatus,
 )
@@ -23,6 +24,7 @@ from app.models.projection import (
     Projection,
     ProjectionRun,
 )
+from app.models.quantity import Quantity
 from app.models.system import EgressLog, Job, Setting
 from app.models.tagging import PaperTag, Tag
 
@@ -47,6 +49,8 @@ __all__ = [
     "ProfileSource",
     "Projection",
     "ProjectionRun",
+    "Quantity",
+    "QuantityStatus",
     "Setting",
     "Tag",
     "TagKind",

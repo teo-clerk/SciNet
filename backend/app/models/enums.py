@@ -88,6 +88,14 @@ class ProfileSource(StrEnum):
     USER = "user"  # added by hand in the Model Lab
 
 
+class QuantityStatus(StrEnum):
+    AUTO = "auto"  # regex-extracted with a known unit; trusted
+    PENDING_LLM = "pending_llm"  # ambiguous; awaiting batched adjudication
+    PENDING_REVIEW = "pending_review"  # the LLM was unsure; a human decides
+    CONFIRMED = "confirmed"  # a human agreed
+    REJECTED = "rejected"  # a human disagreed; excluded from filters
+
+
 # Job priority — lower runs first. Tagging is deliberately last so the map is
 # navigable long before tags finish (see roadmap M2). MEASURE sits just ahead
 # of the LLM era: a measurement is a human waiting at the Model Lab panel,
