@@ -64,6 +64,13 @@ export function FilterBar() {
             Quarantine <span className="badge count">{quarantined}</span>
           </button>
         )}
+        <button
+          className={view === 'models' ? 'active' : ''}
+          onClick={() => setView('models')}
+          title="Hardware, the model catalog, and task routing"
+        >
+          Models
+        </button>
       </div>
 
       {view === 'map' && <MapControls />}
@@ -84,27 +91,35 @@ export function FilterBar() {
 
       {view === 'map' && <TimeScrubber />}
 
-      <div className="tags">
-        {vocabulary.map((slug, id) => (
-          <button
-            key={slug}
-            className={activeTags.has(id) ? 'tag active' : 'tag'}
-            onClick={() => toggleTag(id)}
-          >
-            {slug}
-          </button>
-        ))}
-      </div>
+      {/* The Model Lab is not a view over papers: a tag cloud and an
+          N / M counter above it would describe a corpus it does not show. */}
+      {view !== 'models' && (
+        <div className="tags">
+          {vocabulary.map((slug, id) => (
+            <button
+              key={slug}
+              className={activeTags.has(id) ? 'tag active' : 'tag'}
+              onClick={() => toggleTag(id)}
+            >
+              {slug}
+            </button>
+          ))}
+        </div>
+      )}
 
       <span className="spacer" />
-      <UploadButton />
-      <span className={filtering ? 'count active' : 'count'}>
-        {shown.toLocaleString()} / {count.toLocaleString()}
-      </span>
-      {filtering && (
-        <button className="clear" onClick={clearFilters}>
-          clear
-        </button>
+      {view !== 'models' && (
+        <>
+          <UploadButton />
+          <span className={filtering ? 'count active' : 'count'}>
+            {shown.toLocaleString()} / {count.toLocaleString()}
+          </span>
+          {filtering && (
+            <button className="clear" onClick={clearFilters}>
+              clear
+            </button>
+          )}
+        </>
       )}
     </div>
   )

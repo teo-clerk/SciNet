@@ -405,6 +405,18 @@ Tag filters combine with OR: picking two topics widens the view.
 
 ---
 
+### The Models view
+
+The **Models** tab is the machine's own report: which GPU was detected and
+its real budget, every model in the catalog with its *measured* footprint
+and verdict (a model never measured shows **unproven**, not a guess), models
+found installed in your system Ollama that SciNet could use, and a routing
+table that says which model answers which task. **Measure** warms a model on
+the worker and records what actually happened — including the two shipped
+rejections, kept visible so nobody re-downloads a 13 GiB mistake. Pinning a
+task to a model is the only way routing changes; recommendations never act
+on their own.
+
 ## 5. Privacy
 
 Everything runs locally. Parsing, embedding, tagging and search all happen on

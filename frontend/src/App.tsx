@@ -6,6 +6,7 @@ import { ClusterInspector } from '@/panels/ClusterInspector'
 import { DetailPanel } from '@/panels/DetailPanel'
 import { FilterBar } from '@/panels/FilterBar'
 import { ListView } from '@/panels/ListView'
+import { ModelLab } from '@/panels/ModelLab'
 import { QuarantineView } from '@/panels/QuarantineView'
 import { JobsDrawer } from '@/panels/JobsDrawer'
 import { StatusBar } from '@/panels/StatusBar'
@@ -36,6 +37,8 @@ export default function App() {
             <Scene />
           ) : view === 'quarantine' ? (
             <QuarantineView />
+          ) : view === 'models' ? (
+            <ModelLab />
           ) : (
             <ListView />
           )
