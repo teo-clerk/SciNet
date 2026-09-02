@@ -193,12 +193,17 @@ def handle_tag(session: Session, job: Job, settings: Settings) -> None:
     markdown = _markdown_for(session, paper.id)
     headings = [s.title for s in split_sections(markdown) if s.title][:20]
 
+    from app.core.model_router import TaskKind
+    from app.core.model_router import resolve as resolve_task_model
+
+    tag_model = resolve_task_model(TaskKind.TAG_PAPER, settings, session)
     result = tagger.tag_paper(
         title=meta.title,
         abstract=meta.abstract,
         headings=headings,
         vocabulary=vocabulary,
         settings=settings,
+        model=tag_model,
     )
 
     meta.summary = result["summary"] or meta.summary
@@ -214,7 +219,9 @@ def handle_tag(session: Session, job: Job, settings: Settings) -> None:
                     tag_id=tag.id,
                     confidence=1.0,
                     source="llm",
-                    model_id=settings.llm_model,
+                    # Provenance records the model that actually answered —
+                    # the routed one, not whatever the settings field says.
+                    model_id=tag_model,
                 )
             )
 

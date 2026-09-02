@@ -80,6 +80,7 @@ def name_cluster(
     *,
     settings: Settings | None = None,
     client: httpx.Client | None = None,
+    model: str | None = None,
 ) -> str | None:
     """Return a short label for a cluster, or None if it cannot be named."""
     settings = settings or get_settings()
@@ -87,7 +88,7 @@ def name_cluster(
         return None
 
     payload = {
-        "model": settings.llm_model,
+        "model": model or settings.llm_model,
         "prompt": build_prompt(terms, titles),
         "stream": False,
         "format": NAME_SCHEMA,
@@ -187,10 +188,12 @@ def trim_to_sentence(text: str, limit: int) -> str:
     return (head[:space] if space > 0 else head).rstrip(",;:") + "\u2026"
 
 
-def _ask_json(prompt: str, schema: dict, settings, client) -> dict | None:
+def _ask_json(
+    prompt: str, schema: dict, settings, client, model: str | None = None
+) -> dict | None:
     """One constrained call, returning the whole object."""
     payload = {
-        "model": settings.llm_model,
+        "model": model or settings.llm_model,
         "prompt": prompt,
         "stream": False,
         "format": schema,
@@ -211,11 +214,13 @@ def _ask_json(prompt: str, schema: dict, settings, client) -> dict | None:
             http.close()
 
 
-def _ask(prompt: str, schema: dict, key: str, settings, client) -> str | None:
+def _ask(
+    prompt: str, schema: dict, key: str, settings, client, model: str | None = None
+) -> str | None:
     """One constrained call. Returns None rather than raising: an unnamed
     region is a missing label, not a failed projection."""
     payload = {
-        "model": settings.llm_model,
+        "model": model or settings.llm_model,
         "prompt": prompt,
         "stream": False,
         "format": schema,
@@ -244,6 +249,7 @@ def describe_cluster(
     *,
     settings: Settings | None = None,
     client: httpx.Client | None = None,
+    model: str | None = None,
 ) -> str | None:
     """A few sentences on what a region contains and what holds it together.
 
@@ -271,7 +277,7 @@ def describe_cluster(
             "do not restate the group's name.",
         ]
     )
-    overview = _ask(prompt, OVERVIEW_SCHEMA, "overview", settings, client)
+    overview = _ask(prompt, OVERVIEW_SCHEMA, "overview", settings, client, model)
     return trim_to_sentence(overview, MAX_OVERVIEW_CHARS) if overview else None
 
 
@@ -283,6 +289,7 @@ def describe_bridge(
     *,
     settings: Settings | None = None,
     client: httpx.Client | None = None,
+    model: str | None = None,
 ) -> str | None:
     """How two regions relate, grounded in the papers that span them.
 
@@ -314,7 +321,7 @@ def describe_bridge(
             "single word.",
         ]
     )
-    answer = _ask_json(prompt, BRIDGE_SCHEMA, settings, client)
+    answer = _ask_json(prompt, BRIDGE_SCHEMA, settings, client, model)
     if not answer or not answer.get("connected"):
         # The model was asked directly and said no. Drawing the line anyway
         # would assert a relationship it just declined to find.

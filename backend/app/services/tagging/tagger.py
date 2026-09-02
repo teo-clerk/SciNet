@@ -82,13 +82,14 @@ def build_prompt(
     return "\n".join(parts)[:MAX_INPUT_CHARS]
 
 
-def available(settings: Settings | None = None) -> bool:
+def available(settings: Settings | None = None, reference: str | None = None) -> bool:
+    """Is the model — the routed one, or the default — actually installed?"""
     settings = settings or get_settings()
     try:
         PRIVATE_OLLAMA.start()
     except Exception:  # noqa: BLE001 - no binary, or it would not start
         return False
-    return settings.llm_model in PRIVATE_OLLAMA.installed()
+    return (reference or settings.llm_model) in PRIVATE_OLLAMA.installed()
 
 
 def unload(settings: Settings | None = None) -> None:
@@ -104,17 +105,23 @@ def tag_paper(
     vocabulary: list[str],
     settings: Settings | None = None,
     client: httpx.Client | None = None,
+    model: str | None = None,
 ) -> dict:
-    """Return ``{"summary": str, "tags": [...], "proposed_tags": [...]}``."""
+    """Return ``{"summary": str, "tags": [...], "proposed_tags": [...]}``.
+
+    ``model`` is the router's resolved reference; None keeps the settings
+    default, which is what every call site did before routing existed.
+    """
     settings = settings or get_settings()
-    if not available(settings):
+    reference = model or settings.llm_model
+    if not available(settings, reference):
         raise TaggingUnavailable(
-            f"{settings.llm_model} is not in the project's model store; "
+            f"{reference} is not in the project's model store; "
             "run scripts/download_models.py"
         )
 
     payload = {
-        "model": settings.llm_model,
+        "model": reference,
         "prompt": build_prompt(title=title, abstract=abstract, headings=headings),
         "stream": False,
         "format": response_schema(vocabulary),

@@ -294,9 +294,13 @@ def _write_links(
     can_name: bool,
 ) -> None:
     """Record which regions are linked, and by what."""
+    from app.core.model_router import TaskKind
+    from app.core.model_router import resolve as resolve_model
     from app.models import ClusterLink
     from app.services.project import naming
     from app.services.project.bridges import find_bridges, shared_terms
+
+    bridge_model = resolve_model(TaskKind.BRIDGE_VERDICT, session=session)
 
     bridges = find_bridges(matrix, paper_ids, assignments, probabilities, stored)
     if not bridges:
@@ -322,6 +326,7 @@ def _write_links(
                 names.get(right, "?"),
                 shared,
                 [t for t in bridge_titles if t],
+                model=bridge_model,
             )
         if can_name and not summary:
             # The model was asked whether these two regions genuinely connect
@@ -373,11 +378,15 @@ def _write_clusters(
         ).all()
     }
 
+    from app.core.model_router import TaskKind
+    from app.core.model_router import resolve as resolve_model
     from app.services.project import naming
 
     can_name = naming.available()
     if not can_name:
         logger.info("tagging model unavailable; clusters will be unnamed")
+    name_model = resolve_model(TaskKind.NAME_CLUSTER, session=session)
+    overview_model = resolve_model(TaskKind.DESCRIBE_CLUSTER, session=session)
 
     stored: dict[int, int] = {}  # hdbscan label -> cluster row id
     term_lists: dict[int, list[str]] = {}
@@ -388,9 +397,13 @@ def _write_clusters(
         terms = top_terms(member_titles)
         usable_titles = [t for t in member_titles if t]
 
-        label = naming.name_cluster(terms, usable_titles) if can_name else None
+        label = (
+            naming.name_cluster(terms, usable_titles, model=name_model)
+            if can_name
+            else None
+        )
         overview = (
-            naming.describe_cluster(label, terms, usable_titles)
+            naming.describe_cluster(label, terms, usable_titles, model=overview_model)
             if can_name and label
             else None
         )
