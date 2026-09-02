@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.models import Job, JobState
 from app.schemas.paper import JobCounts
+from app.workers import lease
 from app.workers.queue import pending_counts
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -64,3 +65,40 @@ def retry_dead(db: Session = Depends(get_db)) -> dict[str, int]:
         db.add(job)
     db.commit()
     return {"requeued": len(rows)}
+
+
+@router.post("/pause")
+def pause_worker(db: Session = Depends(get_db)) -> dict:
+    """Ask the worker to stop claiming at its next job boundary.
+
+    One mechanism for two callers: the librarian takes short self-refreshing
+    leases; this endpoint takes a long one, because a human pressed a button
+    and a human will unpress it. The API writing a settings row is
+    precedented — it already writes the jobs table (reproject).
+    """
+    held = lease.take(
+        db, ttl_seconds=lease.USER_TTL_SECONDS, reason="user", keep_warm=None
+    )
+    db.commit()
+    return {"paused_until": held.until.isoformat(), "reason": held.reason}
+
+
+@router.delete("/pause")
+def resume_worker(db: Session = Depends(get_db)) -> dict:
+    """The resume button: end whatever lease exists, expressly."""
+    lease.release_any(db)
+    db.commit()
+    return {"paused": False}
+
+
+@router.get("/pause")
+def pause_state(db: Session = Depends(get_db)) -> dict:
+    held = lease.active(db)
+    if held is None:
+        return {"paused": False}
+    return {
+        "paused": True,
+        "reason": held.reason,
+        "until": held.until.isoformat(),
+        "acked": lease.acked(db, held),
+    }

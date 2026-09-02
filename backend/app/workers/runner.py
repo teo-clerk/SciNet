@@ -23,11 +23,13 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.db import session_scope
 from app.core.events import BROKER
-from app.core.gpu import free_all_models
+from app.core.gpu import GPU, free_all_models
 from app.core.model_store import configure_environment
+from app.core.models_registry import Runtime
 from app.models import PRIORITY, Job, JobKind, JobState, Paper, PaperStatus
 from app.services.ingest.quarantine import quarantine_document
 from app.services.parse.errors import is_fatal
+from app.workers import lease
 from app.workers.handlers import HANDLERS
 from app.workers.queue import claim_next, complete, fail, requeue_stale
 
@@ -44,6 +46,9 @@ class Worker:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
         self._stopping = False
+        # The nonce of the pause lease already yielded to, so the card is
+        # freed and the ack written once per lease, not once per 2 s poll.
+        self._pause_seen: str | None = None
 
     def request_stop(self, *_: object) -> None:
         if self._stopping:
@@ -80,6 +85,8 @@ class Worker:
         for kind in STAGE_ORDER:
             if self._stopping:
                 break
+            if self._honour_pause():
+                break
             drained = self.drain_stage(kind)
             if drained:
                 # The stage's model is no longer needed; empty the card before
@@ -96,6 +103,8 @@ class Worker:
 
         done = 0
         while not self._stopping:
+            if self._honour_pause():
+                break
             with session_scope() as session:
                 job = claim_next(session, kinds=[kind])
                 if job is None:
@@ -117,6 +126,40 @@ class Worker:
                     logger.exception("%s job %d failed", kind.value, job.id)
                     self._record_failure(session, job, kind, exc)
         return done
+
+    def _honour_pause(self) -> bool:
+        """True while an unexpired pause lease exists.
+
+        First sight of a lease yields the card (unless its keep_warm names
+        exactly what the Ollama slot holds — a pauser about to use the same
+        model should inherit it warm) and writes the ack echoing the nonce.
+        After that, honouring it costs one SELECT per poll; run_forever's
+        idle sleep paces the polling, no new loop needed.
+        """
+        with session_scope() as session:
+            held = lease.active(session)
+            if held is None:
+                self._pause_seen = None
+                return False
+            if self._pause_seen != held.nonce:
+                resident = GPU.resident
+                keep = (
+                    held.keep_warm is not None
+                    and resident is not None
+                    and resident.runtime is Runtime.OLLAMA
+                    and resident.reference == held.keep_warm
+                )
+                if not keep:
+                    free_all_models()
+                lease.ack(session, held.nonce)
+                self._pause_seen = held.nonce
+                logger.info(
+                    "paused for %s until %s%s",
+                    held.reason,
+                    held.until.isoformat(timespec="seconds"),
+                    " (model kept warm)" if keep else "",
+                )
+        return True
 
     def _record_failure(
         self, session: Session, job: Job, kind: JobKind, exc: BaseException
