@@ -31,6 +31,8 @@ class JobKind(StrEnum):
     PROJECT = "project"
     ENRICH = "enrich"
     MEASURE = "measure"
+    EXTRACT = "extract"
+    ADJUDICATE = "adjudicate"
 
 
 class JobState(StrEnum):
@@ -104,8 +106,12 @@ PRIORITY = {
     JobKind.PARSE: 10,
     JobKind.METADATA: 20,
     JobKind.EMBED: 30,
+    # Between EMBED and PROJECT: pure CPU, and the map must never wait on it.
+    JobKind.EXTRACT: 35,
     JobKind.PROJECT: 40,
     JobKind.ENRICH: 50,
     JobKind.MEASURE: 90,
+    # Next to TAG so it shares the LLM-resident era; one reload between them.
+    JobKind.ADJUDICATE: 95,
     JobKind.TAG: 100,
 }

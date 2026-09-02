@@ -204,6 +204,7 @@ from app.workers.embed_handlers import (  # noqa: E402
     handle_project,
     handle_tag,
 )
+from app.workers.quantity_handlers import handle_extract  # noqa: E402
 
 HANDLERS = {
     JobKind.PARSE: handle_parse,
@@ -213,4 +214,5 @@ HANDLERS = {
     JobKind.TAG: handle_tag,
     JobKind.ENRICH: handle_enrich,
     JobKind.MEASURE: handle_measure,
+    JobKind.EXTRACT: handle_extract,
 }

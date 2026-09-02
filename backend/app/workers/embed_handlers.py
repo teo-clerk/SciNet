@@ -140,6 +140,7 @@ def handle_embed(session: Session, job: Job, settings: Settings) -> None:
     session.add(paper)
 
     enqueue(session, JobKind.PROJECT, paper_id=None)
+    enqueue(session, JobKind.EXTRACT, paper_id=paper.id)
     enqueue(session, JobKind.TAG, paper_id=paper.id)
 
     BROKER.publish(
