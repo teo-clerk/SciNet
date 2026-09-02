@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.model_store import PRIVATE_OLLAMA
+from app.core.types import utcnow
 from app.models import Job, JobKind, JobState, ModelProfile, ModelVerdict
 from app.models.enums import PRIORITY
 from app.services.models.profiles import record_measurement
@@ -93,10 +94,72 @@ def _record_timeout(session: Session, reference: str, seconds: float) -> None:
     session.flush()
 
 
+def _looks_huggingface(reference: str) -> bool:
+    # HF repos are org/name; ollama tags are name:tag. The slash decides.
+    return "/" in reference
+
+
+def _measure_huggingface(session: Session, reference: str, settings) -> None:
+    """Dimension and CPU encode speed for a sentence-transformers model.
+
+    Presence-gated: a MEASURE job must never trigger a multi-gigabyte
+    download as a side effect — provisioning is download_models.py's job and
+    the user's decision. VRAM stays unproven here (the measurement runs on
+    CPU, where a query encoder lives anyway); the dimension is the fact the
+    morph view needs, because a store is keyed by model *and* dim.
+    """
+    from time import perf_counter
+
+    from app.core.config import get_settings
+    from app.core.preflight import _hf_present
+    from app.services.embed import encoder
+
+    profile = session.get(ModelProfile, reference)
+    if profile is None:
+        profile = ModelProfile(
+            reference=reference,
+            runtime="huggingface",
+            role="embed",
+            source="discovered",
+        )
+        session.add(profile)
+
+    if not _hf_present(reference):
+        profile.notes = (
+            "not in the project's model store; provision it first: "
+            "scripts/download_models.py (measuring must never download)"
+        )
+        session.flush()
+        return
+
+    model = encoder._prepared(reference, "cpu", settings or get_settings())
+    dimension = int(model.get_sentence_embedding_dimension())
+    started = perf_counter()
+    model.encode(
+        ["a short sentence to time the encoder"] * 8,
+        convert_to_numpy=True,
+        show_progress_bar=False,
+    )
+    elapsed = perf_counter() - started
+
+    profile.embed_dim = dimension
+    profile.tok_per_s = round(8 / elapsed, 1) if elapsed > 0 else None
+    profile.notes = f"{dimension}-dim; {profile.tok_per_s} docs/s on CPU"
+    profile.last_measured_at = utcnow()
+    session.flush()
+    logger.info(
+        "measured %s: %d-dim, %s docs/s (cpu)", reference, dimension, profile.tok_per_s
+    )
+
+
 def handle_measure(session: Session, job: Job, settings: Settings) -> None:
     reference = payload_of(job).get("reference", "")
     if not reference:
         raise ValueError("measure job carries no model reference")
+
+    if _looks_huggingface(reference):
+        _measure_huggingface(session, reference, settings)
+        return
 
     server = PRIVATE_OLLAMA
     server.start()

@@ -108,6 +108,51 @@ def test_a_timeout_is_recorded_as_evidence_not_a_dead_job(db, monkeypatch) -> No
     assert "system RAM" in profile.notes
 
 
+def test_an_hf_embed_model_reports_its_dimension_and_speed(db, monkeypatch) -> None:
+    class FakeModel:
+        def get_sentence_embedding_dimension(self):
+            return 384
+
+        def encode(self, texts, **kwargs):
+            return None
+
+    monkeypatch.setattr("app.core.preflight._hf_present", lambda ref: True)
+    monkeypatch.setattr(
+        "app.services.embed.encoder._prepared",
+        lambda ref, device, settings: FakeModel(),
+    )
+
+    enqueue_measure(db, "some-org/small-embed")
+    claimed = claim_next(db, kinds=[JobKind.MEASURE])
+    handle_measure(db, claimed, settings=None)
+    db.commit()
+
+    profile = db.get(ModelProfile, "some-org/small-embed")
+    assert profile.embed_dim == 384
+    assert profile.runtime == "huggingface"
+    assert profile.tok_per_s is not None
+
+
+def test_measuring_never_downloads(db, monkeypatch) -> None:
+    """An absent HF model gets a note pointing at provisioning — a MEASURE
+    job must never pull gigabytes as a side effect."""
+
+    def forbidden(ref, device, settings):
+        raise AssertionError("measure must not load an absent model")
+
+    monkeypatch.setattr("app.core.preflight._hf_present", lambda ref: False)
+    monkeypatch.setattr("app.services.embed.encoder._prepared", forbidden)
+
+    enqueue_measure(db, "some-org/not-downloaded")
+    claimed = claim_next(db, kinds=[JobKind.MEASURE])
+    handle_measure(db, claimed, settings=None)
+    db.commit()
+
+    profile = db.get(ModelProfile, "some-org/not-downloaded")
+    assert "provision" in profile.notes
+    assert profile.embed_dim is None
+
+
 def test_a_job_without_a_reference_is_a_real_failure(db) -> None:
     job = Job(kind=JobKind.MEASURE, priority=90, payload_json="{}")
     db.add(job)
