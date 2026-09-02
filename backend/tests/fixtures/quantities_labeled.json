@@ -256,6 +256,46 @@
     {
       "sentence": "The payload lifts 5 t to the reference orbit in the heavy configuration.",
       "expect": []
+    },
+    {
+      "sentence": "The dissolved oxygen level was maintained above 7.0 mg/l for the whole experiment.",
+      "expect": [
+        {
+          "kind": "mass_concentration",
+          "value_si": 0.007,
+          "unit_si": "gram / liter"
+        }
+      ]
+    },
+    {
+      "sentence": "Cells were treated with 10 µM of the inhibitor before imaging.",
+      "expect": [
+        {
+          "kind": "molarity",
+          "value_si": 1e-05,
+          "unit_si": "molar"
+        }
+      ]
+    },
+    {
+      "sentence": "Stroking stimuli were applied to the forearm at 30 cm/s.",
+      "expect": [
+        {
+          "kind": "velocity",
+          "value_si": 0.3,
+          "unit_si": "meter / second"
+        }
+      ]
+    },
+    {
+      "sentence": "Each aliquot held 50 mL of the buffer solution.",
+      "expect": [
+        {
+          "kind": "volume",
+          "value_si": 0.05,
+          "unit_si": "liter"
+        }
+      ]
     }
   ]
 }

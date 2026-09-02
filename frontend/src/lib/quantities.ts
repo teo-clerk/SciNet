@@ -55,6 +55,23 @@ const SCALES: Record<string, Scale[]> = {
     [1, 'V'],
     [1e-3, 'mV'],
   ],
+  volume: [
+    [1, 'L'],
+    [1e-3, 'mL'],
+    [1e-6, 'µL'],
+    [1e-9, 'nL'],
+  ],
+  molarity: [
+    [1, 'M'],
+    [1e-3, 'mM'],
+    [1e-6, 'µM'],
+    [1e-9, 'nM'],
+  ],
+  mass_concentration: [
+    [1, 'g/L'],
+    [1e-3, 'mg/L'],
+    [1e-6, 'µg/L'],
+  ],
 }
 
 export function formatQuantity(

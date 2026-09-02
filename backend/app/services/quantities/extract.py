@@ -98,9 +98,33 @@ UNITS: dict[str, tuple[str, str]] = {
     "N": ("newton", "force"),
     "mN": ("millinewton", "force"),
     # velocity
+    "µm/s": ("micrometer / second", "velocity"),
+    "um/s": ("micrometer / second", "velocity"),
+    "mm/s": ("millimeter / second", "velocity"),
+    "cm/s": ("centimeter / second", "velocity"),
     "m/s": ("meter / second", "velocity"),
     "km/s": ("kilometer / second", "velocity"),
     "km/h": ("kilometer / hour", "velocity"),
+    # wet-lab families, added when the live review queue filled with them:
+    # µM doses, mL volumes and mg/L concentrations are what a biology corpus
+    # actually measures. Compounds only — bare "L" and "M" are single capital
+    # letters, and the bare-"A" lesson above applies to them verbatim; the
+    # adjudicator route already covers those.
+    "nL": ("nanoliter", "volume"),
+    "µL": ("microliter", "volume"),
+    "uL": ("microliter", "volume"),
+    "mL": ("milliliter", "volume"),
+    "nM": ("nanomolar", "molarity"),
+    "µM": ("micromolar", "molarity"),
+    "uM": ("micromolar", "molarity"),
+    "mM": ("millimolar", "molarity"),
+    "ng/mL": ("nanogram / milliliter", "mass_concentration"),
+    "µg/mL": ("microgram / milliliter", "mass_concentration"),
+    "ug/mL": ("microgram / milliliter", "mass_concentration"),
+    "mg/mL": ("milligram / milliliter", "mass_concentration"),
+    "mg/L": ("milligram / liter", "mass_concentration"),
+    "mg/l": ("milligram / liter", "mass_concentration"),
+    "g/L": ("gram / liter", "mass_concentration"),
     # angle
     "rad": ("radian", "angle"),
     "mrad": ("milliradian", "angle"),
@@ -172,6 +196,9 @@ CANONICAL: dict[str, str] = {
     "force": "newton",
     "velocity": "meter / second",
     "angle": "radian",
+    "volume": "liter",
+    "molarity": "molar",
+    "mass_concentration": "gram / liter",
 }
 
 
