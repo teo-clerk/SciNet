@@ -9,11 +9,13 @@ uniform float uIntensity;
 // Radius of the solid centre, as a fraction of the sprite. Everything outside
 // it is halo.
 uniform float uCoreRadius;
+uniform float uTime;
 
 varying vec3  vColor;
 varying float vAlpha;
 varying float vFogDepth;
 varying float vSelected;
+varying float vHighlight;
 
 void main() {
   // gl_PointCoord is 0..1 across the sprite quad. Work in radius rather than
@@ -58,6 +60,14 @@ void main() {
   float ring = smoothstep(uCoreRadius, uCoreRadius + 0.12, r)
              * (1.0 - smoothstep(uCoreRadius + 0.12, uCoreRadius + 0.30, r));
   color += vec3(1.0) * ring * vSelected * 1.6;
+
+  // The librarian's mark: a warm ring outside the selection ring,
+  // breathing on uTime so cited papers read as alive, not merely lit.
+  float pulse = 0.55 + 0.45 * sin(uTime * 3.0);
+  float hring = smoothstep(uCoreRadius + 0.04, uCoreRadius + 0.22, r)
+              * (1.0 - smoothstep(uCoreRadius + 0.22, uCoreRadius + 0.5, r));
+  color += vec3(1.0, 0.78, 0.35) * hring * vHighlight * (0.7 + 1.3 * pulse);
+  color += vColor * vHighlight * 0.35 * pulse;
 
   // Additive has no fog colour to mix toward — adding grey would brighten
   // distant nodes rather than recede them — so depth fades alpha instead.

@@ -35,6 +35,16 @@ steps aside and the disagreement moves](docs/media/embedding-morph.gif)
 cd backend && uv run python ../scripts/build_alt_projection.py allenai/specter2_base --apply
 ```
 
+And the library can be *asked*. The librarian is a local agent whose tool
+calls are map actions: it plans with constrained decoding, searches the
+library, then streams an answer whose citations are validated in flight
+against the evidence its tools actually returned — a citation the retrieval
+never saw is stripped mid-stream, visibly. The camera flies to the evidence,
+cited papers pulse, and a trail walks them in order. All of it local.
+
+![The librarian answering from a 506-document library — planned searches,
+a streamed cited answer, and the map flying to the evidence](docs/media/librarian.gif)
+
 **[USAGE.md](USAGE.md) is the guide** — setup, the three commands to run it,
 how to get papers in, and how to read the map.
 

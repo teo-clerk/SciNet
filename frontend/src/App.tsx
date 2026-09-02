@@ -5,6 +5,7 @@ import { Scene } from '@/graph/Scene'
 import { ClusterInspector } from '@/panels/ClusterInspector'
 import { DetailPanel } from '@/panels/DetailPanel'
 import { FilterBar } from '@/panels/FilterBar'
+import { LibrarianPanel } from '@/panels/LibrarianPanel'
 import { ListView } from '@/panels/ListView'
 import { ModelLab } from '@/panels/ModelLab'
 import { QuarantineView } from '@/panels/QuarantineView'
@@ -61,6 +62,7 @@ export default function App() {
             reader gets back out of whatever the panel is showing. */}
         <ClusterInspector />
         <DetailPanel />
+        <LibrarianPanel />
       </main>
       <JobsDrawer />
     </div>

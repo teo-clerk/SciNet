@@ -27,6 +27,8 @@ export interface GraphBuffers {
   filtered: Float32Array
   /** 0 | 0.6 (hovered) | 1 (selected). */
   selected: Float32Array
+  /** 1 = the librarian is drawing attention here; pulsed by the shader. */
+  highlight: Float32Array
 }
 
 interface GraphState {
@@ -71,6 +73,18 @@ interface GraphState {
   /** 0 = the active layout, 1 = the alternate model's opinion. */
   morphT: number
   morphRunId: number | null
+  /** The librarian panel's visibility; its transcript lives in the panel. */
+  librarianOpen: boolean
+  /** Node indices the librarian is pointing at; null = none. */
+  highlightSet: Set<number> | null
+  /** Node indices, in order, forming the librarian's trail. Empty = none. */
+  trail: number[]
+  /** Pending camera flight; the nonce lets the same target fire twice. */
+  cameraRequest: {
+    target: [number, number, number]
+    distance: number
+    nonce: number
+  } | null
 
   setLoading: () => void
   setError: (message: string) => void
@@ -93,6 +107,10 @@ interface GraphState {
   setMorph: (runId: number, target: Float32Array, base: Float32Array) => void
   setMorphT: (t: number) => void
   clearMorph: () => void
+  toggleLibrarian: () => void
+  setHighlight: (indices: Set<number> | null) => void
+  setTrail: (indices: number[]) => void
+  flyToPoint: (target: [number, number, number], distance: number) => void
   clearFilters: () => void
 }
 
@@ -128,6 +146,7 @@ function buildBuffers(graph: DecodedGraph): GraphBuffers {
     sizes: new Float32Array(n).fill(1),
     filtered: new Float32Array(n).fill(1),
     selected: new Float32Array(n),
+    highlight: new Float32Array(n),
   }
 }
 
@@ -180,6 +199,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   morphBase: null,
   morphT: 0,
   morphRunId: null,
+  librarianOpen: false,
+  highlightSet: null,
+  trail: [],
+  cameraRequest: null,
 
   setLoading: () => set({ status: 'loading', error: null }),
   setError: (error) => set({ status: 'error', error }),
@@ -206,6 +229,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       morphBase: null,
       morphT: 0,
       morphRunId: null,
+      highlightSet: null,
+      trail: [],
+      cameraRequest: null,
     }),
 
   setColorMode: (colorMode) => set({ colorMode }),
@@ -249,6 +275,17 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   setMorphT: (morphT) => set({ morphT }),
   clearMorph: () =>
     set({ morphTarget: null, morphRunId: null, morphT: 0 }),
+  toggleLibrarian: () => set((state) => ({ librarianOpen: !state.librarianOpen })),
+  setHighlight: (highlightSet) => set({ highlightSet }),
+  setTrail: (trail) => set({ trail }),
+  flyToPoint: (target, distance) =>
+    set((state) => ({
+      cameraRequest: {
+        target,
+        distance,
+        nonce: (state.cameraRequest?.nonce ?? 0) + 1,
+      },
+    })),
   clearFilters: () =>
     set({
       query: '',
@@ -260,5 +297,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       morphBase: null,
       morphT: 0,
       morphRunId: null,
+      highlightSet: null,
+      trail: [],
+      cameraRequest: null,
     }),
 }))

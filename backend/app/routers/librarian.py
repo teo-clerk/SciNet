@@ -32,6 +32,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
@@ -179,28 +180,46 @@ async def ask(
         held: lease.Lease | None = None
         try:
             model = resolve(TaskKind.LIBRARIAN_CHAT, settings, db)
-            held = lease.take(db, keep_warm=model, reason="librarian")
-            db.commit()
+            try:
+                held = lease.take(db, keep_warm=model, reason="librarian")
+                db.commit()
+            except OperationalError:
+                # The worker holds SQLite's write lock through a long
+                # transaction — a projection can hold it for minutes — so
+                # even WRITING the pause request can starve. The lease is
+                # best-effort by design: proceed without it, and Ollama's
+                # single-parallel setting turns the contention into
+                # slowness, never corruption.
+                db.rollback()
+                held = None
+                await put(
+                    "status",
+                    {
+                        "text": "the worker is mid-write; answering without "
+                        "a pause — this may be slow"
+                    },
+                )
 
-            busy_worker = _running_jobs(db) > 0
-            deadline = asyncio.get_event_loop().time() + (
-                ACK_WAIT_BUSY_SECONDS if busy_worker else ACK_WAIT_IDLE_SECONDS
-            )
-            if busy_worker:
-                await put(
-                    "status",
-                    {"text": "waiting for the worker to finish its current job…"},
+            if held is not None:
+                busy_worker = _running_jobs(db) > 0
+                deadline = asyncio.get_event_loop().time() + (
+                    ACK_WAIT_BUSY_SECONDS if busy_worker else ACK_WAIT_IDLE_SECONDS
                 )
-            while asyncio.get_event_loop().time() < deadline:
-                db.expire_all()  # the lease rows change under another process
-                if lease.acked(db, held):
-                    break
-                await asyncio.sleep(ACK_POLL_SECONDS)
-            else:
-                await put(
-                    "status",
-                    {"text": "worker still busy; answers may be slow for a moment"},
-                )
+                if busy_worker:
+                    await put(
+                        "status",
+                        {"text": "waiting for the worker to finish its current job…"},
+                    )
+                while asyncio.get_event_loop().time() < deadline:
+                    db.expire_all()  # the lease rows change under another process
+                    if lease.acked(db, held):
+                        break
+                    await asyncio.sleep(ACK_POLL_SECONDS)
+                else:
+                    await put(
+                        "status",
+                        {"text": "worker still busy; answers may be slow for a moment"},
+                    )
 
             await put("status", {"text": f"thinking with {model}…"})
             gathered = await agent.gather(
@@ -236,9 +255,12 @@ async def ask(
                     if clean:
                         await put("answer_token", {"text": clean})
                 token_count += 1
-                if token_count % LEASE_REFRESH_EVERY_TOKENS == 0:
-                    held = lease.refresh(db, held)
-                    db.commit()
+                if held is not None and token_count % LEASE_REFRESH_EVERY_TOKENS == 0:
+                    try:
+                        held = lease.refresh(db, held)
+                        db.commit()
+                    except OperationalError:
+                        db.rollback()  # expiry covers a refresh that starves
             if pending:
                 clean, cited, dropped = agent.validate_citations(
                     pending, gathered.evidence_ids

@@ -30,6 +30,8 @@ export function FilterBar() {
   const count = useGraphStore((s) => s.count)
   const view = useGraphStore((s) => s.view)
   const setView = useGraphStore((s) => s.setView)
+  const librarianOpen = useGraphStore((s) => s.librarianOpen)
+  const toggleLibrarian = useGraphStore((s) => s.toggleLibrarian)
   const quarantined = useQuarantineCount()
 
   const visible = useVisibleSet()
@@ -71,6 +73,13 @@ export function FilterBar() {
           title="Hardware, the model catalog, and task routing"
         >
           Models
+        </button>
+        <button
+          className={librarianOpen ? 'active' : ''}
+          onClick={toggleLibrarian}
+          title="Ask the library a question; the map shows the evidence"
+        >
+          ✦ Librarian
         </button>
       </div>
 

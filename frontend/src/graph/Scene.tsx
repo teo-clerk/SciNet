@@ -14,6 +14,7 @@ import { Picker } from './Picker'
 import { BridgeCurves } from './BridgeCurves'
 import { PointCloud } from './PointCloud'
 import { SkeletonEdges } from './SkeletonEdges'
+import { Trail } from './Trail'
 import { useGraphStore } from '@/state/graphStore'
 
 export function Scene() {
@@ -37,6 +38,7 @@ export function Scene() {
           conveyed by the shaders' alpha falloff instead. */}
       {!morphing && <SkeletonEdges />}
       <PointCloud />
+      {!morphing && <Trail />}
       {!morphing && <Edges />}
       {!morphing && <ClusterLabels />}
       {!morphing && <BridgeCurves />}

@@ -46,6 +46,7 @@ export function PointCloud() {
     g.setAttribute('aSize', new THREE.BufferAttribute(buffers.sizes, 1))
     g.setAttribute('aFiltered', new THREE.BufferAttribute(buffers.filtered, 1))
     g.setAttribute('aSelected', new THREE.BufferAttribute(buffers.selected, 1))
+    g.setAttribute('aHighlight', new THREE.BufferAttribute(buffers.highlight, 1))
 
     // Node index encoded as a colour, for GPU picking. Built once: identity
     // does not change, only appearance does.
@@ -75,6 +76,7 @@ export function PointCloud() {
           // may contribute depends on how many are stacked behind it.
           uIntensity: { value: POINT_INTENSITY },
           uCoreRadius: { value: CORE_RADIUS },
+          uTime: { value: 0 },
         },
         transparent: true,
         // Additive: overlapping sprites sum instead of occluding, so a dense
@@ -197,8 +199,25 @@ export function PointCloud() {
     g.computeBoundingSphere()
   }, [morphT, morphTarget, morphBase, buffers])
 
-  useFrame(() => {
+  // --- the librarian's highlight: an attribute write, like everything ------
+  const highlightSet = useGraphStore((s) => s.highlightSet)
+  useEffect(() => {
+    const g = geometryRef.current
+    if (!g || !buffers) return
+    const attr = g.getAttribute('aHighlight') as THREE.BufferAttribute
+    const arr = attr.array as Float32Array
+    arr.fill(0)
+    if (highlightSet) {
+      for (const index of highlightSet) {
+        if (index < arr.length) arr[index] = 1
+      }
+    }
+    attr.needsUpdate = true
+  }, [highlightSet, buffers])
+
+  useFrame((state) => {
     material.uniforms.uPixelRatio!.value = Math.min(gl.getPixelRatio(), 2)
+    material.uniforms.uTime!.value = state.clock.elapsedTime
   })
 
   if (!geometry) return null

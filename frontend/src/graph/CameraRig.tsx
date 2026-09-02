@@ -33,6 +33,7 @@ export function CameraRig() {
   const centroids = useGraphStore((s) => s.clusterCentroids)
   const buffers = useGraphStore((s) => s.buffers)
   const autoRotate = useGraphStore((s) => s.autoRotate)
+  const cameraRequest = useGraphStore((s) => s.cameraRequest)
 
   const flight = useRef<{
     start: number
@@ -86,6 +87,17 @@ export function CameraRig() {
     if (!centre) return
     flyTo(new THREE.Vector3(...centre), CLUSTER_DISTANCE)
   }, [inspectedCluster, centroids, flyTo])
+
+  // The librarian (or anything else) may request a flight to an arbitrary
+  // point. The nonce is the trigger: the same target twice must still fly,
+  // and an effect keyed on coordinates alone would not re-fire.
+  useEffect(() => {
+    if (!cameraRequest) return
+    flyTo(
+      new THREE.Vector3(...cameraRequest.target),
+      cameraRequest.distance,
+    )
+  }, [cameraRequest, flyTo])
 
   useFrame(() => {
     if (!controls.current) return
