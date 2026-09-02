@@ -24,6 +24,7 @@ from app.routers import (
     librarian,
     models,
     papers,
+    quantities,
     search,
     system,
 )
@@ -107,6 +108,7 @@ def create_app() -> FastAPI:
         events,
         models,
         librarian,
+        quantities,
     ):
         app.include_router(module.router)
     return app
