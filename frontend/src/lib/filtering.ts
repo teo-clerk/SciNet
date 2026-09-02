@@ -13,9 +13,12 @@ export function useVisibleSet(): Set<number> | null {
   const nodes = useGraphStore((s) => s.nodes)
   const activeTags = useGraphStore((s) => s.activeTags)
   const searchResults = useGraphStore((s) => s.searchResults)
+  const yearCutoff = useGraphStore((s) => s.yearCutoff)
 
   return useMemo(() => {
-    if (searchResults === null && activeTags.size === 0) return null
+    if (searchResults === null && activeTags.size === 0 && yearCutoff === null) {
+      return null
+    }
 
     // Search returns paper ids; the renderer works in node indices.
     const matchedIndices =
@@ -34,8 +37,11 @@ export function useVisibleSet(): Set<number> | null {
       // Tags are OR-ed: selecting two topics widens the view rather than
       // narrowing it to their intersection, which is almost always empty.
       if (activeTags.size > 0 && !node.tags.some((t) => activeTags.has(t))) return
+      // The cutoff hides what came after. An unknown year is not a "later"
+      // year, so undated papers stay visible at every scrubber position.
+      if (yearCutoff !== null && node.year !== null && node.year > yearCutoff) return
       visible.add(i)
     })
     return visible
-  }, [nodes, activeTags, searchResults])
+  }, [nodes, activeTags, searchResults, yearCutoff])
 }

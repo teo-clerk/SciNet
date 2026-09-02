@@ -15,14 +15,16 @@ function visibleSet(
   nodes: GraphNode[],
   query: string,
   activeTags: Set<number>,
+  yearCutoff: number | null = null,
 ): Set<number> | null {
   const trimmed = query.trim().toLowerCase()
-  if (!trimmed && activeTags.size === 0) return null
+  if (!trimmed && activeTags.size === 0 && yearCutoff === null) return null
 
   const visible = new Set<number>()
   nodes.forEach((node, i) => {
     if (trimmed && !(node.title ?? '').toLowerCase().includes(trimmed)) return
     if (activeTags.size > 0 && !node.tags.some((t) => activeTags.has(t))) return
+    if (yearCutoff !== null && node.year !== null && node.year > yearCutoff) return
     visible.add(i)
   })
   return visible
@@ -79,5 +81,24 @@ describe('visibleSet', () => {
     const result = visibleSet(NODES, 'zzzznomatch', new Set())
     expect(result).not.toBeNull()
     expect(result?.size).toBe(0)
+  })
+
+  test('the year cutoff hides what came after', () => {
+    expect(visibleSet(NODES, '', new Set(), 2020)).toEqual(new Set([0, 3]))
+    expect(visibleSet(NODES, '', new Set(), 2021)).toEqual(new Set([0, 1, 3]))
+  })
+
+  test('an undated paper stays visible at every scrubber position', () => {
+    // An unknown year is not a "later" year — hiding undated papers would
+    // make them flicker into existence only when the filter releases.
+    expect(visibleSet(NODES, '', new Set(), 2019)).toEqual(new Set([3]))
+  })
+
+  test('a null cutoff is no filter at all', () => {
+    expect(visibleSet(NODES, '', new Set(), null)).toBeNull()
+  })
+
+  test('the cutoff ANDs with tags — dimensions narrow each other', () => {
+    expect(visibleSet(NODES, '', new Set([1]), 2021)).toEqual(new Set([1]))
   })
 })

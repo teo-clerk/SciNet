@@ -62,6 +62,8 @@ interface GraphState {
   /** Model still loading — a wait, not a fault. */
   searchWarming: { remaining: number | null } | null
   activeTags: Set<number>
+  /** Show only papers up to this year; null = the whole timeline. */
+  yearCutoff: number | null
 
   setLoading: () => void
   setError: (message: string) => void
@@ -80,6 +82,7 @@ interface GraphState {
   setSearchError: (message: string | null) => void
   setSearchWarming: (state: { remaining: number | null } | null) => void
   toggleTag: (tagId: number) => void
+  setYearCutoff: (year: number | null) => void
   clearFilters: () => void
 }
 
@@ -162,6 +165,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   searchError: null,
   searchWarming: null,
   activeTags: new Set(),
+  yearCutoff: null,
 
   setLoading: () => set({ status: 'loading', error: null }),
   setError: (error) => set({ status: 'error', error }),
@@ -183,6 +187,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       selectedIndex: null,
       searchResults: null,
       searchError: null,
+      yearCutoff: null,
     }),
 
   setColorMode: (colorMode) => set({ colorMode }),
@@ -220,11 +225,13 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       next.has(tagId) ? next.delete(tagId) : next.add(tagId)
       return { activeTags: next }
     }),
+  setYearCutoff: (yearCutoff) => set({ yearCutoff }),
   clearFilters: () =>
     set({
       query: '',
       activeTags: new Set(),
       searchResults: null,
       searchError: null,
+      yearCutoff: null,
     }),
 }))
