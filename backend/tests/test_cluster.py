@@ -122,7 +122,15 @@ def test_dominant_share_ignores_noise() -> None:
 
 
 def test_a_floor_producing_one_giant_cluster_is_rejected() -> None:
-    """Three well-separated blobs must survive a candidate that merges two."""
+    """Three well-separated blobs must survive a candidate that merges two.
+
+    "Well-separated" must mean separated in the space the pipeline measures.
+    The clustering UMAP runs on *cosine* distance, and an earlier version of
+    this test put one blob at the origin — where direction is pure noise, so
+    its points scattered over the whole angular sphere and merged with a
+    neighbour on ~1 seed in 8, locally on some CPUs and reliably on CI's.
+    Axis-aligned centres keep every blob 90 degrees from the others.
+    """
     import numpy as np
 
     from app.services.project.cluster import (
@@ -130,11 +138,13 @@ def test_a_floor_producing_one_giant_cluster_is_rejected() -> None:
         cluster_embeddings,
     )
 
+    def centre(axis: int) -> list[float]:
+        c = [0.0] * 8
+        c[axis] = 7.0
+        return c
+
     rng = np.random.default_rng(11)
-    blobs = [
-        rng.normal(centre, 0.35, size=(14, 8))
-        for centre in ([0.0] * 8, [7.0] * 8, [-7.0] * 8)
-    ]
+    blobs = [rng.normal(centre(axis), 0.35, size=(14, 8)) for axis in (0, 1, 2)]
     dense = np.vstack(blobs).astype(np.float32)
 
     floor = choose_min_cluster_size(dense, dense.shape[0])
