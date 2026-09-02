@@ -37,6 +37,9 @@ dependencies = [
     # anyone remembering an extra.
     "sentence-transformers>=3.1.0",
     "torch>=2.4.0",
+    # mcp server — the library as context for any MCP client. Pinned below 2:
+    # the SDK has moved import paths within major versions before.
+    "mcp>=1.2,<2",
 ]
 
 [project.scripts]
@@ -47,6 +50,9 @@ scinet-stop = "app.cli.stop:main"
 # The complement of scinet-stop: up owns the children it spawned, stop hunts
 # the ones nobody owns.
 scinet-up = "app.cli.up:main"
+# `uv run scinet-mcp` — stdio MCP server proxying the running API, so any MCP
+# client (Claude Code, Claude Desktop, ...) can search and read the library.
+scinet-mcp = "app.mcp.server:main"
 
 [project.optional-dependencies]
 # Tier 1 only (Marker + Surya), which is off by default and saved 3.6 minutes
