@@ -21,6 +21,7 @@ from app.routers import (
     events,
     graph,
     jobs,
+    librarian,
     models,
     papers,
     search,
@@ -96,7 +97,17 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["*"],
     )
-    for module in (system, papers, graph, clusters, search, jobs, events, models):
+    for module in (
+        system,
+        papers,
+        graph,
+        clusters,
+        search,
+        jobs,
+        events,
+        models,
+        librarian,
+    ):
         app.include_router(module.router)
     return app
 

@@ -153,6 +153,29 @@ def build_answer_prompt(question: str, gathered: Gathered) -> str:
     )
 
 
+#: A citation marker is at most [#123456] — ten characters. Held-back text
+#: beyond this cannot be an unfinished marker, so it flushes.
+MAX_MARKER_CHARS = 10
+
+
+def safe_split(pending: str) -> tuple[str, str]:
+    """Split streamed text into (safe to emit, hold for the next token).
+
+    A marker split across two tokens — "see [#" then "42]" — must not reach
+    the validator in halves: the regex would miss it and the fragment would
+    leak to the reader. Anything after a '[' that has not closed yet is held
+    back; a bracket that stays open past a marker's maximum length was never
+    a marker and flushes.
+    """
+    cut = pending.rfind("[")
+    if cut == -1:
+        return pending, ""
+    tail = pending[cut:]
+    if "]" in tail or len(tail) > MAX_MARKER_CHARS:
+        return pending, ""
+    return pending[:cut], tail
+
+
 def validate_citations(chunk: str, allowed: set[int]) -> tuple[str, set[int], set[int]]:
     """Pass through a piece of answer text, stripping unearned citations.
 
