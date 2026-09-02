@@ -159,6 +159,48 @@ export async function fetchGraph(): Promise<DecodedGraph> {
   return decodeGraph((await res.json()) as GraphPayload)
 }
 
+export interface RunInfo {
+  id: number
+  model_id: string
+  method: string
+  is_active: boolean
+  n_fit: number | null
+  fitted_at: string | null
+}
+
+/** Every retained projection run — the morph slider's picker. */
+export async function fetchRuns(): Promise<RunInfo[]> {
+  const res = await fetch('/api/graph/runs')
+  if (!res.ok) return []
+  return (await res.json()) as RunInfo[]
+}
+
+/**
+ * Positions of a retained run, keyed by paper id.
+ *
+ * Decoded and normalised exactly like the active payload, so the two clouds
+ * are comparable; keyed by id because the runs may not hold identical paper
+ * sets — the morph lerps shared papers and leaves the rest where they are.
+ */
+export async function fetchRunPositions(
+  runId: number,
+): Promise<Map<number, [number, number, number]>> {
+  const res = await fetch(`/api/graph?run_id=${runId}`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) throw new Error(`run ${runId} -> ${res.status}`)
+  const decoded = decodeGraph((await res.json()) as GraphPayload)
+  const byId = new Map<number, [number, number, number]>()
+  decoded.nodes.forEach((node, i) => {
+    byId.set(node.id, [
+      decoded.positions[i * 3]!,
+      decoded.positions[i * 3 + 1]!,
+      decoded.positions[i * 3 + 2]!,
+    ])
+  })
+  return byId
+}
+
 export interface PaperDetail {
   id: number
   title: string | null

@@ -52,6 +52,10 @@ body {
 .filter-bar .search:focus { outline: none; border-color: var(--accent); }
 .filter-bar .modes { display: flex; gap: 2px; }
 .filter-bar .scrubber { display: flex; align-items: center; gap: 6px; }
+.filter-bar .morph { display: flex; align-items: center; gap: 6px; }
+.filter-bar .morph select { background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font: inherit; max-width: 220px; }
+.filter-bar .morph input[type='range'] { width: 120px; accent-color: var(--warn); }
+.filter-bar .morph .mover { font-size: 11px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* --- model lab ----------------------------------------------------------- */
 .model-lab { padding: 18px 22px; overflow-y: auto; height: 100%; }

@@ -22,6 +22,7 @@ import {
   yearColor,
 } from '@/state/graphStore'
 import { useVisibleSet } from '@/lib/filtering'
+import { lerpInto } from '@/lib/morph'
 
 const FOG_COLOR = new THREE.Color('#050510')
 export const PICK_LAYER = 1
@@ -180,6 +181,21 @@ export function PointCloud() {
     if (selectedIndex !== null && selectedIndex < arr.length) arr[selectedIndex] = 1
     attr.needsUpdate = true
   }, [hoveredIndex, selectedIndex, buffers])
+
+  // --- morph: lerp between the active layout and an alternate run's --------
+  const morphTarget = useGraphStore((s) => s.morphTarget)
+  const morphBase = useGraphStore((s) => s.morphBase)
+  const morphT = useGraphStore((s) => s.morphT)
+  useEffect(() => {
+    const g = geometryRef.current
+    if (!g || !buffers || !morphBase) return
+    const attr = g.getAttribute('position') as THREE.BufferAttribute
+    const arr = attr.array as Float32Array
+    // A cleared morph lerps back to base (target falls back to base, t moot).
+    lerpInto(arr, morphBase, morphTarget ?? morphBase, morphTarget ? morphT : 0)
+    attr.needsUpdate = true
+    g.computeBoundingSphere()
+  }, [morphT, morphTarget, morphBase, buffers])
 
   useFrame(() => {
     material.uniforms.uPixelRatio!.value = Math.min(gl.getPixelRatio(), 2)

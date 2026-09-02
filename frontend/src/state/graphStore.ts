@@ -64,6 +64,13 @@ interface GraphState {
   activeTags: Set<number>
   /** Show only papers up to this year; null = the whole timeline. */
   yearCutoff: number | null
+  /** Morph view: where each node goes at t=1, in active-run index space. */
+  morphTarget: Float32Array | null
+  /** The active layout, copied when a morph begins, restored when it ends. */
+  morphBase: Float32Array | null
+  /** 0 = the active layout, 1 = the alternate model's opinion. */
+  morphT: number
+  morphRunId: number | null
 
   setLoading: () => void
   setError: (message: string) => void
@@ -83,6 +90,9 @@ interface GraphState {
   setSearchWarming: (state: { remaining: number | null } | null) => void
   toggleTag: (tagId: number) => void
   setYearCutoff: (year: number | null) => void
+  setMorph: (runId: number, target: Float32Array, base: Float32Array) => void
+  setMorphT: (t: number) => void
+  clearMorph: () => void
   clearFilters: () => void
 }
 
@@ -166,6 +176,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   searchWarming: null,
   activeTags: new Set(),
   yearCutoff: null,
+  morphTarget: null,
+  morphBase: null,
+  morphT: 0,
+  morphRunId: null,
 
   setLoading: () => set({ status: 'loading', error: null }),
   setError: (error) => set({ status: 'error', error }),
@@ -188,6 +202,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       searchResults: null,
       searchError: null,
       yearCutoff: null,
+      morphTarget: null,
+      morphBase: null,
+      morphT: 0,
+      morphRunId: null,
     }),
 
   setColorMode: (colorMode) => set({ colorMode }),
@@ -226,6 +244,11 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       return { activeTags: next }
     }),
   setYearCutoff: (yearCutoff) => set({ yearCutoff }),
+  setMorph: (morphRunId, morphTarget, morphBase) =>
+    set({ morphRunId, morphTarget, morphBase, morphT: 0 }),
+  setMorphT: (morphT) => set({ morphT }),
+  clearMorph: () =>
+    set({ morphTarget: null, morphRunId: null, morphT: 0 }),
   clearFilters: () =>
     set({
       query: '',
@@ -233,5 +256,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       searchResults: null,
       searchError: null,
       yearCutoff: null,
+      morphTarget: null,
+      morphBase: null,
+      morphT: 0,
+      morphRunId: null,
     }),
 }))

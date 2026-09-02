@@ -6,6 +6,7 @@
  * having a map.
  */
 import { MapControls } from '@/panels/MapControls'
+import { MorphSlider } from '@/panels/MorphSlider'
 import { SearchBox } from '@/panels/SearchBox'
 import { TimeScrubber } from '@/panels/TimeScrubber'
 import { UploadButton } from '@/panels/UploadButton'
@@ -90,6 +91,8 @@ export function FilterBar() {
       )}
 
       {view === 'map' && <TimeScrubber />}
+
+      {view === 'map' && <MorphSlider />}
 
       {/* The Model Lab is not a view over papers: a tag cloud and an
           N / M counter above it would describe a corpus it does not show. */}

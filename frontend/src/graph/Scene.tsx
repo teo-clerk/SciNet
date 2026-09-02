@@ -14,8 +14,14 @@ import { Picker } from './Picker'
 import { BridgeCurves } from './BridgeCurves'
 import { PointCloud } from './PointCloud'
 import { SkeletonEdges } from './SkeletonEdges'
+import { useGraphStore } from '@/state/graphStore'
 
 export function Scene() {
+  // While a morph is live the skeleton, labels, edges and bridges step
+  // aside: they are properties of the ACTIVE run's layout and clustering,
+  // and drawing them over the alternate model's opinion would attach run A's
+  // chrome to positions it never described.
+  const morphing = useGraphStore((s) => s.morphTarget !== null)
   return (
     <Canvas
       dpr={[1, 2]}
@@ -29,11 +35,11 @@ export function Scene() {
       {/* No scene fog: additive blending would add the fog colour rather than
           blend toward it, brightening the far side of the map. Depth is
           conveyed by the shaders' alpha falloff instead. */}
-      <SkeletonEdges />
+      {!morphing && <SkeletonEdges />}
       <PointCloud />
-      <Edges />
-      <ClusterLabels />
-      <BridgeCurves />
+      {!morphing && <Edges />}
+      {!morphing && <ClusterLabels />}
+      {!morphing && <BridgeCurves />}
       <Picker />
       <CameraRig />
     </Canvas>
