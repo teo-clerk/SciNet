@@ -16,7 +16,7 @@ import type { DecodedGraph, GraphCluster, GraphNode } from '@/api/graph'
 import type { SearchMode } from '@/lib/search'
 
 export type ColorMode = 'cluster' | 'year' | 'provisional'
-export type ViewMode = 'map' | 'list' | 'quarantine' | 'models'
+export type ViewMode = 'map' | 'list' | 'quarantine' | 'models' | 'review'
 export type SortKey = 'title' | 'year' | 'cluster' | 'confidence'
 
 export interface GraphBuffers {
@@ -66,6 +66,8 @@ interface GraphState {
   activeTags: Set<number>
   /** Show only papers up to this year; null = the whole timeline. */
   yearCutoff: number | null
+  /** Paper ids matching the quantity range filter; null = no filter. */
+  quantityResults: Set<number> | null
   /** Morph view: where each node goes at t=1, in active-run index space. */
   morphTarget: Float32Array | null
   /** The active layout, copied when a morph begins, restored when it ends. */
@@ -104,6 +106,7 @@ interface GraphState {
   setSearchWarming: (state: { remaining: number | null } | null) => void
   toggleTag: (tagId: number) => void
   setYearCutoff: (year: number | null) => void
+  setQuantityResults: (ids: Set<number> | null) => void
   setMorph: (runId: number, target: Float32Array, base: Float32Array) => void
   setMorphT: (t: number) => void
   clearMorph: () => void
@@ -195,6 +198,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   searchWarming: null,
   activeTags: new Set(),
   yearCutoff: null,
+  quantityResults: null,
   morphTarget: null,
   morphBase: null,
   morphT: 0,
@@ -225,6 +229,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       searchResults: null,
       searchError: null,
       yearCutoff: null,
+      quantityResults: null,
       morphTarget: null,
       morphBase: null,
       morphT: 0,
@@ -270,6 +275,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       return { activeTags: next }
     }),
   setYearCutoff: (yearCutoff) => set({ yearCutoff }),
+  setQuantityResults: (quantityResults) => set({ quantityResults }),
   setMorph: (morphRunId, morphTarget, morphBase) =>
     set({ morphRunId, morphTarget, morphBase, morphT: 0 }),
   setMorphT: (morphT) => set({ morphT }),
@@ -293,6 +299,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       searchResults: null,
       searchError: null,
       yearCutoff: null,
+      quantityResults: null,
       morphTarget: null,
       morphBase: null,
       morphT: 0,

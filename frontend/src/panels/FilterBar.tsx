@@ -7,6 +7,7 @@
  */
 import { MapControls } from '@/panels/MapControls'
 import { MorphSlider } from '@/panels/MorphSlider'
+import { QuantityFilter } from '@/panels/QuantityFilter'
 import { SearchBox } from '@/panels/SearchBox'
 import { TimeScrubber } from '@/panels/TimeScrubber'
 import { UploadButton } from '@/panels/UploadButton'
@@ -75,6 +76,13 @@ export function FilterBar() {
           Models
         </button>
         <button
+          className={view === 'review' ? 'active' : ''}
+          onClick={() => setView('review')}
+          title="Quantities the adjudicator was unsure about"
+        >
+          Review
+        </button>
+        <button
           className={librarianOpen ? 'active' : ''}
           onClick={toggleLibrarian}
           title="Ask the library a question; the map shows the evidence"
@@ -100,6 +108,8 @@ export function FilterBar() {
       )}
 
       {view === 'map' && <TimeScrubber />}
+
+      {view === 'map' && <QuantityFilter />}
 
       {view === 'map' && <MorphSlider />}
 

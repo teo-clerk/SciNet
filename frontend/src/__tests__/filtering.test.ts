@@ -16,15 +16,24 @@ function visibleSet(
   query: string,
   activeTags: Set<number>,
   yearCutoff: number | null = null,
+  quantityResults: Set<number> | null = null,
 ): Set<number> | null {
   const trimmed = query.trim().toLowerCase()
-  if (!trimmed && activeTags.size === 0 && yearCutoff === null) return null
+  if (
+    !trimmed &&
+    activeTags.size === 0 &&
+    yearCutoff === null &&
+    quantityResults === null
+  ) {
+    return null
+  }
 
   const visible = new Set<number>()
   nodes.forEach((node, i) => {
     if (trimmed && !(node.title ?? '').toLowerCase().includes(trimmed)) return
     if (activeTags.size > 0 && !node.tags.some((t) => activeTags.has(t))) return
     if (yearCutoff !== null && node.year !== null && node.year > yearCutoff) return
+    if (quantityResults !== null && !quantityResults.has(node.id)) return
     visible.add(i)
   })
   return visible
@@ -100,5 +109,21 @@ describe('visibleSet', () => {
 
   test('the cutoff ANDs with tags — dimensions narrow each other', () => {
     expect(visibleSet(NODES, '', new Set([1]), 2021)).toEqual(new Set([1]))
+  })
+
+  test('quantity results filter by paper id, ANDed like everything', () => {
+    // Ids, not indices: the server speaks paper ids, the renderer indices.
+    expect(visibleSet(NODES, '', new Set(), null, new Set([1, 3]))).toEqual(
+      new Set([0, 2]),
+    )
+    expect(
+      visibleSet(NODES, '', new Set([1]), null, new Set([1, 3])),
+    ).toEqual(new Set([2]))
+  })
+
+  test('an empty quantity match is an empty map, not no filter', () => {
+    const result = visibleSet(NODES, '', new Set(), null, new Set())
+    expect(result).not.toBeNull()
+    expect(result?.size).toBe(0)
   })
 })

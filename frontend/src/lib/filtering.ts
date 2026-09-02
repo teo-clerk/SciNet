@@ -14,9 +14,15 @@ export function useVisibleSet(): Set<number> | null {
   const activeTags = useGraphStore((s) => s.activeTags)
   const searchResults = useGraphStore((s) => s.searchResults)
   const yearCutoff = useGraphStore((s) => s.yearCutoff)
+  const quantityResults = useGraphStore((s) => s.quantityResults)
 
   return useMemo(() => {
-    if (searchResults === null && activeTags.size === 0 && yearCutoff === null) {
+    if (
+      searchResults === null &&
+      activeTags.size === 0 &&
+      yearCutoff === null &&
+      quantityResults === null
+    ) {
       return null
     }
 
@@ -40,8 +46,10 @@ export function useVisibleSet(): Set<number> | null {
       // The cutoff hides what came after. An unknown year is not a "later"
       // year, so undated papers stay visible at every scrubber position.
       if (yearCutoff !== null && node.year !== null && node.year > yearCutoff) return
+      // Ranges AND with everything: a physical filter narrows, always.
+      if (quantityResults !== null && !quantityResults.has(node.id)) return
       visible.add(i)
     })
     return visible
-  }, [nodes, activeTags, searchResults, yearCutoff])
+  }, [nodes, activeTags, searchResults, yearCutoff, quantityResults])
 }
