@@ -1,0 +1,249 @@
+{
+  "_comment": "Hand-labelled sentences for the extractor's precision floor. expect lists the AUTO rows a correct extractor emits (kind, value_si, unit_si); an empty expect is a negative — anything emitted there is a false positive. pending lists tokens that should be recorded for adjudication, not auto-extracted.",
+  "cases": [
+    {
+      "sentence": "The satellite operates in a sun-synchronous orbit at an altitude of 705 km above the surface.",
+      "expect": [
+        {
+          "kind": "length",
+          "value_si": 705000.0,
+          "unit_si": "meter"
+        }
+      ]
+    },
+    {
+      "sentence": "Ground sampling distance reaches 0.5 m in panchromatic mode for this sensor.",
+      "expect": [
+        {
+          "kind": "length",
+          "value_si": 0.5,
+          "unit_si": "meter"
+        }
+      ]
+    },
+    {
+      "sentence": "The thruster delivered a specific impulse of 312 s during the qualification campaign.",
+      "expect": [
+        {
+          "kind": "time",
+          "value_si": 312.0,
+          "unit_si": "second"
+        }
+      ]
+    },
+    {
+      "sentence": "The radar transmits at 5.405 GHz with a bandwidth that supports fine resolution imaging.",
+      "expect": [
+        {
+          "kind": "frequency",
+          "value_si": 5405000000.0,
+          "unit_si": "hertz"
+        }
+      ]
+    },
+    {
+      "sentence": "Radiative cooling kept the detector assembly at 65 K throughout the observation window.",
+      "expect": [
+        {
+          "kind": "temperature",
+          "value_si": 65.0,
+          "unit_si": "kelvin"
+        }
+      ]
+    },
+    {
+      "sentence": "Surface temperatures in the study region peaked near 35 °C during the summer campaign.",
+      "expect": [
+        {
+          "kind": "temperature",
+          "value_si": 308.15,
+          "unit_si": "kelvin"
+        }
+      ]
+    },
+    {
+      "sentence": "The solar array generates 2.4 kW at the beginning of life under full illumination.",
+      "expect": [
+        {
+          "kind": "power",
+          "value_si": 2400.0,
+          "unit_si": "watt"
+        }
+      ]
+    },
+    {
+      "sentence": "Each electron carries an energy of about 1.2 MeV in the inner radiation belt population.",
+      "expect": [
+        {
+          "kind": "energy",
+          "value_si": 1.9224e-13
+        }
+      ]
+    },
+    {
+      "sentence": "A membrane potential of -70 mV is typical for these cells at rest in culture.",
+      "expect": [
+        {
+          "kind": "voltage",
+          "value_si": -0.07
+        }
+      ]
+    },
+    {
+      "sentence": "The magnetometer resolves fields down to 0.1 nT after calibration and despinning.",
+      "expect": [
+        {
+          "kind": "magnetic_field",
+          "value_si": 1e-10
+        }
+      ]
+    },
+    {
+      "sentence": "Chamber pressure was held at 2.1 MPa while the injector ran at nominal mixture ratio.",
+      "expect": [
+        {
+          "kind": "pressure",
+          "value_si": 2100000.0
+        }
+      ]
+    },
+    {
+      "sentence": "The spacecraft re-enters at a velocity of 7.8 km/s before drag begins to dominate.",
+      "expect": [
+        {
+          "kind": "velocity",
+          "value_si": 7800.0,
+          "unit_si": "meter / second"
+        }
+      ]
+    },
+    {
+      "sentence": "Classification accuracy improved by 12 % when the temporal features were included.",
+      "expect": [
+        {
+          "kind": "fraction",
+          "value_si": 0.12,
+          "unit_si": "dimensionless"
+        }
+      ]
+    },
+    {
+      "sentence": "The receiver achieves a signal-to-noise ratio of 23 dB under clear-sky conditions.",
+      "expect": [
+        {
+          "kind": "level",
+          "value_si": 23.0,
+          "unit_si": "dB"
+        }
+      ]
+    },
+    {
+      "sentence": "Pointing stability of 0.8 arcsec was maintained over each thirty-minute exposure.",
+      "expect": [
+        {
+          "kind": "angle",
+          "value_si": 3.8785e-06,
+          "unit_si": "radian"
+        }
+      ]
+    },
+    {
+      "sentence": "The companion orbits at a projected separation of 12 AU from the primary star.",
+      "expect": [
+        {
+          "kind": "length",
+          "value_si": 1795170000000.0,
+          "unit_si": "meter"
+        }
+      ]
+    },
+    {
+      "sentence": "Integration times of 45 ms per frame kept motion blur below one pixel.",
+      "expect": [
+        {
+          "kind": "time",
+          "value_si": 0.045,
+          "unit_si": "second"
+        }
+      ]
+    },
+    {
+      "sentence": "The payload mass is limited to 150 kg including margins and the adapter ring.",
+      "expect": [
+        {
+          "kind": "mass",
+          "value_si": 150.0,
+          "unit_si": "kilogram"
+        }
+      ]
+    },
+    {
+      "sentence": "A swath of 290 km is imaged in each pass at the equator by the instrument.",
+      "expect": [
+        {
+          "kind": "length",
+          "value_si": 290000.0,
+          "unit_si": "meter"
+        }
+      ]
+    },
+    {
+      "sentence": "Measurements spanned 10-20 km in altitude across the stratospheric profile set.",
+      "expect": [
+        {
+          "kind": "length",
+          "value_si": 10000.0,
+          "unit_si": "meter"
+        }
+      ]
+    },
+    {
+      "sentence": "The oscillator drifts by 3 ± 0.4 Hz over the full operating temperature range.",
+      "expect": [
+        {
+          "kind": "frequency",
+          "value_si": 3.0,
+          "unit_si": "hertz"
+        }
+      ]
+    },
+    {
+      "sentence": "The survey gathered responses from 120 participants across three institutions in total.",
+      "expect": []
+    },
+    {
+      "sentence": "Results are summarised in Table 3 and discussed alongside earlier campaigns below.",
+      "expect": []
+    },
+    {
+      "sentence": "The dataset was collected in 2019 and reprocessed twice before public release.",
+      "expect": []
+    },
+    {
+      "sentence": "We trained the model for 100 epochs with early stopping on the validation loss.",
+      "expect": []
+    },
+    {
+      "sentence": "Roughly 40 papers from the corpus discuss calibration in some operational form.",
+      "expect": []
+    },
+    {
+      "sentence": "The mission launched with 3 instruments and returned data for a full decade.",
+      "expect": []
+    },
+    {
+      "sentence": "The orbit reaches 12 RJ from the planet before crossing the magnetopause boundary.",
+      "expect": [],
+      "pending": [
+        "RJ"
+      ]
+    },
+    {
+      "sentence": "Doses of 5 Gy were applied to each sample before the viability assay began.",
+      "expect": [],
+      "pending": [
+        "Gy"
+      ]
+    }
+  ]
+}
