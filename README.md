@@ -45,6 +45,19 @@ cited papers pulse, and a trail walks them in order. All of it local.
 ![The librarian answering from a 506-document library — planned searches,
 a streamed cited answer, and the map flying to the evidence](docs/media/librarian.gif)
 
+Every measured value in the library is a queryable row: numbers next to
+units the extractor *recognises* become SI-normalised quantities carrying
+the sentence they came from, and the filter bar turns a physical range —
+1–100 Hz, say — into geometry. Extraction is allowlist-strict because the
+first live run proved why: on a biology corpus, bare "A" matched matrix
+indices a thousand times and amperes never. Tokens that only look like
+units go to a local model, and its doubt lands in a review queue — nothing
+enters the filters on a guess.
+
+![Filtering 506 papers to those reporting 1–100 Hz — the oscillation
+literature lights up, a paper's card lists its measured values, and the
+review queue holds what the adjudicator was unsure about](docs/media/quantities.gif)
+
 **[USAGE.md](USAGE.md) is the guide** — setup, the three commands to run it,
 how to get papers in, and how to read the map.
 
@@ -58,6 +71,8 @@ Measured on 300 arXiv papers across 10 fields:
 | semantic query | 0.25 s warm |
 | clustering vs known fields | ARI 0.697, 10 regions, 1 unclustered |
 | embedder A/B, 506 papers (SciNCL vs SPECTER2) | mean node shift 1.90 of radius 40 |
+| quantity extraction, 506 papers | 16,275 rows in 6 s, CPU only |
+| extraction precision, labelled fixture | 25/25 auto emissions correct (CI floor 0.90) |
 | abstract coverage | 287 of 293 |
 
 ## How the map stays fast

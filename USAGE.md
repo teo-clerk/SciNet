@@ -433,6 +433,24 @@ want the same one, and if the worker is mid-write the librarian proceeds
 without the pause — slower, never wrong. The ⏸ in the jobs drawer is the
 same lease with a human on the button.
 
+### Measured values
+
+Every number a paper reports next to a unit it recognises — 40 Hz, 1.2 mV,
+3 µm — becomes a row with the sentence it came from. The **measured…**
+control in the filter bar turns them into geometry: pick a kind, set a
+range, and the map dims to the papers whose measurements fall inside it.
+The ranges are in each kind's canonical unit (shown beside the inputs,
+with the corpus's actual span as the placeholder). A selected paper lists
+its values on the card; hover a row for the sentence that produced it.
+
+Extraction is deliberately strict — a wrong unit is worse than a missing
+one, so only a curated table of unit tokens extracts directly. A token that
+merely *looks* like a unit goes to a local model for adjudication, and
+anything the model is unsure about lands in the **Review** tab, where the
+sentence, the raw text, and the model's reading sit side by side. Confirm
+moves the row into the filterable set; reject removes it for good. Nothing
+enters your filters on a guess.
+
 ## 5. Privacy
 
 Everything runs locally. Parsing, embedding, tagging and search all happen on

@@ -282,6 +282,7 @@ cd backend && uv run python ../scripts/clean_library.py --dry-run  # find junk
 cd backend && uv run python ../scripts/check_portability.py  # models stay local
 cd backend && uv run python ../scripts/fix_abstracts.py  # re-derive bad abstracts
 cd backend && uv run python ../scripts/revive_jobs.py  # requeue env-killed jobs
+cd backend && uv run python ../scripts/extract_quantities.py --apply  # re-extract measured values
 cd backend && uv run python ../scripts/force_project.py --apply  # rebuild the map
 cd backend && uv run python ../scripts/prepare_export.py  # clean before zipping
 cd backend && SCINET_MAX_PARSE_PAGES=0 uv run python -m app.workers.runner  # no page cap
