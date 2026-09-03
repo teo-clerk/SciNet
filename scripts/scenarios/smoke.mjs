@@ -1,9 +1,9 @@
 /**
  * The minimal scenario: load the map, let it settle, orbit once.
  *
- * Exists to prove the recorder end-to-end and as the template to copy — every
- * phase of EXECUTION_PLAN.md adds its own scenario file beside this one
- * rather than growing the harness.
+ * Exists to prove the recorder end-to-end and as the template to copy — each
+ * feature adds its own scenario file beside this one rather than growing the
+ * harness.
  */
 export default {
   name: 'smoke',

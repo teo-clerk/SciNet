@@ -1,3 +1,7 @@
+# working notes — audits, brainstorms, execution plans. Kept beside the code
+# for whoever is developing it, not shipped with it.
+.archive/
+
 # data — never committed
 data/library/
 data/markdown/
