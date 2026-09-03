@@ -138,6 +138,45 @@ Backfill is resumable. Interrupt it and run it again; it picks up where it
 stopped, because registration is keyed on file content and the job queue is
 durable.
 
+### A library to try it on
+
+No papers to hand? The repository ships the recipe for one: 85
+documents across five aerospace subfields — radar imaging, machine learning
+on satellite imagery, trajectory optimisation, astronomical instrumentation,
+and satellite positioning — drawn from arXiv and from NASA's technical report
+server, including 1960s–80s scans the pipeline has to OCR.
+
+```bash
+cd backend
+uv run python ../scripts/fetch_demo_corpus.py   # into data/library/, ~5 minutes
+uv run alembic upgrade head
+uv run python ../scripts/backfill.py            # register and queue them
+uv run scinet-up                                # the worker builds the map
+```
+
+Every file is named `Domain_identifier.pdf`, so once the map exists
+`scripts/eval_clustering.py` can score it against the true domains — the
+number the README reports, reproduced on your machine. Nothing is
+redistributed: `demo/manifest.jsonl` pins each document's source URL and
+SHA-256, and the script downloads from the sources and checks the hash. It is
+a tool you run, not something the app does; `egress_log` stays empty.
+
+Already have a library? Keep the two apart. One variable relocates
+everything but the models:
+
+```bash
+cd backend
+uv run python ../scripts/fetch_demo_corpus.py --dest ../data/demo/library
+SCINET_DATA_DIR=data/demo uv run alembic upgrade head
+SCINET_DATA_DIR=data/demo uv run python ../scripts/backfill.py
+SCINET_DATA_DIR=data/demo uv run scinet-up
+```
+
+The library folder, the Markdown, the vectors and the database all follow
+`SCINET_DATA_DIR`; the models stay where they are, because a second library
+should not mean a second 11 GB download. Drop the variable and the personal
+library is back, untouched.
+
 ### What counts as a paper
 
 | format | how it is read |

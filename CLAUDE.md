@@ -278,6 +278,8 @@ frontend/src/
 cd backend && uv run pytest                     # tests
 cd backend && uv run python -m app.workers.runner   # worker
 cd backend && uv run python ../scripts/backfill.py  # bulk import
+cd backend && uv run python ../scripts/fetch_demo_corpus.py --dest ../data/demo/library  # the benchmark corpus
+cd backend && SCINET_DATA_DIR=data/demo uv run scinet-up  # run it beside the personal library
 cd backend && uv run python ../scripts/clean_library.py --dry-run  # find junk
 cd backend && uv run python ../scripts/check_portability.py  # models stay local
 cd backend && uv run python ../scripts/fix_abstracts.py  # re-derive bad abstracts

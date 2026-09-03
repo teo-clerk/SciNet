@@ -61,8 +61,11 @@ DOWNLOAD_ATTEMPTS = 3
 #: NASA reports before this year are scans, which is what they are here for.
 LEGACY_BEFORE = 1995
 #: A scan longer than this costs more OCR minutes than it teaches — tier 2
-#: runs at roughly nine seconds a page.
-MAX_LEGACY_PAGES = 60
+#: runs at roughly nine seconds a page. A legacy report whose OCR layer the
+#: gate accepts costs seconds, so it is allowed to run long: the first-run
+#: manifest topped out at 57 pages and never exercised the 80-page cap.
+MAX_SCAN_PAGES = 60
+MAX_TEXT_PAGES = 150
 #: Legacy candidates probed per accepted one. Scans are found by probing, and
 #: a candidate with a clean OCR layer is not what the demo came for.
 LEGACY_CANDIDATES_PER_PICK = 3
@@ -289,6 +292,27 @@ def is_legacy(hit: Hit) -> bool:
     return hit.year is not None and hit.year < LEGACY_BEFORE
 
 
+def page_budget(text_layer: bool | None) -> int:
+    """How long a legacy report may be: scans are paid for in OCR minutes."""
+    return MAX_SCAN_PAGES if text_layer is False else MAX_TEXT_PAGES
+
+
+def choose_legacy(candidates: list[Entry], wanted: int) -> list[Entry]:
+    """Scans first; then the *longest* readable reports.
+
+    A 111-page report with a usable text layer is the document that
+    exercises the 80-page cap and the synopsis ladder's book rungs, and it
+    costs seconds. The first build took candidates in search order and every
+    pick came in under 80 pages, so the cap was never on camera.
+    """
+    scans = [e for e in candidates if e.text_layer is False]
+    readable = sorted(
+        (e for e in candidates if e.text_layer is not False),
+        key=lambda e: -(e.pages or 0),
+    )
+    return (scans + readable)[:wanted]
+
+
 # --- deciding what to fetch ---------------------------------------------------
 
 
@@ -422,10 +446,13 @@ def measured(entry: Entry, path: Path) -> Entry:
 
 
 def _fetch_one(fetcher: Fetcher, domain: str, hit: Hit, dest: Path) -> Entry | None:
+    """Download and measure; a file already on disk is measured, not refetched,
+    so a rebuild after a recipe change re-pins in seconds rather than minutes."""
     entry = entry_for(domain, hit)
     path = dest / entry.file
     try:
-        fetcher.download(hit.url, path)
+        if not path.exists():
+            fetcher.download(hit.url, path)
         return measured(entry, path)
     except Exception as exc:  # noqa: BLE001 - one bad document must not stop a build
         print(f"  [skip]  {entry.file}: {exc}")
@@ -466,8 +493,8 @@ def _pick_legacy(
         entry = _fetch_one(fetcher, domain.label, hit, dest)
         if entry is None:
             continue
-        if entry.pages is not None and entry.pages > MAX_LEGACY_PAGES:
-            print(f"  [long]  {entry.file}: {entry.pages} pages of OCR is too many")
+        if entry.pages is not None and entry.pages > page_budget(entry.text_layer):
+            print(f"  [long]  {entry.file}: {entry.pages} pages")
             (dest / entry.file).unlink(missing_ok=True)
             continue
         claimed.add(hit.ident)
@@ -475,9 +502,7 @@ def _pick_legacy(
         kind = "scan" if entry.text_layer is False else "text"
         print(f"  [{kind}]  {entry.file}  {entry.pages}p  {entry.title[:60]}")
 
-    scans = [e for e in candidates if e.text_layer is False]
-    readable = [e for e in candidates if e.text_layer is not False]
-    chosen = (scans + readable)[:wanted]
+    chosen = choose_legacy(candidates, wanted)
     for entry in candidates:
         if entry not in chosen:
             (dest / entry.file).unlink(missing_ok=True)

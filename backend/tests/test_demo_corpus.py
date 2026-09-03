@@ -22,9 +22,11 @@ from fetch_demo_corpus import (  # noqa: E402
     RECIPE,
     Entry,
     Hit,
+    choose_legacy,
     entry_for,
     filename_for,
     is_legacy,
+    page_budget,
     parse_arxiv_feed,
     parse_ntrs_results,
     plan_fetch,
@@ -160,6 +162,29 @@ def test_legacy_means_before_the_scan_era_ended():
     assert is_legacy(old)
     assert not is_legacy(new)
     assert not is_legacy(undated)
+
+
+def test_a_scan_is_budgeted_in_ocr_minutes_and_a_text_layer_is_not():
+    """A long report with a text layer costs seconds and exercises the 80-page
+    cap; a long scan costs an hour of tier 2 and teaches nothing new."""
+    assert page_budget(False) < 80 < page_budget(True)
+    assert page_budget(None) == page_budget(True)
+
+
+def test_legacy_picks_scans_first_then_the_longest_readable_report():
+    def legacy(name, pages, text_layer):
+        return Entry(
+            name, "SAR", "ntrs", name, "t", "u", 1970, "r",
+            pages=pages, text_layer=text_layer,
+        )  # fmt: skip
+
+    short = legacy("short", 5, True)
+    long = legacy("long", 111, True)
+    scan = legacy("scan", 20, False)
+
+    assert choose_legacy([short, long, scan], 2) == [scan, long]
+    assert choose_legacy([short, long], 1) == [long]
+    assert choose_legacy([], 2) == []
 
 
 # --- the manifest on disk --------------------------------------------------------
