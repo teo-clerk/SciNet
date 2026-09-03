@@ -9,10 +9,21 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+
+#: The parts of a library that follow ``data_dir`` unless set on their own.
+#: ``models_dir`` is deliberately not among them: models are not part of a
+#: library, and a second library on the same machine should not mean a second
+#: eleven-gigabyte download.
+_FOLLOWS_DATA_DIR: dict[str, str] = {
+    "library_dir": "library",
+    "markdown_dir": "markdown",
+    "vectors_dir": "vectors",
+    "db_path": "scinet.db",
+}
 
 
 class Settings(BaseSettings):
@@ -110,6 +121,21 @@ class Settings(BaseSettings):
     @classmethod
     def _absolute(cls, v: Path) -> Path:
         return v if v.is_absolute() else (REPO_ROOT / v).resolve()
+
+    @model_validator(mode="after")
+    def _follow_data_dir(self) -> Settings:
+        """One variable relocates a whole library.
+
+        ``SCINET_DATA_DIR=data/demo`` should be enough to run a second
+        library beside the first — a benchmark corpus next to a personal one.
+        Requiring the database, the Markdown, the vectors and the library
+        folder to be moved by hand as well is four chances to leave one of
+        them behind and quietly merge two libraries into one map.
+        """
+        for name, tail in _FOLLOWS_DATA_DIR.items():
+            if name not in self.model_fields_set:
+                setattr(self, name, self.data_dir / tail)
+        return self
 
     @property
     def ollama_url(self) -> str:
