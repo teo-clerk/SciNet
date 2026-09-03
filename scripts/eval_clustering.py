@@ -35,8 +35,10 @@ from app.core.db import session_scope  # noqa: E402
 from app.models import Cluster, Paper, Projection, ProjectionRun  # noqa: E402
 
 NOISE = -1
-# `Genomics_and_Bio_2401.12345v1.pdf` -> `Genomics_and_Bio`
-DOMAIN_RE = re.compile(r"^(.*?)_\d")
+# `Genomics_and_Bio_2401.12345v1.pdf` -> `Genomics_and_Bio`; the identifier may
+# carry a lower-case source tag first, `Orbits_ntrs-19680012395.pdf` -> `Orbits`,
+# so a document can say where it came from without confusing its domain.
+DOMAIN_RE = re.compile(r"^(.*?)_(?:[a-z]+-)?\d")
 
 
 def domain_of(pdf_path: str) -> str | None:
