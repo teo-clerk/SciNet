@@ -187,6 +187,26 @@ Target scale 3–4k papers on a single laptop.
   Nothing failed; the only symptom was 1.6 GB of weights in
   `~/.cache/huggingface` and a checkout that would have been hollow if zipped
   and moved. `scripts/check_portability.py` is the gate.
+- **Tier 0 counts vector paths before it lays a page out** (`MAX_PAGE_PATHS`,
+  `parse/limits.py`). Its cost model assumed a page costs its text layer; the
+  layout engine also walks every path, and on the aerospace corpus one figure
+  page — a scatter plot drawn point by point, 1.3 million paths — held the
+  worker for 5.5 hours with 48 documents behind it. pymupdf4llm's
+  `graphics_limit` is silently dropped on the layout-engine path, so the gate
+  is ours: over 20,000 paths (every stalled page; the median busiest page has
+  78) the page is read as plain text, which keeps its prose and loses only
+  the layout, and the Markdown names the pages.
+- **The demo corpus is a benchmark, and it is separate.** `demo/manifest.jsonl`
+  pins 85 open documents named `Domain_identifier.pdf`; `fetch_demo_corpus.py`
+  rebuilds it from the sources with hash checks and is user-invoked, not app
+  egress. It lives under `data/demo/` beside the personal library:
+  `SCINET_DATA_DIR` relocates the library, Markdown, vectors and database
+  together, and deliberately not the models. Nine wrong titles on that corpus
+  were worth 0.05 ARI and an entire region.
+- **The semantic-search limit scales with the library** (`semanticLimit`,
+  `frontend/src/lib/search.ts`): k nearest is the whole answer to "how much
+  lights up", and a fixed 60 lit 70% of an 85-paper map. Square root, like
+  the projection's own parameters.
 - **`os.kill(pid, 0)` is not a liveness probe on Windows.** Every signal value
   but the two console-control ones reaches TerminateProcess, so the portable-
   looking probe kills what it asks about. `app/cli/stop.py` queries instead.

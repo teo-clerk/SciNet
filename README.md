@@ -11,11 +11,54 @@ turn enrichment on.
 
 ## Status
 
-Working end to end on a real 300-paper library. Papers are watched or uploaded,
-deduplicated, parsed, embedded, positioned in 3D, clustered, named and tagged;
-the map persists and updates incrementally, and renders at 60 fps.
+Working end to end on a real 500-paper library, and on a benchmark anyone
+can rebuild. `demo/manifest.jsonl` pins 85 open documents across five
+aerospace subfields — radar imaging, machine learning on satellite imagery,
+trajectory optimisation, astronomical instrumentation, satellite positioning
+— seventeen arXiv preprints and two public-domain NASA technical reports in
+each, 1963 to 2026, filed as `Domain_identifier.pdf` so the map can be scored
+against the truth:
 
-The full suite — 650+ backend tests and 86 frontend tests — runs in CI on
+![The aerospace benchmark corpus settling into its regions — 85 documents,
+four named regions, a slow half-orbit](docs/media/aerospace-hero.gif)
+
+Five fields, four regions. Radar imaging and optical Earth observation share
+one — on arXiv, radar imaging *is* machine learning on satellite imagery now
+— and the other three come out pure: adjusted Rand index **0.725**, nothing
+left unclustered. Nothing is redistributed; one command fetches the corpus
+from its sources and checks every hash, and the score is reproducible on
+your machine:
+
+```bash
+cd backend
+uv run python ../scripts/fetch_demo_corpus.py   # 85 documents, ~5 minutes
+uv run alembic upgrade head
+uv run python ../scripts/backfill.py
+uv run scinet-up                                # then, once the map exists:
+uv run python ../scripts/eval_clustering.py
+```
+
+Ask it something that lives between two fields. *Ionospheric delay
+correction for interferometry* is a satellite-positioning problem the radar
+literature has to solve, and in Meaning mode its nearest papers light up in
+the ionosphere region with a spill into radar imaging — the one image that
+explains an embedding space to someone who has never seen one:
+
+![Semantic search for "ionospheric delay correction for interferometry"
+lighting up 18 of 85 papers between the ionosphere and radar
+regions](docs/media/aerospace-search.gif)
+
+The corpus found things, which is what a benchmark is for. The two genuine
+scans went through the vision model as intended. One 13-page born-digital
+paper held the parser for five and a half hours: a scatter plot drawn point
+by point, 1.3 million vector paths, which the layout engine walks one by one
+— tier 0 now counts paths first and reads such a page as plain text in
+seconds. And nine of the 85 titles were wrong (Word templates left in the
+PDF's Title field, author bylines the converter set as headings); fixing
+them was worth 0.05 of ARI and an entire region — the trajectory papers,
+unclustered noise before, are a pure region after.
+
+The full suite — 780+ backend tests and 112 frontend tests — runs in CI on
 every push, on a runner with no GPU, no model weights, and no network access
 to models: the pipeline's seams are designed to be testable without the
 hardware they orchestrate.
@@ -60,6 +103,20 @@ review queue holds what the adjudicator was unsure about](docs/media/quantities.
 
 **[USAGE.md](USAGE.md) is the guide** — setup, the three commands to run it,
 how to get papers in, and how to read the map.
+
+Measured on the 85-document aerospace benchmark (`demo/manifest.jsonl`):
+
+| | |
+|---|---|
+| clustering vs the five true fields | ARI 0.725 · homogeneity 0.781 · completeness 0.946 · 4 regions, 0 unclustered |
+| the same corpus before nine titles were fixed | ARI 0.675 · 3 regions, 18% unclustered |
+| tier-0 parse, 85 documents, 1,877 pages | median 15 s per document; 73 of 85 under a minute |
+| tier-2 OCR, the two scans (18 and 20 pages) | 785 s and 882 s, three page timeouts each |
+| the paper with 1.3 million vector paths | 19,825 s before the path gate, 20 s after |
+| embedding, 85 documents | 18 s |
+| refit + cluster + name + bridges | 47 s |
+| quantity extraction + adjudication | 2,572 automatic rows over 84 of 85 papers; 18 left for review |
+| outbound requests, whole pipeline | `SELECT count(*) FROM egress_log` → 0 |
 
 Measured on 300 arXiv papers across 10 fields:
 
@@ -254,6 +311,19 @@ is on is recorded in the `egress_log` table:
 ```bash
 sqlite3 data/scinet.db "SELECT ts, service, url FROM egress_log ORDER BY ts DESC LIMIT 20"
 ```
+
+Privacy as a query result, not a promise. The demo library, after all 85
+documents went through parsing, OCR, embedding, clustering, naming, tagging
+and quantity extraction:
+
+```console
+$ sqlite3 data/demo/scinet.db "SELECT count(*) FROM egress_log;"
+0
+```
+
+The corpus fetcher does reach arXiv and NASA — it is a tool you run, like
+the model downloader, not something the app does, and it writes nothing to
+that table.
 
 ## Use it from your AI tools
 

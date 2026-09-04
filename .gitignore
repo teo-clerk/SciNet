@@ -2,18 +2,19 @@
 # for whoever is developing it, not shipped with it.
 .archive/
 
-# data — never committed
-data/library/
-data/markdown/
-data/vectors/
+# data — never committed. `**` because a second library lives one level
+# down (SCINET_DATA_DIR=data/demo) and carries the same folders.
+data/**/library/
+data/**/markdown/
+data/**/vectors/
+data/**/logs/
 data/models/
-data/logs/
 # Files cleanup took out of the library. Operator data, not source, and a
 # quarantine run can be tens of megabytes of PDFs.
-data/quarantine/
-data/*.db
-data/*.db-wal
-data/*.db-shm
+data/**/quarantine/
+data/**/*.db
+data/**/*.db-wal
+data/**/*.db-shm
 
 # python
 __pycache__/

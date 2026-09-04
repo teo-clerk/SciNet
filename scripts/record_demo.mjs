@@ -18,8 +18,8 @@
  *
  * A scenario module default-exports:
  *   { name, url?, steps: [...] }
- * with steps drawn from: { wait: 'css', timeout? } · { sleep: ms } ·
- * { click: 'css' } · { clickAt: [x, y] } · { hover: [x, y] } ·
+ * with steps drawn from: { wait: 'css', timeout? } · { waitGone: 'css', timeout? }
+ * · { sleep: ms } · { click: 'css' } · { clickAt: [x, y] } · { hover: [x, y] } ·
  * { orbit: { x, y, steps, dx } } · { type: 'text' } · { evaluate: 'js' } ·
  * { startRecording } · { stopRecording }.
  * Waits gate on real state; sleeps only pace the cut.
@@ -149,6 +149,22 @@ async function waitFor(cdp, selector, timeout = 20_000) {
   throw new Error(`"${selector}" never appeared (${timeout} ms)`)
 }
 
+/** The complement of waitFor: a spinner, a warming notice, a panel closing.
+ * Gating on the element's absence is what makes "results landed" a real
+ * state rather than a guessed sleep. */
+async function waitGone(cdp, selector, timeout = 20_000) {
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    const probe = await cdp.send('Runtime.evaluate', {
+      expression: `!document.querySelector(${JSON.stringify(selector)})`,
+      returnByValue: true,
+    })
+    if (probe.result.value) return
+    await sleep(250)
+  }
+  throw new Error(`"${selector}" never went away (${timeout} ms)`)
+}
+
 async function centerOf(cdp, selector) {
   const probe = await cdp.send('Runtime.evaluate', {
     expression: `(() => {
@@ -188,6 +204,7 @@ async function orbit(cdp, { x = 500, y = 450, steps = 40, dx = 12 } = {}) {
 
 async function runStep(cdp, step, recorder) {
   if (step.wait) return waitFor(cdp, step.wait, step.timeout)
+  if (step.waitGone) return waitGone(cdp, step.waitGone, step.timeout)
   if (step.sleep) return sleep(step.sleep)
   if (step.click) {
     const { x, y } = await centerOf(cdp, step.click)
