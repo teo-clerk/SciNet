@@ -60,9 +60,77 @@ FURNITURE_RE = re.compile(
     # Unfilled manuscript templates. These reach the sidebar as a paper's
     # title and are unmistakably not one.
     r"|replace\s+this|double-?click\s+here|click\s+here\s+to|<\s*title\s*>"
-    r"|insert\s+(?:title|your)|type\s+your|\[?title\s+here)",
+    r"|insert\s+(?:title|your)|type\s+your|\[?title\s+here"
+    # Elsevier stamps "Journal Pre-proof" as a level-1 heading above the
+    # real title; Word templates leave their own name in the Title field.
+    r"|journal\s+pre-?proofs?|author\s+template)",
     re.IGNORECASE,
 )
+
+# Template and banner phrases that can appear anywhere in a candidate, found
+# in the Title field of real PDFs: "Author template for journal articles",
+# "JIIDE 2010 PROCEEDINGS FORMAT". Deliberately narrower than the word
+# "template" — "A Template-Based Approach to Protein Structure Prediction"
+# is a title.
+TEMPLATE_RE = re.compile(
+    r"\b(?:pre-?proofs?|template\s+for\s+(?:journal|conference|papers?|articles?)"
+    r"|(?:manuscript|paper|article)\s+template|proceedings\s+format)\b",
+    re.IGNORECASE,
+)
+
+# A Title field holding the file's own name: "13096_22_WST_Instrumentation".
+# Titles have spaces; filenames have underscores instead.
+FILENAME_RE = re.compile(r"^\S*_\S*$")
+
+# A conference or report code standing alone on the first line —
+# "IAC–24–C1.7.1", "NASA-CR-141441": digits, no lowercase, one or two words.
+# An all-caps title with a number in it ("LANDSAT-4 MSS RADIOMETRIC
+# CHARACTERIZATION") has more words than that and is kept.
+CODE_RE = re.compile(r"^(?=.*\d)[^a-z]+$")
+MAX_CODE_WORDS = 2
+
+# The line after an author byline. Converters mark bylines as headings when
+# they are set large, and "# **Chiara Pozzi**" then outranks the unmarked
+# title above it; the affiliation that follows a name is what gives it away.
+AFFILIATION_RE = re.compile(
+    r"\b(?:department|dept\.?|universit|institut|laborator|faculty|"
+    r"school\s+of|college|cent(?:er|re)\s+(?:for|of))|[\w.+-]+@[\w-]+\.\w",
+    re.IGNORECASE,
+)
+
+
+# A person's name as a byline sets it: two to four capitalised words, no
+# digits, no punctuation a title would carry. The affiliation test below
+# applies only to candidates shaped like this — a real title is very often
+# followed by an author line that names a university, and treating that as
+# a byline cost two correct titles on the first run.
+NAME_WORD_RE = re.compile(r"^[A-Z][\w'’.-]*$")
+MAX_NAME_WORDS = 4
+MAX_NAME_LENGTH = 40
+
+
+def _looks_like_a_code(candidate: str) -> bool:
+    return len(candidate.split()) <= MAX_CODE_WORDS and bool(CODE_RE.match(candidate))
+
+
+def _looks_like_a_name(candidate: str) -> bool:
+    words = candidate.split()
+    return (
+        2 <= len(words) <= MAX_NAME_WORDS
+        and len(candidate) <= MAX_NAME_LENGTH
+        and all(NAME_WORD_RE.match(word) for word in words)
+    )
+
+
+def _is_byline(candidate: str, lines: list[str], index: int) -> bool:
+    """A name-shaped heading whose next non-empty line is an affiliation."""
+    if not _looks_like_a_name(candidate):
+        return False
+    for line in lines[index + 1 :]:
+        if line.strip():
+            return bool(AFFILIATION_RE.search(line))
+    return False
+
 
 # "Journal of Theoretical Biology 241 (2006) 438-441" — a citation line for the
 # paper, printed above it, not the paper's name.
@@ -142,11 +210,16 @@ def split_authors(raw: str) -> list[str]:
 LEADING_MARKER_RE = re.compile(r"^[>\-–—*•|]+\s*\d*\s*")
 
 EMPHASIS_RE = re.compile(r"(\*{1,3}|_{1,3})(.+?)\1")
+# The converter also emits HTML for what Markdown cannot say — underlined
+# section headings ("1. <u>Introduction</u>"), affiliation superscripts
+# ("Tavana<sup>∗</sup>") — and a tag in the middle of a candidate hides it
+# from every pattern below.
+HTML_TAG_RE = re.compile(r"</?[A-Za-z][^>]*>")
 
 
 def strip_markdown(line: str) -> str:
-    """Remove heading markers and emphasis from a candidate title line."""
-    candidate = line.strip().lstrip("#").strip()
+    """Remove heading markers, emphasis and HTML tags from a candidate line."""
+    candidate = HTML_TAG_RE.sub("", line.strip().lstrip("#")).strip()
     # Applied repeatedly for nested emphasis (***bold italic***).
     for _ in range(3):
         replaced = EMPHASIS_RE.sub(r"\2", candidate)
@@ -182,7 +255,7 @@ HEADING_RE = re.compile(r"^\s*(#{1,6})\s*\S")
 # Front matter ("Table of Contents") and numbered sections ("1 Introduction")
 # both appear above the real title often enough to matter.
 SECTION_HEADING_RE = re.compile(
-    r"^\s*(?:\d+[.)]?\s+)?(?:table\s+of\s+contents|contents|summary|"
+    r"^\s*(?:(?:\d+|[IVX]+)[.)]?\s+)?(?:table\s+of\s+contents|contents|summary|"
     r"introduction|abstract|background|references|bibliography|"
     r"acknowledge?ments?|appendix|conclusions?|methods?|results?|discussion)"
     r"\s*$",
@@ -198,9 +271,11 @@ def _title_candidate(line: str) -> str | None:
     candidate = LEADING_MARKER_RE.sub("", strip_markdown(line)).strip()
     if len(candidate) < MIN_TITLE_LENGTH or len(candidate) > MAX_TITLE_LENGTH:
         return None
-    if FURNITURE_RE.match(candidate):
+    if FURNITURE_RE.match(candidate) or TEMPLATE_RE.search(candidate):
         return None
     if CITATION_HEADER_RE.search(candidate) or LOCATOR_RE.search(candidate):
+        return None
+    if _looks_like_a_code(candidate):
         return None
     if SECTION_HEADING_RE.match(candidate):
         # Checked here rather than only in the heading pass: "Introduction" is
@@ -227,16 +302,16 @@ def guess_title(text: str) -> str | None:
 
     head = lines[:HEADING_SEARCH_LINES]
     for level in range(1, MAX_TITLE_HEADING_LEVEL + 1):
-        for line in head:
+        for index, line in enumerate(head):
             match = HEADING_RE.match(line)
             if match is None or len(match.group(1)) != level:
                 continue
             candidate = _title_candidate(line)
-            if candidate is None:
+            if candidate is None or _is_byline(candidate, head, index):
                 continue
             return candidate
 
-    for line in lines:
+    for index, line in enumerate(lines):
         deep = HEADING_RE.match(line)
         if deep is not None and len(deep.group(1)) > MAX_TITLE_HEADING_LEVEL:
             # The converter marked this line subordinate. It was already passed
@@ -245,7 +320,7 @@ def guess_title(text: str) -> str | None:
             # ("###### **Pierluigi Fasano**") became titles.
             continue
         candidate = _title_candidate(line)
-        if candidate is None:
+        if candidate is None or _is_byline(candidate, lines, index):
             continue
         if candidate.lower().startswith("abstract"):
             break
@@ -387,6 +462,25 @@ class _Embedded:
     source: MetaSource = MetaSource.PDF_EMBEDDED
 
 
+def usable_embedded_title(raw: str) -> str | None:
+    """The PDF's Title field if it is honestly filled in, else None.
+
+    Judged by the same furniture rules as any other candidate, plus the two
+    ways a Title field lies that a page line cannot: it holds the file's own
+    name, or the name of the template the author started from.
+    """
+    title = strip_markdown(raw)
+    if len(title) < MIN_TITLE_LENGTH:
+        return None
+    if FURNITURE_RE.match(title) or TEMPLATE_RE.search(title):
+        return None
+    if CITATION_HEADER_RE.search(title) or FILENAME_RE.match(title):
+        return None
+    if _looks_like_a_code(title):
+        return None
+    return title
+
+
 def _embedded_metadata(path: Path | str) -> _Embedded:
     """Whatever the container itself claims, by format.
 
@@ -462,13 +556,8 @@ def extract_from_document(
     # carry "Dissertation Thesis", "CLASE No. 1 PARTE I", a journal's running
     # header, or a LaTeX template's leftovers. Checked against the same
     # furniture patterns as any other candidate before being trusted.
-    embedded_title = strip_markdown(embedded.get("title") or "")
-    embedded_usable = (
-        len(embedded_title) >= MIN_TITLE_LENGTH
-        and not FURNITURE_RE.match(embedded_title)
-        and not CITATION_HEADER_RE.search(embedded_title)
-    )
-    if embedded_usable:
+    embedded_title = usable_embedded_title(embedded.get("title") or "")
+    if embedded_title is not None:
         meta.title = embedded_title
         meta.field_sources["title"] = container.source
     elif (guessed := guess_title(head_text)) is not None:

@@ -16,6 +16,7 @@ from app.services.metadata.extract import (
     extract_from_document,
     guess_title,
     split_authors,
+    usable_embedded_title,
 )
 
 # --- identifiers ----------------------------------------------------------
@@ -415,6 +416,112 @@ def test_a_title_merely_mentioning_a_publisher_is_kept():
     """The guard anchors at the start; it must not eat real titles."""
     title = "Benchmarking Nature-Inspired Optimisation Algorithms"
     assert guess_title(f"{title}\n\nAuthors") == title
+
+
+# --- what the aerospace corpus taught the title heuristic -----------------
+
+# Elsevier's accepted-manuscript banner arrives as the only level-1 heading,
+# and the converter sets the author bylines as level-2 headings, so both
+# outranked the real, unmarked title.
+PREPROOF_HEAD = """# Journal Pre-proof
+
+Published Open Access at: https://doi.org/10.1016/j.actaastro.2024.05.036
+
+Optimization, Guidance, and Control of Low-Thrust Transfers to Low Lunar Orbit
+
+## **Chiara Pozzi**
+
+Department of Aerospace Engineering, Khalifa University, Abu Dhabi
+
+## **Mauro Pontani**
+
+Department of Astronautical Engineering, Sapienza Universita di Roma
+"""
+
+# A conference paper: the paper code on line one, then the unmarked title,
+# then every author as a level-1 heading followed by an affiliation.
+CONFERENCE_HEAD = """IAC–24–C1.7.1
+
+Optimal Low-Thrust Orbit Transfers Connecting Gateway with Earth and Moon
+
+# **Chiara Pozzi**
+
+Department of Aerospace Engineering, Khalifa University; 100064456@ku.ac.ae
+
+# **Mauro Pontani**
+
+Department of Astronautical Engineering, Sapienza Universita di Roma
+"""
+
+
+def test_a_preproof_banner_heading_is_not_the_title():
+    assert guess_title(PREPROOF_HEAD) == (
+        "Optimization, Guidance, and Control of Low-Thrust Transfers to Low Lunar Orbit"
+    )
+
+
+def test_a_byline_set_as_a_heading_is_not_the_title():
+    assert guess_title(CONFERENCE_HEAD) == (
+        "Optimal Low-Thrust Orbit Transfers Connecting Gateway with Earth and Moon"
+    )
+
+
+def test_a_short_heading_without_an_affiliation_after_it_is_still_a_title():
+    """The byline rule needs the affiliation; a terse title alone is kept."""
+    assert guess_title("# Quantum Chromodynamics Revisited\n\nAbstract\n") == (
+        "Quantum Chromodynamics Revisited"
+    )
+
+
+def test_a_title_followed_by_an_author_line_naming_a_university_is_kept():
+    """The first version of the byline rule lost this one: the affiliation
+    test must apply to name-shaped headings only."""
+    title = "A Novel Optimization-Based Collision Avoidance For On-Orbit Assembly"
+    text = (
+        f"# {title}\n\n"
+        "Siavash Tavana<sup>∗</sup>, Anton de Ruiter, "
+        "Toronto Metropolitan University, Toronto, Canada\n\n"
+        "Abstract\n"
+    )
+    assert guess_title(text) == title
+
+
+@pytest.mark.parametrize(
+    "heading",
+    ["# 1. <u>Introduction</u>", "# I. <u>INTRODUCTION</u>", "## II) Methods"],
+)
+def test_a_numbered_section_heading_is_never_the_title(heading):
+    """Once the banner and bylines are ruled out, the next heading the converter
+    marked was the first section — underlined, and once in roman numerals."""
+    real = "Optimal Low-Thrust Orbit Transfers Connecting Gateway with Earth and Moon"
+    assert guess_title(f"{heading}\n\n{real}\n\nAbstract\n") == real
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "Author template for journal articles",
+        "JIIDE 2010 PROCEEDINGS FORMAT",
+        "13096_22_WST_Instrumentation",
+        "Journal Pre-proof",
+        "NASA-CR-141441",
+    ],
+)
+def test_a_title_field_that_lies_is_not_trusted(field):
+    """Each of these was the Title field of a real PDF in the demo corpus."""
+    assert usable_embedded_title(field) is None
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "A Template-Based Approach to Protein Structure Prediction",
+        "LANDSAT-4 MSS RADIOMETRIC CHARACTERIZATION",
+        "Hardware-Aware Deployment of Joint SAR Compression on FPGA",
+    ],
+)
+def test_an_honest_title_field_is_kept(field):
+    assert usable_embedded_title(field) == field
 
 
 # --- page furniture that the list view made visible ----------------------
