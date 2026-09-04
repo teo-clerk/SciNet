@@ -71,13 +71,32 @@ export class EngineWarming extends Error {
   }
 }
 
+/** Exact matches are what they are; the cap only bounds the payload. */
+export const FULLTEXT_LIMIT = 60
+
+/**
+ * How many nearest papers a meaning search lights up.
+ *
+ * Semantic search always returns its k nearest, however unrelated, so k is
+ * the whole answer to "how much of the map lights up". A fixed 60 was right
+ * for a five-hundred-paper library and lit 70% of an 85-paper one — the
+ * result read as "nearly everything matched", which said nothing. The same
+ * square-root law the projection uses: a library ten times larger does not
+ * have ten times as many papers about one thing.
+ */
+export function semanticLimit(paperCount: number): number {
+  const scaled = Math.round(2 * Math.sqrt(Math.max(paperCount, 0)))
+  return Math.min(FULLTEXT_LIMIT, Math.max(12, scaled))
+}
+
 export async function searchServer(
   mode: 'fulltext' | 'semantic',
   query: string,
   signal?: AbortSignal,
+  limit: number = FULLTEXT_LIMIT,
 ): Promise<ServerHit[]> {
   const res = await fetch(
-    `/api/search/${mode}?q=${encodeURIComponent(query)}&limit=60`,
+    `/api/search/${mode}?q=${encodeURIComponent(query)}&limit=${limit}`,
     { signal },
   )
 

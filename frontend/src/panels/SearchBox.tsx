@@ -13,8 +13,10 @@ import { useCallback, useEffect, useRef } from 'react'
 import {
   buildTitleIndex,
   EngineWarming,
+  FULLTEXT_LIMIT,
   searchServer,
   searchTitles,
+  semanticLimit,
   type SearchMode,
 } from '@/lib/search'
 import { useGraphStore } from '@/state/graphStore'
@@ -77,7 +79,9 @@ export function SearchBox() {
       const controller = new AbortController()
       inFlight.current = controller
       setPending(true)
-      searchServer(searchMode, trimmed, controller.signal)
+      const limit =
+        searchMode === 'semantic' ? semanticLimit(nodes.length) : FULLTEXT_LIMIT
+      searchServer(searchMode, trimmed, controller.signal, limit)
         .then((hits) => {
           if (controller.signal.aborted) return
           setResults(new Set(hits.map((h) => h.paper_id)))
@@ -100,7 +104,7 @@ export function SearchBox() {
           setPending(false)
         })
     },
-    [setResults, setPending, setError, setWarming],
+    [nodes.length, setResults, setPending, setError, setWarming],
   )
 
   useEffect(() => {
