@@ -10,12 +10,14 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.models import Cluster, ClusterLink, Paper, PaperMeta, Projection, ProjectionRun
+from app.services.project import curriculum_api
 
 router = APIRouter(prefix="/api/clusters", tags=["clusters"])
 
@@ -28,6 +30,26 @@ class ClusterMember(BaseModel):
     confidence: float | None
 
 
+class EntryPoint(BaseModel):
+    """Where to start reading, and why — the reasons are for the reader."""
+
+    paper_id: int
+    title: str | None
+    year: int | None
+    score: float
+    reasons: list[str]
+
+
+def entry_point_out(point: curriculum_api.EntryPoint) -> EntryPoint:
+    return EntryPoint(
+        paper_id=point.paper_id,
+        title=point.title,
+        year=point.year,
+        score=point.score,
+        reasons=point.reasons,
+    )
+
+
 class ClusterDetail(BaseModel):
     id: int
     label: str | None
@@ -35,6 +57,10 @@ class ClusterDetail(BaseModel):
     size: int
     terms: list[str]
     members: list[ClusterMember]
+    #: None when fewer than two members have a vector; nothing to rank.
+    entry_point: EntryPoint | None = None
+    alternatives: list[EntryPoint] = Field(default_factory=list)
+    reading_order: list[int] = Field(default_factory=list)
 
 
 class LinkSummary(BaseModel):
@@ -98,10 +124,22 @@ def _members(
 
 
 @router.get("/{cluster_id}", response_model=ClusterDetail)
-def get_cluster(cluster_id: int, db: Session = Depends(get_db)) -> ClusterDetail:
+def get_cluster(
+    cluster_id: int,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> ClusterDetail:
     cluster = db.get(Cluster, cluster_id)
     if cluster is None:
         raise HTTPException(404, "no such cluster")
+
+    members = _members(db, cluster.run_id, None, cluster.id)
+    # Computed on request rather than stored with the cluster: it is a few
+    # milliseconds over a region's vectors, and storing it would mean one
+    # more derived row to invalidate whenever a paper's metadata changes.
+    curriculum = curriculum_api.curriculum_for(
+        db, settings, [m.paper_id for m in members]
+    )
 
     return ClusterDetail(
         id=cluster.id,
@@ -109,7 +147,14 @@ def get_cluster(cluster_id: int, db: Session = Depends(get_db)) -> ClusterDetail
         overview=cluster.llm_overview,
         size=cluster.size,
         terms=json.loads(cluster.top_terms_json or "[]"),
-        members=_members(db, cluster.run_id, None, cluster.id),
+        members=members,
+        entry_point=(
+            entry_point_out(curriculum.entry_point)
+            if curriculum.entry_point is not None
+            else None
+        ),
+        alternatives=[entry_point_out(p) for p in curriculum.alternatives],
+        reading_order=curriculum.reading_order,
     )
 
 

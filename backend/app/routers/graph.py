@@ -10,6 +10,10 @@ whole corpus is what turns a 50 ms load into a multi-second one.
 
 The response carries an ETag keyed to the active projection run, so reopening
 the app is a 304 and costs nothing.
+
+Two questions about the map that are not the map itself also live here: where
+to start reading an arbitrary set of papers, and the trail of papers that leads
+from one to another. Both run in the embedding space, never on x/y/z.
 """
 
 from __future__ import annotations
@@ -19,11 +23,13 @@ import json
 
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from sqlalchemy import select
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
+from app.core.warmup import WARMER, WarmupState
 from app.models import (
     Cluster,
     JobKind,
@@ -35,6 +41,10 @@ from app.models import (
     ProjectionRun,
     Tag,
 )
+from app.routers.clusters import EntryPoint, entry_point_out
+from app.services.project import curriculum_api
+from app.services.project.curriculum import MAX_READING_ORDER
+from app.services.project.paths import MAX_STOPS, KnnGraph, find_path, graph_for, thin
 from app.services.project.skeleton import load as load_skeleton
 from app.workers.queue import enqueue
 
@@ -255,3 +265,238 @@ def similar_papers(
         {"id": pid, "title": titles.get(pid), "similarity": round(score, 4)}
         for pid, score in hits
     ]
+
+
+# --- where do I start? -------------------------------------------------------
+
+
+class EntryPointRequest(BaseModel):
+    paper_ids: list[int] = Field(max_length=2000)
+    limit: int = Field(MAX_READING_ORDER, ge=1, le=50)
+
+
+class CurriculumOut(BaseModel):
+    entry_point: EntryPoint | None
+    alternatives: list[EntryPoint]
+    reading_order: list[int]
+    considered: int
+
+
+@router.post("/entry-point", response_model=CurriculumOut)
+def entry_point_for_set(
+    body: EntryPointRequest,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> CurriculumOut:
+    """Where to start reading an arbitrary set of papers.
+
+    A cluster gets this for free from its own endpoint; this is for every other
+    set a reader assembles — a search result, a lasso selection, a tag. The
+    ranking is the same one, so the answer does not change with how the set
+    was drawn.
+    """
+    if not body.paper_ids:
+        raise HTTPException(400, "give at least one paper id")
+
+    curriculum = curriculum_api.curriculum_for(
+        db, settings, body.paper_ids, limit=body.limit
+    )
+    return CurriculumOut(
+        entry_point=(
+            entry_point_out(curriculum.entry_point)
+            if curriculum.entry_point is not None
+            else None
+        ),
+        alternatives=[entry_point_out(p) for p in curriculum.alternatives],
+        reading_order=curriculum.reading_order,
+        considered=curriculum.considered,
+    )
+
+
+# --- idea trails -------------------------------------------------------------
+
+
+class PathEnd(BaseModel):
+    paper_id: int
+    #: The phrase this end was typed as, when it was anchored to its nearest
+    #: paper rather than given by id. Null for an id.
+    anchored_from_text: str | None = None
+
+
+class PathStop(BaseModel):
+    paper_id: int
+    title: str | None
+    year: int | None
+    cluster_id: int | None
+    cluster_label: str | None
+    #: Cosine to the following stop, so the reader sees which step is the
+    #: leap. Null on the last stop.
+    similarity_to_next: float | None
+    # `core_question` joins here once `paper_insights` lands.
+
+
+class PathOut(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    from_: PathEnd = Field(alias="from")
+    to: PathEnd
+    complete: bool
+    hops: int
+    #: True when the raw trail was longer than MAX_STOPS and has been sampled.
+    thinned: bool
+    stops: list[PathStop]
+
+
+def _require_warm_encoder() -> None:
+    """Refuse to embed a phrase until the model is loaded.
+
+    A twin of the gate in ``routers.search.search_semantic``, kept in step by
+    hand rather than shared: the two routers are owned separately and the
+    block is short. The three answers are deliberately distinct — "still
+    loading" is not "unavailable", and neither is "no results".
+    """
+    status = WARMER.status()
+    if status.state is WarmupState.FAILED:
+        raise HTTPException(
+            503,
+            {
+                "state": "failed",
+                "message": f"the embedding model could not be loaded: {status.error}",
+            },
+        )
+    if not WARMER.is_ready:
+        WARMER.start()  # no-op if already warming; recovers a missed dispatch
+        raise HTTPException(
+            503,
+            {
+                "state": "warming",
+                "message": "the search engine is still starting up",
+                "elapsed_seconds": round(status.elapsed_seconds, 1),
+                "estimated_remaining": (
+                    round(status.estimated_remaining, 1)
+                    if status.estimated_remaining is not None
+                    else None
+                ),
+            },
+        )
+
+
+def _anchor(text: str, store, settings: Settings) -> int:
+    """The paper nearest a phrase — how a typed end becomes a node."""
+    from app.services.embed import encoder
+
+    _require_warm_encoder()
+    try:
+        vector = encoder.encode_query(text, settings=settings)
+    except Exception as exc:  # noqa: BLE001 - model absent or not yet downloaded
+        raise HTTPException(
+            503,
+            {"state": "failed", "message": f"the embedding model failed: {exc}"},
+        ) from exc
+
+    hits = store.nearest(vector, k=1)
+    if not hits:
+        raise HTTPException(404, "nothing in the library has an embedding yet")
+    return hits[0][0]
+
+
+def _resolve_end(
+    paper_id: int | None, text: str | None, store, settings: Settings
+) -> PathEnd:
+    """One end of a trail as a node. An id wins over text when both are given."""
+    if paper_id is not None:
+        if store.get(paper_id) is None:
+            raise HTTPException(404, f"paper {paper_id} has no embedding yet")
+        return PathEnd(paper_id=paper_id)
+    assert text is not None  # presence was checked before either end resolved
+    return PathEnd(paper_id=_anchor(text, store, settings), anchored_from_text=text)
+
+
+def _describe_stops(db: Session, graph: KnnGraph, stops: list[int]) -> list[PathStop]:
+    run = db.scalar(select(ProjectionRun).where(ProjectionRun.is_active.is_(True)))
+    # A trail does not need a map to exist; without one the cluster fields are
+    # simply empty rather than the request failing.
+    run_id = run.id if run is not None else -1
+    rows = db.execute(
+        select(
+            Paper.id,
+            PaperMeta.title,
+            PaperMeta.year,
+            Projection.cluster_id,
+            Cluster.llm_label,
+        )
+        .outerjoin(PaperMeta, PaperMeta.paper_id == Paper.id)
+        .outerjoin(
+            Projection,
+            and_(Projection.paper_id == Paper.id, Projection.run_id == run_id),
+        )
+        .outerjoin(Cluster, Cluster.id == Projection.cluster_id)
+        .where(Paper.id.in_(stops))
+    ).all()
+    by_id = {row.id: row for row in rows}
+
+    described: list[PathStop] = []
+    for position, pid in enumerate(stops):
+        row = by_id.get(pid)
+        following = stops[position + 1] if position + 1 < len(stops) else None
+        similarity = (
+            float(
+                graph.unit[graph.index_of[pid]] @ graph.unit[graph.index_of[following]]
+            )
+            if following is not None
+            else None
+        )
+        described.append(
+            PathStop(
+                paper_id=pid,
+                title=row.title if row else None,
+                year=row.year if row else None,
+                cluster_id=row.cluster_id if row else None,
+                cluster_label=row.llm_label if row else None,
+                similarity_to_next=round(similarity, 4)
+                if similarity is not None
+                else None,
+            )
+        )
+    return described
+
+
+@router.get("/path", response_model=PathOut)
+def idea_trail(
+    from_id: int | None = Query(None, alias="from"),
+    to_id: int | None = Query(None, alias="to"),
+    from_text: str | None = Query(None, min_length=2),
+    to_text: str | None = Query(None, min_length=2),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> PathOut:
+    """The chain of papers from one idea to another.
+
+    Each end is a paper id or a phrase; a phrase is anchored to its nearest
+    paper first, and the response says so, because "from Ethics" is a claim
+    about the reader's words and "from paper 12" is a claim about the corpus.
+    """
+    from app.workers.embed_handlers import open_store
+
+    if (from_id is None and from_text is None) or (to_id is None and to_text is None):
+        raise HTTPException(400, "each end of a trail needs a paper id or a phrase")
+
+    store = open_store(settings)
+    source = _resolve_end(from_id, from_text, store, settings)
+    target = _resolve_end(to_id, to_text, store, settings)
+    if source.paper_id == target.paper_id:
+        raise HTTPException(400, "both ends of the trail are the same paper")
+
+    graph = graph_for(store, settings)
+    result = find_path(graph, source.paper_id, target.paper_id)
+    thinned = len(result.stops) > MAX_STOPS
+    stops = thin(result.stops) if thinned else list(result.stops)
+
+    return PathOut(
+        from_=source,
+        to=target,
+        complete=result.complete,
+        hops=result.hops,
+        thinned=thinned,
+        stops=_describe_stops(db, graph, stops),
+    )
