@@ -7,17 +7,25 @@ parse pipeline exists to catch the cases where this is not true.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 import pymupdf
 
 from app.core.config import get_settings
-from app.services.parse.limits import append_note, page_budget
+from app.services.parse.limits import (
+    MAX_PAGE_PATHS,
+    append_note,
+    append_plain_pages_note,
+    page_budget,
+)
 from app.services.parse.quality import TextProbe
 
 PARSER_NAME = "pymupdf"
 TIER = 0
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -31,10 +39,35 @@ class ParseResult:
     page_count: int
     #: Pages actually converted. Equal to page_count unless the limit applied.
     pages_parsed: int | None = None
+    #: Pages (1-based) within the budget read as plain text, without layout,
+    #: because their vector graphics would have cost hours. Distinct from
+    #: truncation: the document was read to its end.
+    pages_plain: tuple[int, ...] = ()
 
     @property
     def truncated(self) -> bool:
         return self.pages_parsed is not None and self.pages_parsed < self.page_count
+
+
+def dense_pages(doc: pymupdf.Document, budget: int) -> tuple[int, ...]:
+    """0-based pages with too many vector paths to lay out in bounded time."""
+    return tuple(
+        index
+        for index in range(min(budget, doc.page_count))
+        if len(doc[index].get_cdrawings()) > MAX_PAGE_PATHS
+    )
+
+
+def _segments(budget: int, dense: tuple[int, ...]) -> list[tuple[bool, list[int]]]:
+    """Consecutive pages grouped by how they are read: (is_plain, pages)."""
+    segments: list[tuple[bool, list[int]]] = []
+    for index in range(budget):
+        plain = index in dense
+        if segments and segments[-1][0] == plain:
+            segments[-1][1].append(index)
+        else:
+            segments.append((plain, [index]))
+    return segments
 
 
 def _image_area_ratio(page: pymupdf.Page) -> float:
@@ -109,20 +142,38 @@ def parse(path: Path | str, *, limit: int | None = None) -> ParseResult:
 
     with pymupdf.open(path) as doc:
         pages = doc.page_count
-    budget = page_budget(pages, limit)
-
-    markdown = pymupdf4llm.to_markdown(
-        str(path),
-        pages=list(range(budget)) if budget < pages else None,
-        show_progress=False,
-        use_ocr=False,
-    )
+        budget = page_budget(pages, limit)
+        dense = dense_pages(doc, budget)
+        if dense:
+            logger.warning(
+                "%s: reading page(s) %s as plain text, vector graphics too dense",
+                Path(path).name,
+                ", ".join(str(i + 1) for i in dense),
+            )
+        parts: list[str] = []
+        for plain, run in _segments(budget, dense):
+            if plain:
+                parts.append("\n\n".join(doc[index].get_text() for index in run))
+            else:
+                # The one-call, whole-document form when nothing is dense and
+                # nothing is cut — the ordinary paper's path, unchanged.
+                parts.append(
+                    pymupdf4llm.to_markdown(
+                        str(path),
+                        pages=run if len(run) < pages else None,
+                        show_progress=False,
+                        use_ocr=False,
+                    )
+                )
+    markdown = append_note("\n\n".join(parts), kept=budget, total=pages)
+    plain_pages = tuple(index + 1 for index in dense)
 
     return ParseResult(
-        markdown=append_note(markdown, kept=budget, total=pages),
+        markdown=append_plain_pages_note(markdown, pages=plain_pages),
         tier=TIER,
         parser=PARSER_NAME,
         parser_version=pymupdf.__doc__ or "unknown",
         page_count=pages,
         pages_parsed=budget,
+        pages_plain=plain_pages,
     )

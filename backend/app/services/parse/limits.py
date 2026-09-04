@@ -52,6 +52,35 @@ def append_note(markdown: str, *, kept: int, total: int) -> str:
     return f"{markdown.rstrip()}\n\n{note}\n"
 
 
+#: Vector paths on a single page beyond which tier 0 reads the page as plain
+#: text instead of laying it out. Tier 0's cost model assumed a page costs
+#: its text layer; the layout engine also walks every vector path, and on
+#: the aerospace demo corpus a 13-page arXiv paper carried a scatter plot
+#: drawn point by point — 1.3 million paths — which held the worker for
+#: five and a half hours with 48 documents queued behind it. Measured on
+#: that corpus: 24,000 paths cost 40 s, 83,000 cost twenty minutes, and the
+#: median document's busiest page has 78. Counting paths is cheap (7 s on
+#: the million-path page, under a second everywhere else) and, unlike the
+#: page's own content-stream size, sees paths hidden in form XObjects.
+#: Plain text keeps the body prose that shares a page with the figure and
+#: loses only the layout; the Markdown says which pages, so nothing
+#: downstream mistakes a flat page for the converter's own choice.
+MAX_PAGE_PATHS = 20_000
+
+PLAIN_PAGES_NOTE = (
+    "[Page(s) {pages} were read as plain text without layout: their vector "
+    "graphics are too dense to lay out in bounded time.]"
+)
+
+
+def append_plain_pages_note(markdown: str, *, pages: tuple[int, ...]) -> str:
+    """Record which pages (1-based) tier 0 read without layout."""
+    if not pages:
+        return markdown
+    note = PLAIN_PAGES_NOTE.format(pages=", ".join(str(p) for p in pages))
+    return f"{markdown.rstrip()}\n\n{note}\n"
+
+
 def was_truncated(markdown: str | None) -> bool:
     """Did this Markdown stop early?
 
