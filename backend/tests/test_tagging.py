@@ -18,7 +18,7 @@ from app.services.tagging.canonicalize import (
     seed_vocabulary,
 )
 from app.services.tagging.tagger import build_prompt, normalise, response_schema
-from app.services.tagging.taxonomy import MAX_TAGS_PER_PAPER, SEED_TAGS
+from app.services.tagging.taxonomy import MAX_TAGS_PER_PAPER, SEED_TAGS, seed_slugs
 
 # --- vocabulary -----------------------------------------------------------
 
@@ -32,6 +32,27 @@ def test_seeding_populates_the_vocabulary(db):
 def test_seeding_twice_adds_nothing(db):
     seed_vocabulary(db)
     assert seed_vocabulary(db) == 0
+    assert db.query(Tag).count() == len(SEED_TAGS)
+
+
+def test_the_vocabulary_reaches_beyond_science():
+    """A library of Plato, Mill and Darwin was tagged 'social-science' and
+    'biology' because those were the nearest words on offer."""
+    slugs = set(seed_slugs())
+    assert {"philosophy", "history", "literature", "cognitive-science"} <= slugs
+    assert {"close-reading", "conceptual-analysis"} <= slugs
+    assert {"essay", "primary-source", "dialogue"} <= slugs
+
+
+def test_an_existing_library_picks_up_new_seeds_without_a_reset(db):
+    """Seeding runs at every tag job and inserts only what is missing, so
+    appending to SEED_TAGS is enough for a library tagged last year."""
+    old = [row for row in SEED_TAGS if row[0] not in {"philosophy", "essay"}]
+    for slug, label, kind in old:
+        db.add(Tag(slug=slug, label=label, kind=kind, status=TagStatus.APPROVED))
+    db.flush()
+
+    assert seed_vocabulary(db) == 2
     assert db.query(Tag).count() == len(SEED_TAGS)
 
 

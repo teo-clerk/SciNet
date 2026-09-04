@@ -9,6 +9,15 @@ review queue rather than the vocabulary.
 The spine is arXiv's category taxonomy — it is the classification scheme most
 of this corpus was already filed under — flattened to readable labels and
 extended with method and task terms that cut across fields.
+
+It was, for a year, science only. A library that also holds Plato, Mill and
+Darwin's *Origin* got them tagged "social-science" and "biology" because those
+were the nearest words on offer, and a closed vocabulary is only as good as
+what it closes over. The second half of the list is the humanities and the
+social sciences, with the methods and the kinds of writing that go with them:
+an essay is not a benchmark, and close reading is not an experimental study.
+Seeding is idempotent and runs at every tag job, so an existing library picks
+the new terms up without a reset.
 """
 
 from __future__ import annotations
@@ -75,6 +84,56 @@ SEED_TAGS: tuple[tuple[str, str, str], ...] = (
     ("position-paper", "Position or Opinion Paper", TagKind.ARTIFACT),
     ("case-study", "Case Study", TagKind.ARTIFACT),
     ("reproducibility", "Reproducibility Study", TagKind.ARTIFACT),
+    # --- the humanities and the social sciences ---------------------------
+    # Appended, never interleaved: existing rows keep their ids, and the
+    # PaperTag rows that point at them stay valid.
+    ("philosophy", "Philosophy", TagKind.DOMAIN),
+    ("ethics", "Ethics and Moral Philosophy", TagKind.DOMAIN),
+    ("epistemology", "Epistemology", TagKind.DOMAIN),
+    ("metaphysics", "Metaphysics", TagKind.DOMAIN),
+    ("logic", "Logic", TagKind.DOMAIN),
+    ("philosophy-of-mind", "Philosophy of Mind", TagKind.DOMAIN),
+    ("philosophy-of-science", "Philosophy of Science", TagKind.DOMAIN),
+    ("history", "History", TagKind.DOMAIN),
+    ("history-of-science", "History of Science", TagKind.DOMAIN),
+    ("literature", "Literature", TagKind.DOMAIN),
+    ("literary-theory", "Literary Theory and Criticism", TagKind.DOMAIN),
+    ("linguistics", "Linguistics", TagKind.DOMAIN),
+    ("psychology", "Psychology", TagKind.DOMAIN),
+    ("cognitive-science", "Cognitive Science", TagKind.DOMAIN),
+    ("political-theory", "Political Theory", TagKind.DOMAIN),
+    ("sociology", "Sociology", TagKind.DOMAIN),
+    ("anthropology", "Anthropology", TagKind.DOMAIN),
+    ("religion-studies", "Religion and Theology", TagKind.DOMAIN),
+    ("classics", "Classics and Ancient World", TagKind.DOMAIN),
+    ("art-and-design", "Art and Design", TagKind.DOMAIN),
+    ("music", "Music", TagKind.DOMAIN),
+    ("education", "Education", TagKind.DOMAIN),
+    ("law", "Law", TagKind.DOMAIN),
+    ("cultural-studies", "Cultural Studies", TagKind.DOMAIN),
+    ("media-studies", "Media and Communication", TagKind.DOMAIN),
+    ("archaeology", "Archaeology", TagKind.DOMAIN),
+    ("geography", "Geography", TagKind.DOMAIN),
+    # --- how humanists work ---------------------------------------------
+    ("close-reading", "Close Reading", TagKind.METHOD),
+    ("historical-analysis", "Historical Analysis", TagKind.METHOD),
+    ("conceptual-analysis", "Conceptual Analysis", TagKind.METHOD),
+    ("argumentation", "Argument and Dialectic", TagKind.METHOD),
+    ("ethnography", "Ethnography and Fieldwork", TagKind.METHOD),
+    ("textual-criticism", "Textual Criticism", TagKind.METHOD),
+    ("qualitative-study", "Qualitative Study", TagKind.METHOD),
+    ("comparative-analysis", "Comparative Analysis", TagKind.METHOD),
+    ("thought-experiment", "Thought Experiment", TagKind.METHOD),
+    # --- the kinds of writing -------------------------------------------
+    ("essay", "Essay", TagKind.ARTIFACT),
+    ("treatise", "Treatise or Monograph", TagKind.ARTIFACT),
+    ("lecture", "Lecture", TagKind.ARTIFACT),
+    ("commentary", "Commentary", TagKind.ARTIFACT),
+    ("dialogue", "Dialogue", TagKind.ARTIFACT),
+    ("primary-source", "Primary Source", TagKind.ARTIFACT),
+    ("textbook", "Textbook or Introduction", TagKind.ARTIFACT),
+    ("book-chapter", "Book Chapter", TagKind.ARTIFACT),
+    ("letter-or-memoir", "Letter, Diary or Memoir", TagKind.ARTIFACT),
 )
 
 MAX_TAGS_PER_PAPER = 6
