@@ -296,6 +296,41 @@
           "unit_si": "liter"
         }
       ]
+    },
+    {
+      "sentence": "The orbit has an inclination of 98.2° and crosses the equator at 10:30 UTC each day.",
+      "expect": [
+        {
+          "kind": "angle",
+          "value_si": 1.7139,
+          "unit_si": "radian"
+        }
+      ]
+    },
+    {
+      "sentence": "Gravity-wave signatures appear near 3 mHz in the total electron content record.",
+      "expect": [
+        {
+          "kind": "frequency",
+          "value_si": 0.003,
+          "unit_si": "hertz"
+        }
+      ]
+    },
+    {
+      "sentence": "Cells were incubated at 37 ° C before the 3 D reconstruction was assembled.",
+      "expect": [],
+      "pending": ["°"]
+    },
+    {
+      "sentence": "The column was operated between 100°-175°C during the whole run.",
+      "expect": [],
+      "pending": ["°"]
+    },
+    {
+      "sentence": "The vertical TEC reached 20 TECU during the storm before it subsided.",
+      "expect": [],
+      "pending": ["TECU"]
     }
   ]
 }

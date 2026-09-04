@@ -58,7 +58,10 @@ UNITS: dict[str, tuple[str, str]] = {
     "yr": ("year", "time"),
     "Myr": ("megayear", "time"),
     "Gyr": ("gigayear", "time"),
-    # frequency
+    # frequency — mHz added from the aerospace corpus, where ionospheric
+    # gravity waves are reported in millihertz; the adjudicator had already
+    # been confirming it as frequency on the biology corpus.
+    "mHz": ("millihertz", "frequency"),
     "Hz": ("hertz", "frequency"),
     "kHz": ("kilohertz", "frequency"),
     "MHz": ("megahertz", "frequency"),
@@ -125,7 +128,12 @@ UNITS: dict[str, tuple[str, str]] = {
     "mg/L": ("milligram / liter", "mass_concentration"),
     "mg/l": ("milligram / liter", "mass_concentration"),
     "g/L": ("gram / liter", "mass_concentration"),
-    # angle
+    # angle — the bare degree sign was the aerospace corpus's largest unknown
+    # token (115 rows: zenith angles, elevations, latitudes) and an angle in
+    # every sample from both corpora. Its one ambiguity is a temperature
+    # whose C was set apart ("37 ° C", "100°-175°C"); a sentence carrying a
+    # degree-Celsius anywhere sends the bare sign to the adjudicator instead.
+    "°": ("degree", "angle"),
     "rad": ("radian", "angle"),
     "mrad": ("milliradian", "angle"),
     "deg": ("degree", "angle"),
@@ -142,6 +150,16 @@ _STOPWORDS = frozenset(
     "to of and the in is was for on at or by we a an as with from per out "
     "times more less new all other such each than".split()
 )
+
+#: Unit-shaped tokens the adjudicator has rejected every single time — over
+#: a thousand "D"s (2 D, 3 D) and the clock suffixes after "12:00". Skipped
+#: outright rather than sent for a verdict; case-sensitive, because "d" may
+#: yet be a day.
+_NEVER_UNITS = frozenset({"D", "UTC", "UT", "LT"})
+
+#: A degree sign in a sentence that also carries a Celsius or Fahrenheit
+#: reading is likelier to be a temperature with its letter set apart.
+_TEMPERATURE_NEARBY = re.compile(r"°\s?[CF]\b")
 
 #: value: sign, decimals, scientific notation; then optional ± tolerance and
 #: an optional range tail — captured whole as value_original, first number
@@ -250,7 +268,10 @@ def extract_from_text(
             value_original = (number + (tail or "")).strip()
             value = float(number)
 
-            if token in UNITS:
+            if token in _NEVER_UNITS:
+                continue
+            ambiguous_degree = token == "°" and _TEMPERATURE_NEARBY.search(sentence)
+            if token in UNITS and not ambiguous_degree:
                 try:
                     value_si, unit_si, kind = _normalise(value, token)
                 except Exception:  # noqa: BLE001 - pint surprise -> pending
@@ -271,7 +292,7 @@ def extract_from_text(
                         else QuantityStatus.PENDING_LLM,
                     )
                 )
-            elif _looks_like_a_unit(token):
+            elif ambiguous_degree or _looks_like_a_unit(token):
                 found.append(
                     ExtractedQuantity(
                         chunk_ord=chunk_ord,
