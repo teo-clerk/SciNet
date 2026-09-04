@@ -68,7 +68,7 @@ def build_plan_prompt(
     question: str, gathered: Gathered, rounds_left: int, semantic_ok: bool
 ) -> str:
     lines = [
-        "You are the librarian of a private scientific library. Decide the "
+        "You are the librarian of a private library. Decide the "
         "next step toward answering the reader's question.",
         "",
         f"Question: {question}",
@@ -137,7 +137,7 @@ def build_answer_prompt(question: str, gathered: Gathered) -> str:
     )
     return "\n".join(
         [
-            "You are the librarian of a private scientific library. Answer "
+            "You are the librarian of a private library. Answer "
             "the reader's question from the evidence below and nothing else.",
             "",
             f"Question: {question}",

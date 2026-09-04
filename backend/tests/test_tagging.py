@@ -140,6 +140,15 @@ def test_prompt_survives_missing_metadata():
     assert "unknown" in prompt
 
 
+def test_prompt_does_not_assume_a_scientific_paper():
+    """An essay or a chapter is catalogued on the same terms as a preprint;
+    told it is reading science, the model summarises a philosophical argument
+    as if it reported an experiment."""
+    prompt = build_prompt(title="On Liberty", abstract="Of the liberty…", headings=[])
+    assert "scientific" not in prompt.lower()
+    assert "essay" in prompt.lower()
+
+
 # --- normalisation --------------------------------------------------------
 
 

@@ -62,18 +62,23 @@ def response_schema(vocabulary: list[str]) -> dict:
 def build_prompt(
     *, title: str | None, abstract: str | None, headings: list[str]
 ) -> str:
+    # "A work", never "a paper": the library holds essays, chapters, lectures
+    # and primary sources beside preprints, and a model told it is reading
+    # science summarises a philosophical essay as if it reported an experiment.
     parts = [
-        "You are cataloguing a scientific paper for a personal library.",
+        "You are cataloguing a work — a paper, a book chapter, an essay, a "
+        "report or an article — for a personal library.",
         "",
         f"Title: {title or '(unknown)'}",
     ]
     if abstract:
-        parts += ["", "Abstract:", abstract.strip()[:3000]]
+        parts += ["", "Abstract or opening:", abstract.strip()[:3000]]
     if headings:
         parts += ["", "Section headings: " + "; ".join(headings[:20])]
     parts += [
         "",
-        "Write a two-sentence summary of what this paper does, in plain prose.",
+        "Write a two-sentence summary of what this work does or argues, in "
+        "plain prose a reader from another field could follow.",
         f"Then choose up to {MAX_TAGS_PER_PAPER} tags from the allowed list.",
         "Choose only tags the paper genuinely fits; fewer is better than wrong.",
         "If a central topic has no matching tag, put it in proposed_tags "

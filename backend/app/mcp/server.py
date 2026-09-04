@@ -34,8 +34,9 @@ MAX_REGION_MEMBERS = 15
 MAX_OVERVIEW_TAGS = 40
 
 INSTRUCTIONS = (
-    "SciNet is the user's local, private library of scientific papers and "
-    "books, already parsed, embedded, and clustered into a semantic map. "
+    "SciNet is the user's local, private library of papers, books and essays "
+    "from any discipline, already parsed, embedded, and clustered into a "
+    "semantic map. "
     "Use search_library to find papers (semantic for meaning, fulltext for "
     "exact words, title for names you already know), then get_paper for "
     "metadata and the abstract. Paper ids are stable integers."

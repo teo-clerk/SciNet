@@ -35,6 +35,89 @@ def test_prompt_discourages_invented_specificity():
     assert "invent" in prompt.lower()
 
 
+# --- every discipline, every reader ------------------------------------------
+
+
+class _Capture:
+    """A client that records the prompt and answers with a fixed object."""
+
+    def __init__(self, answer: dict):
+        self.answer = answer
+        self.prompts: list[str] = []
+
+    def post(self, url, json):
+        self.prompts.append(json["prompt"])
+        client = self
+
+        class Response:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                import json as _json
+
+                return {"response": _json.dumps(client.answer)}
+
+        return Response()
+
+    def close(self):
+        pass
+
+
+def test_no_prompt_assumes_the_works_are_science(monkeypatch):
+    """A model told it is reading science names a subfield where a newcomer
+    needed the idea, and summarises an essay as if it reported an experiment.
+    The library holds essays, chapters and primary sources beside preprints."""
+    from app.services.project.naming import describe_bridge, describe_cluster
+
+    monkeypatch.setattr(
+        "app.services.project.naming.PRIVATE_OLLAMA.start", lambda: None
+    )
+    overview = _Capture({"overview": "Three sentences about the group."})
+    describe_cluster("Stoic Ethics", ["virtue"], ["Enchiridion"], client=overview)
+    bridge = _Capture(
+        {"connected": True, "relationship": "One idea carries across the two."}
+    )
+    describe_bridge(
+        "Stoic Ethics", "Cognitive Therapy", ["habit"], ["T"], client=bridge
+    )
+
+    for prompt in [build_prompt(["a"], ["b"]), *overview.prompts, *bridge.prompts]:
+        lowered = prompt.lower()
+        assert "scientific" not in lowered
+        assert "researcher" not in lowered
+        assert "newcomer" in lowered
+
+
+def test_the_bridge_prompt_still_asks_for_the_verdict_first():
+    """Property order is decision order under constrained decoding: the model
+    must decide whether the groups connect before it writes the story."""
+    from app.services.project.naming import BRIDGE_SCHEMA
+
+    assert list(BRIDGE_SCHEMA["properties"]) == ["connected", "relationship"]
+
+
+def test_the_bridge_story_has_room_for_three_sentences(monkeypatch):
+    from app.services.project.naming import MAX_BRIDGE_CHARS, describe_bridge
+
+    monkeypatch.setattr(
+        "app.services.project.naming.PRIVATE_OLLAMA.start", lambda: None
+    )
+    story = " ".join(
+        [
+            "Stoic exercises train a person to notice that distress comes from "
+            "their judgement about an event rather than from the event itself.",
+            "Cognitive therapy borrows exactly that move, teaching patients to "
+            "catch and reframe the automatic thoughts behind a mood.",
+            "The listed works trace the borrowing from the ancient handbooks "
+            "through the mid-century clinics where the therapy was written down.",
+        ]
+    )
+    assert 300 < len(story) <= MAX_BRIDGE_CHARS
+    client = _Capture({"connected": True, "relationship": story})
+    assert describe_bridge("A", "B", [], ["T"], client=client) == story
+
+
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [

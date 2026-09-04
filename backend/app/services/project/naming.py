@@ -1,6 +1,6 @@
 """Naming clusters with the local LLM.
 
-A map of unlabelled blobs is a puzzle, not a tool. HDBSCAN says *which* papers
+A map of unlabelled blobs is a puzzle, not a tool. HDBSCAN says *which* works
 belong together but nothing about what they have in common, so each cluster is
 described to the tagging model and asked for a short region name.
 
@@ -8,6 +8,14 @@ The model is given evidence rather than asked to guess: the most distinctive
 words across the cluster's titles, plus a sample of the titles themselves. It
 is told to name only what it can see, because an invented label on a map is
 worse than no label — the user cannot tell it is wrong.
+
+The prompts never say "paper" or "scientific". A library may hold essays,
+chapters, lectures and primary sources beside preprints, and a model told it
+is looking at science reaches for a subfield name ("Longitudinal Cohort
+Analysis") where a reader from outside the field needed the idea ("Memory and
+Identity"). Every prompt asks for the version a curious newcomer would follow,
+and the specialist's layer — the distinctive words themselves — is kept
+alongside rather than replaced.
 """
 
 from __future__ import annotations
@@ -57,17 +65,20 @@ def sample_titles(titles: list[str], limit: int = SAMPLE_TITLES) -> list[str]:
 def build_prompt(terms: list[str], titles: list[str]) -> str:
     return "\n".join(
         [
-            "These scientific papers were grouped together by an automatic "
-            "clustering of their content. Name the topic they share.",
+            "These works were grouped together automatically because their "
+            "content is similar. They may be papers, essays, chapters or "
+            "reports from any field. Name the theme they share.",
             "",
             "Most distinctive words: " + (", ".join(terms[:12]) or "(none)"),
             "",
             "Sample titles:",
             *[f"- {t}" for t in sample_titles(titles)],
             "",
-            f"Reply with a topic name of at most {MAX_NAME_WORDS} words, in "
-            "title case, that a researcher would recognise as a field or "
-            "subfield.",
+            f"Reply with a name of at most {MAX_NAME_WORDS} words, in title "
+            "case, that a curious newcomer would understand and a specialist "
+            'would still find accurate ("Stoic Ethics", "Radar Imaging of the '
+            'Earth", "Theories of Consciousness"). Prefer the idea over the '
+            "method.",
             "Do not invent specificity the titles do not support: if they have "
             "little in common, give a broad name and set confident to false.",
         ]
@@ -168,7 +179,9 @@ BRIDGE_SCHEMA = {
 MIN_BRIDGE_WORDS = 6
 
 MAX_OVERVIEW_CHARS = 420
-MAX_BRIDGE_CHARS = 300
+#: Three plain sentences that tell a story need more room than the two
+#: technical ones this used to hold; 300 cut the third sentence off mid-way.
+MAX_BRIDGE_CHARS = 420
 
 
 def trim_to_sentence(text: str, limit: int) -> str:
@@ -264,17 +277,20 @@ def describe_cluster(
 
     prompt = "\n".join(
         [
-            f'These papers were grouped together and the group is called "{name}".',
+            f'These works were grouped together and the group is called "{name}".',
             "",
             "Most distinctive words: " + (", ".join(terms[:12]) or "(none)"),
             "",
-            "Papers in the group:",
+            "Works in the group:",
             *[f"- {t}" for t in sample_titles(titles, limit=14)],
             "",
-            "In two or three sentences, describe what this group of papers is "
-            "about and what they have in common. Describe only what these "
-            "titles show; do not speculate about work that is not listed, and "
-            "do not restate the group's name.",
+            "In two or three sentences, tell a curious newcomer what this "
+            "group of works is about: what question they share, and what "
+            "holds them together. Write it as you would explain it to a "
+            "friend from another field, without jargon; if a technical term "
+            "is unavoidable, say in a few words what it means. Describe only "
+            "what these titles show; do not speculate about work that is not "
+            "listed, and do not restate the group's name.",
         ]
     )
     overview = _ask(prompt, OVERVIEW_SCHEMA, "overview", settings, client, model)
@@ -303,22 +319,25 @@ def describe_bridge(
 
     prompt = "\n".join(
         [
-            f'Two groups of papers in a library are called "{left_name}" and '
+            f'Two groups of works in a library are called "{left_name}" and '
             f'"{right_name}".',
             "",
-            "These papers sit between the two groups:",
+            "These works sit between the two groups:",
             *[f"- {t}" for t in bridge_titles[:8] if t],
             "",
-            "Vocabulary both groups use: " + (", ".join(shared[:10]) or "(none)"),
+            "Words both groups use: " + (", ".join(shared[:10]) or "(none)"),
             "",
-            "First, set connected to true only if the listed papers show a "
-            "real, specific link between the two groups. Sharing a broad "
-            "field, or a word like 'review', is not a link. If in doubt, set "
-            "it to false.",
-            "Then write relationship: one or two full sentences saying how "
-            "the two groups connect, naming the specific idea or method "
-            "involved and referring to the papers above. Do not answer with a "
-            "single word.",
+            "First, set connected to true only if the listed works show a "
+            "real, specific path of ideas from one group to the other. "
+            "Sharing a broad field, or a word like 'review', is not a path. "
+            "If in doubt, set it to false.",
+            "Then write relationship: two or three full sentences a newcomer "
+            "could follow, telling the story of how someone starting in "
+            f'"{left_name}" would arrive at "{right_name}" — name the idea, '
+            "question or method that carries them across, say what one side "
+            "supplies and what the other does with it, and refer to the works "
+            "above. Plain language; if a technical term is unavoidable, say "
+            "in a few words what it means. Do not answer with a single word.",
         ]
     )
     answer = _ask_json(prompt, BRIDGE_SCHEMA, settings, client, model)

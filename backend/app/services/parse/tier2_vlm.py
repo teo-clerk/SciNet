@@ -37,7 +37,7 @@ PAGE_TIMEOUT_SECONDS = 180
 # survives the quality gate (it is long, spaced and word-like) and then poisons
 # the embeddings with pipe characters.
 PROMPT = (
-    "Transcribe this page of a scientific paper into clean Markdown. "
+    "Transcribe this page of a document into clean Markdown. "
     "Preserve headings, paragraph structure and lists. "
     "Render equations as LaTeX between $ delimiters. "
     "Use a Markdown table ONLY where the page itself shows a real table with "

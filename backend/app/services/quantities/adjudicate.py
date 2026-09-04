@@ -54,7 +54,7 @@ ADJUDICATION_SCHEMA = {
 def build_prompt(row: Quantity) -> str:
     return "\n".join(
         [
-            "A sentence from a scientific paper contains a number followed by "
+            "A sentence from a document contains a number followed by "
             "a token that may be a unit of measurement.",
             "",
             f"Sentence: {row.context_sentence}",

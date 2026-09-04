@@ -85,7 +85,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title="SciNet",
-        description="Local privacy-first scientific paper map",
+        description="A local, privacy-first map of everything you have read",
         version=system.VERSION,
         lifespan=lifespan,
     )
