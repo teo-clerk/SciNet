@@ -30,6 +30,7 @@ const TASK_LABELS: Record<string, string> = {
   bridge_verdict: 'Bridge verdicts',
   librarian_chat: 'Librarian',
   extract_adjudicate: 'Quantity adjudication',
+  insight: 'Core ideas',
 }
 
 export function ModelLab() {

@@ -33,6 +33,9 @@ class JobKind(StrEnum):
     MEASURE = "measure"
     EXTRACT = "extract"
     ADJUDICATE = "adjudicate"
+    #: The plain-English reading of one work: question, argument, significance,
+    #: claims and named things. One constrained LLM call per document.
+    INSIGHT = "insight"
 
 
 class JobState(StrEnum):
@@ -114,4 +117,7 @@ PRIORITY = {
     # Next to TAG so it shares the LLM-resident era; one reload between them.
     JobKind.ADJUDICATE: 95,
     JobKind.TAG: 100,
+    # After TAG, in the same era: the map and the tags are usable before the
+    # plain-English layer lands, and the card is not reloaded to write it.
+    JobKind.INSIGHT: 101,
 }

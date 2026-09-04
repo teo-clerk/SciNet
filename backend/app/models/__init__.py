@@ -16,6 +16,7 @@ from app.models.enums import (
     TagKind,
     TagStatus,
 )
+from app.models.insight import PaperInsight
 from app.models.model_profile import ModelProfile
 from app.models.paper import Chunk, DocVector, MarkdownDoc, Paper, PaperMeta
 from app.models.projection import (
@@ -43,6 +44,7 @@ __all__ = [
     "ModelProfile",
     "ModelVerdict",
     "Paper",
+    "PaperInsight",
     "PaperMeta",
     "PaperStatus",
     "PaperTag",

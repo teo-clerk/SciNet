@@ -48,6 +48,7 @@ class TaskKind(StrEnum):
     EMBED_QUERY = "embed_query"
     LIBRARIAN_CHAT = "librarian_chat"
     EXTRACT_ADJUDICATE = "extract_adjudicate"
+    INSIGHT = "insight"
 
 
 PIN_PREFIX = "route."
@@ -60,6 +61,7 @@ _LEGACY_FIELD: dict[TaskKind, str] = {
     TaskKind.BRIDGE_VERDICT: "llm_model",
     TaskKind.LIBRARIAN_CHAT: "llm_model",
     TaskKind.EXTRACT_ADJUDICATE: "llm_model",
+    TaskKind.INSIGHT: "llm_model",
     TaskKind.PAGE_OCR: "vlm_model",
     TaskKind.EMBED_DOCS: "embed_model",
     TaskKind.EMBED_QUERY: "embed_model",
@@ -74,6 +76,7 @@ PINNABLE: tuple[TaskKind, ...] = (
     TaskKind.BRIDGE_VERDICT,
     TaskKind.LIBRARIAN_CHAT,
     TaskKind.EXTRACT_ADJUDICATE,
+    TaskKind.INSIGHT,
 )
 
 

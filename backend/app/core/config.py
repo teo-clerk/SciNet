@@ -106,6 +106,13 @@ class Settings(BaseSettings):
     #:
     #: Set to 0 to read everything.
     max_parse_pages: int = 80
+    #: The plain-English reading of each work (question, argument, why it
+    #: matters, claims, named things) is one more constrained LLM call per
+    #: document — five to ten seconds on an 8B model, an hour over a
+    #: five-hundred-paper library. On by default because it is what makes the
+    #: inspector legible outside the reader's own field; off for someone who
+    #: only wants the map.
+    insight_enabled: bool = True
     tier0_workers: int = 4
     umap_min_papers: int = Field(default=20, ge=10)
 
