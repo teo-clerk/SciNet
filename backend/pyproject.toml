@@ -1,8 +1,15 @@
 [project]
 name = "scinet-backend"
 version = "0.1.0"
-description = "SciNet — local privacy-first scientific paper map"
+description = "SciNet — a private 3D map of everything you've read"
 requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "Teo Clerk" }]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
 dependencies = [
     # api
     "fastapi>=0.115.0",
@@ -42,6 +49,12 @@ dependencies = [
     "mcp>=1.2,<2",
     "pint>=0.25.3",
 ]
+
+[project.urls]
+Homepage = "https://github.com/teo-clerk/SciNet"
+Repository = "https://github.com/teo-clerk/SciNet"
+Issues = "https://github.com/teo-clerk/SciNet/issues"
+Documentation = "https://github.com/teo-clerk/SciNet/blob/main/USAGE.md"
 
 [project.scripts]
 # `uv run scinet-stop` from backend/. The logic lives in the package so it is
