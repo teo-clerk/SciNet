@@ -86,6 +86,10 @@ ABSTRACT_CUES = re.compile(
 )
 
 
+#: Fewer letters than this is a number or a symbol, not a title.
+MIN_TITLE_LETTERS = 4
+
+
 @dataclass(frozen=True)
 class Candidate:
     paper_id: int
@@ -107,7 +111,14 @@ def presentable(candidate: Candidate) -> bool:
     from app.services.metadata.extract import TEMPLATE_RE
 
     title = (candidate.title or "").strip()
-    return bool(title) and TEMPLATE_RE.search(title) is None
+    if not title or TEMPLATE_RE.search(title) is not None:
+        return False
+    # A Markdown table row the converter left at the top of a document
+    # ("| 0 |") is a title the pipeline recovered wrongly, not one to hand a
+    # reader; so is anything with fewer letters than a word.
+    if "|" in title:
+        return False
+    return len(re.findall(r"[^\W\d_]", title)) >= MIN_TITLE_LETTERS
 
 
 @dataclass(frozen=True)

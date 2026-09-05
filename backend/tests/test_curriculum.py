@@ -17,6 +17,7 @@ from app.services.project.curriculum import (
     MAX_READING_ORDER,
     Candidate,
     intro_cue,
+    presentable,
     rank_entry_points,
     reading_order,
 )
@@ -331,3 +332,32 @@ def test_entry_point_endpoint_rejects_an_empty_set(env):  # noqa: F811
     assert (
         client.post("/api/graph/entry-point", json={"paper_ids": []}).status_code == 400
     )
+
+
+# --- what may be recommended by name ------------------------------------------
+
+
+def _candidate(title):
+    return Candidate(paper_id=1, title=title, abstract=None, year=2000, pages=10)
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "| 0",
+        "<md> | A SACRED UNITY | GREGORY BATESON |",
+        "1..9",
+        "",
+        None,
+        "Paper Title (use style: paper title)",
+    ],
+)
+def test_a_table_row_or_a_placeholder_is_not_a_title(title):
+    """Found on the real library: a Markdown table cell the converter left at
+    the top of a document became the recommended start of a topic."""
+    assert not presentable(_candidate(title))
+
+
+@pytest.mark.parametrize("title", ["Meno", "On Liberty", "Incomplete Nature"])
+def test_a_real_title_is_presentable(title):
+    assert presentable(_candidate(title))
