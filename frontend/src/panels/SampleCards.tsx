@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react'
 
 import { fetchSamples, installSample, type Sample } from '@/api/samples'
+import { useCopy } from '@/lib/useCopy'
 
 const EGRESS_NOTE =
   'SciNet never downloads anything itself; this script runs on your machine, ' +
@@ -81,19 +82,8 @@ function BundledCard({ sample }: { sample: Sample }) {
 }
 
 function FetchCard({ sample }: { sample: Sample }) {
-  const [copied, setCopied] = useState(false)
-
-  const copy = async () => {
-    // The clipboard needs a secure context and a user gesture; a bare file://
-    // page or an old browser has neither, and the command is still readable.
-    if (!sample.command || typeof navigator === 'undefined' || !navigator.clipboard) return
-    try {
-      await navigator.clipboard.writeText(sample.command)
-      setCopied(true)
-    } catch {
-      setCopied(false)
-    }
-  }
+  const { copied, copy } = useCopy()
+  const command = sample.command
 
   return (
     <article className="sample-card">
@@ -103,10 +93,10 @@ function FetchCard({ sample }: { sample: Sample }) {
         <span className="dim">{sample.documents} works</span>
         {sample.installed && <span className="chip">Installed</span>}
       </div>
-      {sample.command && (
+      {command && (
         <div className="command">
-          <code>{sample.command}</code>
-          <button onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
+          <code>{command}</code>
+          <button onClick={() => void copy(command)}>{copied ? 'Copied' : 'Copy'}</button>
         </div>
       )}
       <p className="dim note">{EGRESS_NOTE}</p>
