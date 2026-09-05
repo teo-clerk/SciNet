@@ -332,6 +332,40 @@ def _excerpt(text: str, limit: int) -> str:
     return (window[:cut] if cut > 0 else window).strip() + "…"
 
 
+#: Enough of a work's opening to ground a plain-English reading of it when it
+#: has no abstract — an essay, a chapter, a lecture — without handing the model
+#: the title page and the copyright notice instead.
+OPENING_EXCERPT_CHARS = 1800
+
+
+def opening_excerpt(
+    markdown: str | None, limit: int = OPENING_EXCERPT_CHARS
+) -> str | None:
+    """The first real paragraphs of the text, for a reader who has not seen it.
+
+    The same prose test the abstract ladder uses decides what counts: headings,
+    copyright notices, captions, converted tables and mid-sentence fragments
+    are all skipped, so an essay's excerpt is its first argument and a book's
+    is its preface rather than its cataloguing data. Cut at a sentence end.
+    """
+    if not markdown or not markdown.strip():
+        return None
+    out: list[str] = []
+    total = 0
+    for paragraph in _paragraphs(markdown):
+        if not is_prose(paragraph):
+            continue
+        text = " ".join(paragraph.split())
+        room = limit - total
+        if len(text) > room:
+            if room >= MIN_PARAGRAPH_CHARS:
+                out.append(_excerpt(text, room))
+            break
+        out.append(text)
+        total += len(text) + 1
+    return " ".join(out) or None
+
+
 #: Ordered strongest evidence first. A labelled abstract is what the author
 #: wrote to answer this question; a preface is the same thing under a different
 #: name; the shape heuristic is a guess; an introduction is about the field

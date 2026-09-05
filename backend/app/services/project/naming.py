@@ -27,6 +27,21 @@ import httpx
 
 from app.core.config import Settings, get_settings
 from app.core.model_store import PRIVATE_OLLAMA
+from app.services.llm_text import trim_to_sentence
+
+__all__ = [
+    "BRIDGE_SCHEMA",
+    "NAME_SCHEMA",
+    "OVERVIEW_SCHEMA",
+    "available",
+    "build_prompt",
+    "clean_name",
+    "describe_bridge",
+    "describe_cluster",
+    "name_cluster",
+    "sample_titles",
+    "trim_to_sentence",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -182,23 +197,6 @@ MAX_OVERVIEW_CHARS = 420
 #: Three plain sentences that tell a story need more room than the two
 #: technical ones this used to hold; 300 cut the third sentence off mid-way.
 MAX_BRIDGE_CHARS = 420
-
-
-def trim_to_sentence(text: str, limit: int) -> str:
-    """Cut to the last sentence that fits, not to the last character.
-
-    A hard slice ends summaries mid-word ("...linking gut microbiota to suga"),
-    which reads as a bug in the pipeline rather than a length cap. Falls back to
-    a word boundary when the first sentence is already over the limit.
-    """
-    if len(text) <= limit:
-        return text
-    head = text[:limit]
-    cut = max(head.rfind(". "), head.rfind("! "), head.rfind("? "))
-    if cut > limit // 3:
-        return head[: cut + 1]
-    space = head.rfind(" ")
-    return (head[:space] if space > 0 else head).rstrip(",;:") + "\u2026"
 
 
 def _ask_json(
