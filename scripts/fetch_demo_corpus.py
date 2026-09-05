@@ -125,6 +125,49 @@ RECIPE: tuple[Domain, ...] = (
     ),
 )
 
+#: A second recipe, for a library about minds and machines rather than
+#: spacecraft: alignment, the ethics of automated decisions, the science of
+#: consciousness, the foundations of physics and cognitive architectures. All
+#: arXiv, no NASA reports — nothing here was ever scanned — so it exercises the
+#: prose end of the pipeline where the aerospace corpus exercised OCR.
+AI_MIND_RECIPE: tuple[Domain, ...] = (
+    Domain(
+        "Alignment",
+        "aligning learned systems with human intent (cs.AI)",
+        'cat:cs.AI AND (abs:"value alignment" OR abs:"AI alignment" '
+        'OR abs:"reward hacking" OR abs:"AI safety")',
+    ),
+    Domain(
+        "MachineEthics",
+        "ethics and fairness of automated decisions (cs.CY)",
+        'cat:cs.CY AND (abs:ethics OR abs:fairness) AND abs:"artificial intelligence"',
+    ),
+    Domain(
+        "Consciousness",
+        "the science of consciousness (q-bio.NC)",
+        'cat:q-bio.NC AND (abs:consciousness OR abs:"neural correlates")',
+    ),
+    Domain(
+        "FoundationsPhys",
+        "interpretation and foundations of physics (physics.hist-ph)",
+        "cat:physics.hist-ph AND (abs:interpretation OR abs:foundations)",
+    ),
+    Domain(
+        "Cognition",
+        "cognitive architectures and theory of mind (cs.AI)",
+        'cat:cs.AI AND (abs:"cognitive architecture" OR abs:"theory of mind")',
+    ),
+)
+
+RECIPES: dict[str, tuple[Domain, ...]] = {
+    "aerospace": RECIPE,
+    "ai-and-mind": AI_MIND_RECIPE,
+}
+MANIFESTS: dict[str, Path] = {
+    "aerospace": MANIFEST,
+    "ai-and-mind": REPO_ROOT / "demo" / "ai-and-mind.jsonl",
+}
+
 
 @dataclass(frozen=True)
 class Hit:
@@ -509,10 +552,16 @@ def _pick_legacy(
     return chosen
 
 
-def build(fetcher: Fetcher, dest: Path, per_domain: int, legacy: int) -> list[Entry]:
+def build(
+    fetcher: Fetcher,
+    dest: Path,
+    per_domain: int,
+    legacy: int,
+    recipe: tuple[Domain, ...] = RECIPE,
+) -> list[Entry]:
     claimed: set[str] = set()
     entries: list[Entry] = []
-    for domain in RECIPE:
+    for domain in recipe:
         print(f"\n{domain.label} — {domain.about}")
         entries.extend(_pick_papers(fetcher, domain, dest, per_domain, claimed))
         entries.extend(_pick_legacy(fetcher, domain, dest, legacy, claimed))
@@ -574,7 +623,18 @@ def summarize(entries: list[Entry]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", type=Path, default=MANIFEST)
+    parser.add_argument(
+        "--recipe",
+        choices=sorted(RECIPES),
+        default="aerospace",
+        help="which corpus: the aerospace benchmark, or minds and machines",
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=None,
+        help="manifest to read or write (default: the recipe's own)",
+    )
     parser.add_argument(
         "--dest", type=Path, default=None, help="destination (default: the library)"
     )
@@ -591,6 +651,8 @@ def main() -> int:
         "--legacy", type=int, default=2, help="NASA legacy reports per domain"
     )
     args = parser.parse_args()
+    if args.manifest is None:
+        args.manifest = MANIFESTS[args.recipe]
 
     if args.dest is None:
         from app.core.config import get_settings
@@ -604,7 +666,13 @@ def main() -> int:
             return 2
         dest.mkdir(parents=True, exist_ok=True)
         with open_client() as client:
-            entries = build(Fetcher(client), dest, args.per_domain, args.legacy)
+            entries = build(
+                Fetcher(client),
+                dest,
+                args.per_domain,
+                args.legacy,
+                recipe=RECIPES[args.recipe],
+            )
         write_manifest(args.manifest, entries)
         print(f"\nwrote {args.manifest} ({len(entries)} documents) into {dest}")
         print(summarize(entries))

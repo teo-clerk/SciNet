@@ -1,0 +1,8 @@
+{
+  "name": "ai-and-mind",
+  "title": "Foundations of AI & Philosophy",
+  "blurb": "Seventy-five open preprints on minds and machines: alignment, the ethics of automated decisions, the science of consciousness, the foundations of physics, and cognitive architectures. Fetched by a script you run — never by the app — which checks every hash and leaves the egress log empty.",
+  "kind": "fetch",
+  "documents": 75,
+  "command": "cd backend && uv run python ../scripts/fetch_demo_corpus.py --recipe ai-and-mind"
+}

@@ -19,7 +19,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
 from eval_clustering import domain_of  # noqa: E402
 from fetch_demo_corpus import (  # noqa: E402
+    MANIFESTS,
     RECIPE,
+    RECIPES,
     Entry,
     Hit,
     choose_legacy,
@@ -108,6 +110,20 @@ def test_the_old_corpus_convention_still_parses():
     assert domain_of("Genomics_and_Bio_2401.12345v1.pdf") == "Genomics_and_Bio"
     assert domain_of("Astrophysics_0812.4574v2.pdf") == "Astrophysics"
     assert domain_of("some_random_paper.pdf") is None
+
+
+def test_every_recipe_keeps_the_naming_contract():
+    """A second corpus is a second benchmark only if its labels survive the
+    same round trip; each recipe also writes its own manifest, so building one
+    never overwrites the other's pinned hashes."""
+    assert RECIPES["aerospace"] is RECIPE
+    for recipe in RECIPES.values():
+        for domain in recipe:
+            assert domain_of(filename_for(domain.label, "arxiv", "2401.00001v1")) == (
+                domain.label
+            )
+    assert len({path.name for path in MANIFESTS.values()}) == len(MANIFESTS)
+    assert set(MANIFESTS) == set(RECIPES)
 
 
 # --- reading the sources --------------------------------------------------------
