@@ -6,10 +6,17 @@
  * were meant to annotate. The cluster labels stay on the map because there are
  * only a handful; everything about a region's contents lives here instead,
  * fetched when asked for rather than shipped with the graph.
+ *
+ * Top to bottom: what the region is, where to start reading it, the words
+ * that recur, the regions it reaches toward, and the works themselves — the
+ * list last, because it takes the leftover height and scrolls on its own.
  */
 import { useEffect, useState } from 'react'
 
 import { fetchCluster, type ClusterDetail } from '@/api/clusters'
+import { useReadingOrder } from '@/lib/useReadingOrder'
+import { BridgesFromHere } from '@/panels/BridgesFromHere'
+import { EntryPointCard } from '@/panels/EntryPointCard'
 import { useGraphStore } from '@/state/graphStore'
 
 export function ClusterInspector() {
@@ -19,6 +26,7 @@ export function ClusterInspector() {
   const setSelected = useGraphStore((s) => s.setSelected)
   const setView = useGraphStore((s) => s.setView)
   const labMode = useGraphStore((s) => s.labMode)
+  const startReadingOrder = useReadingOrder()
 
   const [detail, setDetail] = useState<ClusterDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -75,6 +83,16 @@ export function ClusterInspector() {
             </section>
           )}
 
+          {detail.entry_point && (
+            <EntryPointCard
+              entry={detail.entry_point}
+              alternatives={detail.alternatives}
+              readingOrder={detail.reading_order}
+              onOpen={focusPaper}
+              onReadingOrder={() => startReadingOrder(detail.reading_order)}
+            />
+          )}
+
           {detail.terms.length > 0 && (
             <section>
               <h3>Recurring words</h3>
@@ -87,6 +105,8 @@ export function ClusterInspector() {
               </div>
             </section>
           )}
+
+          <BridgesFromHere clusterId={clusterId} />
 
           <section>
             <h3>Works ({detail.members.length})</h3>

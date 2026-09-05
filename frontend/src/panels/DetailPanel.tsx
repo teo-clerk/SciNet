@@ -3,13 +3,23 @@
  *
  * Detail is fetched per node on click. Shipping abstracts for the whole corpus
  * up front is what turns a 50 ms map load into a multi-second one.
+ *
+ * Top to bottom the panel goes plain to technical: the idea in plain words,
+ * then the abstract (folded once there is something plainer above it), the
+ * two-sentence summary, the measured values and the claims they support, and
+ * only then where the map put it. The sections live in ./detail; this file is
+ * the fetching and the order.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { fetchNeighbours, fetchPaper, type Neighbour, type PaperDetail } from '@/api/graph'
 import { fetchPaperQuantities, type QuantityRow } from '@/api/quantities'
-import { pagesLabel, placementSentence } from '@/lib/plain'
-import { formatQuantity } from '@/lib/quantities'
+import { subscribeToEvents } from '@/api/sse'
+import { pagesLabel } from '@/lib/plain'
+import { CoreIdea } from '@/panels/detail/CoreIdea'
+import { KeyIdeas } from '@/panels/detail/KeyIdeas'
+import { MeasuredValues } from '@/panels/detail/MeasuredValues'
+import { Placement } from '@/panels/detail/Placement'
 import { useGraphStore } from '@/state/graphStore'
 
 export function DetailPanel() {
@@ -24,9 +34,14 @@ export function DetailPanel() {
   const [opening, setOpening] = useState(false)
 
   const node = selectedIndex === null ? null : nodes[selectedIndex]
+  const paperId = node?.id ?? null
+  // What the event stream compares against; a ref, so the one subscription
+  // below outlives every selection instead of reconnecting per click.
+  const shownId = useRef<number | null>(null)
 
   useEffect(() => {
-    if (!node) {
+    shownId.current = paperId
+    if (paperId === null) {
       setPaper(null)
       setNeighbours([])
       setQuantities([])
@@ -34,15 +49,30 @@ export function DetailPanel() {
     }
     let cancelled = false
     setPaper(null)
-    void fetchPaper(node.id).then((p) => !cancelled && setPaper(p)).catch(() => {})
-    void fetchPaperQuantities(node.id)
+    void fetchPaper(paperId).then((p) => !cancelled && setPaper(p)).catch(() => {})
+    void fetchPaperQuantities(paperId)
       .then((rows) => !cancelled && setQuantities(rows))
       .catch(() => {})
-    void fetchNeighbours(node.id, 5).then((n) => !cancelled && setNeighbours(n)).catch(() => {})
+    void fetchNeighbours(paperId, 5).then((n) => !cancelled && setNeighbours(n)).catch(() => {})
     return () => {
       cancelled = true
     }
-  }, [node])
+  }, [paperId])
+
+  // The plain-English reading is written after tagging, often while the
+  // panel is open on a freshly added work. Re-fetch when the worker says it
+  // has landed, so the section fills in without the reader clicking away.
+  useEffect(
+    () =>
+      subscribeToEvents((event) => {
+        const id = shownId.current
+        if (id === null || event.kind !== 'insight.done' || event.detail.paper_id !== id) return
+        void fetchPaper(id)
+          .then((p) => shownId.current === id && setPaper(p))
+          .catch(() => {})
+      }),
+    [],
+  )
 
   if (!node) return null
 
@@ -60,10 +90,6 @@ export function DetailPanel() {
     const index = nodes.findIndex((n) => n.id === id)
     if (index >= 0) setSelected(index)
   }
-
-  const placement = paper
-    ? placementSentence(paper.cluster_name, paper.cluster_confidence, paper.manifold_drift)
-    : null
 
   return (
     <aside className="detail-panel">
@@ -100,16 +126,14 @@ export function DetailPanel() {
         </div>
       ) : null}
 
-      {paper?.summary && (
-        <section>
-          <h3>In two sentences</h3>
-          <p className="prose">{paper.summary}</p>
-        </section>
-      )}
+      {paper && <CoreIdea paper={paper} />}
 
       {paper?.abstract && (
-        <section>
-          <h3>Academic abstract</h3>
+        /* Folded once the plain reading exists above it: the abstract is
+           still there for whoever wants the author's own words, but it no
+           longer stands between the reader and the idea. */
+        <details className="academic" open={!paper.insight}>
+          <summary>Academic abstract</summary>
           {paper.abstract_source === 'extracted_digest' && (
             /* A book has no abstract, so this one was assembled from the
                book's own paragraphs. Saying so matters: presented plainly it
@@ -117,80 +141,21 @@ export function DetailPanel() {
             <p className="assembled">Assembled from the text — this document has no abstract of its own.</p>
           )}
           <p className="abstract prose">{paper.abstract}</p>
+        </details>
+      )}
+
+      {paper?.summary && (
+        <section>
+          <h3>In two sentences</h3>
+          <p className="prose">{paper.summary}</p>
         </section>
       )}
 
-      {paper && (paper.cluster_confidence !== null || paper.manifold_drift !== null) && (
-        <section>
-          <h3>Placement</h3>
-          <dl className="placement">
-            {paper.cluster_name && (
-              <>
-                <dt>Region</dt>
-                <dd>{paper.cluster_name}</dd>
-              </>
-            )}
-            {/* The bars and decimals are for whoever is tuning the projection;
-                everyone else gets the same fact as a sentence, below. */}
-            {labMode && paper.cluster_confidence !== null && (
-              <>
-                <dt title="How strongly this paper belongs to its cluster">
-                  Cluster confidence
-                </dt>
-                <dd>
-                  <span className="bar">
-                    <span
-                      className="fill"
-                      style={{ width: `${Math.round(paper.cluster_confidence * 100)}%` }}
-                    />
-                  </span>
-                  {paper.cluster_confidence.toFixed(2)}
-                  {paper.cluster_confidence < 0.5 && (
-                    <span className="dim"> · sits between fields</span>
-                  )}
-                </dd>
-              </>
-            )}
-            {labMode && paper.manifold_drift !== null && (
-              <>
-                <dt title="Distance from the region the map was fitted on; ~1 is typical">
-                  Embedding drift
-                </dt>
-                <dd>
-                  {paper.manifold_drift.toFixed(2)}
-                  {paper.manifold_drift > 1.6 && (
-                    <span className="warn"> · unlike anything else here</span>
-                  )}
-                </dd>
-              </>
-            )}
-          </dl>
-          {!labMode && placement && <p className="prose">{placement}</p>}
-        </section>
-      )}
+      <MeasuredValues quantities={quantities} labMode={labMode} />
 
-      {quantities.length > 0 && (
-        <section>
-          <h3>Measured values</h3>
-          {/* The sentence is the provenance; the tooltip carries it whole. */}
-          <dl className="placement quantities">
-            {quantities.slice(0, 8).map((q) => (
-              <div key={q.id} title={q.context_sentence}>
-                <dt>
-                  {q.quantity_kind}
-                  {q.status !== 'auto' && q.status !== 'confirmed' && (
-                    <span className="dim"> ({q.status.replace('_', ' ')})</span>
-                  )}
-                </dt>
-                <dd>
-                  {formatQuantity(q.value_si, q.unit_si, q.quantity_kind)}
-                  <span className="dim"> · “{q.value_original} {q.unit_original}”</span>
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      )}
+      {paper?.insight && <KeyIdeas insight={paper.insight} />}
+
+      {paper && <Placement paper={paper} labMode={labMode} />}
 
       {neighbours.length > 0 && (
         <section>
