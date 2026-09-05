@@ -165,7 +165,10 @@ Zed (`settings.json`):
 </details>
 
 Everything is read-only and localhost-only, and the API must be running
-(`uv run scinet-up`). Details: [docs/MCP.md](docs/MCP.md).
+(`uv run scinet-up`). Details: [docs/MCP.md](docs/MCP.md). The repository
+also ships a Claude Code skill — `.claude/skills/scinet-researcher/` — that
+teaches the assistant to work these tools as a research librarian: orient,
+find the structure, quote the evidence with citations.
 
 ## Why not Zotero, NotebookLM or ChatPDF?
 

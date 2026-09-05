@@ -89,6 +89,25 @@ out otherwise, so the default snippet is exactly what you see here.
 | `get_curriculum(topic_or_cluster)` | Where to start reading a region or a topic, with the reasons, and the order to read the rest |
 | `query_quantities(quantity_kind, unit, min_val, max_val, query, limit)` | Measured values across the library with the sentence each came from — by kind, unit, SI range or phrase; trusted rows only |
 
+## Claude Code as a research librarian
+
+The repository ships a skill, `.claude/skills/scinet-researcher/SKILL.md`,
+that Claude Code loads automatically in a session opened here — and that
+you can copy into any other project's `.claude/skills/` (or `~/.claude/skills/`
+for every project). It teaches the assistant to work the tools in three
+steps rather than guessing:
+
+1. **Orient** — `library_overview`, then `list_regions`: name regions as the
+   library names them, never invent one.
+2. **Structure** — `find_semantic_path` for how two ideas connect (read
+   `regions_crossed` and each stop's central question; say so when the chain
+   is not continuous); `get_curriculum` for where to start and in what order,
+   with the reasons verbatim; `query_quantities` for numbers, quoting the
+   sentence each came from.
+3. **Evidence** — `read_paper` in windows for verbatim passages, every claim
+   carrying `[#paper_id]`, never a paper no tool returned; a `warming` answer
+   means wait and retry once.
+
 ## Properties worth knowing
 
 - **Read-only.** Nothing an agent does through these tools can change the

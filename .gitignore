@@ -36,6 +36,10 @@ dist/
 # os
 .DS_Store
 
+# agent working files — personal, except the skills the project ships
+.claude/*
+!.claude/skills/
+
 # generated test fixtures — rebuilt by tests/fixtures/generate.py
 backend/tests/fixtures/generated/
 backend/tests/fixtures/real/
