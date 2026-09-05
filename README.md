@@ -274,8 +274,17 @@ Open <http://localhost:5173>.
 
 ## Importing a library
 
-Drop PDFs into `data/library/` and the watcher picks them up. To import an
-existing collection in bulk:
+Drop files onto the map — or onto the welcome screen a fresh install shows —
+and they are copied into the library and queued: PDF, EPUB, DOCX, Markdown
+or plain text, papers or books or a folder of notes. Nothing to hand? The
+welcome screen installs **History of Thought**, forty-one public-domain
+openings from Plato to Darwin that ship inside the repository and need no
+network at all, and names the command that fetches the second benchmark,
+**Foundations of AI & Philosophy** — a script you run, never something the
+app does.
+
+The watcher also picks up anything dropped into `data/library/`. To import
+an existing collection in bulk:
 
 ```bash
 cd backend && uv run python ../scripts/backfill.py ~/Papers
@@ -323,7 +332,9 @@ $ sqlite3 data/demo/scinet.db "SELECT count(*) FROM egress_log;"
 
 The corpus fetcher does reach arXiv and NASA — it is a tool you run, like
 the model downloader, not something the app does, and it writes nothing to
-that table.
+that table. The sample library the welcome screen offers is committed to the
+repository and installed by copying; a sample the repository cannot carry
+answers with the command that fetches it, not with a download.
 
 ## Use it from your AI tools
 

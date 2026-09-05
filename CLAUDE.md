@@ -207,6 +207,54 @@ Target scale 3–4k papers on a single laptop.
   `frontend/src/lib/search.ts`): k nearest is the whole answer to "how much
   lights up", and a fixed 60 lit 70% of an 85-paper map. Square root, like
   the projection's own parameters.
+- **No prompt assumes the works are science.** A model told it is reading a
+  scientific paper names a subfield where a newcomer needed the idea and
+  summarises Mill as if he reported an experiment. Every prompt says "work",
+  lists essays, chapters and primary sources before papers, and asks for the
+  version a curious reader from another field could follow; the specialist's
+  layer — the distinctive words — is kept alongside, never replaced.
+- **The plain-English reading is its own stage and its own table**
+  (`INSIGHT`, `paper_insights`, priority 101). One constrained call per work
+  answers the question, the argument and why it matters, and names the
+  claims and the people, works and ideas the text turns on — which is what
+  the inspector shows where a physics paper shows measured values. Genre is
+  declared *first* in the schema because whether "the central question" is a
+  hypothesis, a thesis or a narrative arc depends on it; `grounded` is
+  declared last because it assesses prose that has to exist first. Queued
+  from the embed stage so a dead TAG job cannot lose it; never fed to the
+  embedder, because a reading of a work is not part of it and embedding it
+  would move every node.
+- **Trails route through a kNN graph at `neighbours_for(N)`, never the k=2
+  skeleton** (`project/paths.py`). Two edges per node leaves a graph that is
+  barely connected. Edge weight is `(1 − cosine) + 0.05`: without the hop
+  penalty Dijkstra crawls through twenty near-identical works to save 0.02.
+  Two islands the library does not bridge get a greedy climb and an explicit
+  jump reported as `complete=false`, never a hidden one.
+- **"Where to start" is computed on request, from four signals weighted by
+  how much evidence each carries** (`project/curriculum.py`): centrality
+  0.45 (rank-normalised, so a tight region and a loose one weigh it alike),
+  an introductory title or abstract 0.30, an earlier year 0.15, length 0.10.
+  The reading order that follows is a walk, not a ranking — each step the
+  nearest unread work to the last, pulled toward whatever scored well.
+- **The app never fetches a sample library.** The bundled "History of
+  Thought" is forty-one public-domain openings committed to `demo/samples/`
+  and installed by copying, exactly as an upload is; the preprint corpus is
+  listed with the command that fetches it and answers 409 if asked to install
+  itself. `egress_log` stays at 0. The bundle is a second benchmark: files
+  are named `Theme_NN-slug.md` so `eval_clustering.py` scores it, and it
+  needs at least 30 works or HDBSCAN draws no regions at all.
+- **Labelled front matter is metadata.** `Author:` and `Year:` lines at the
+  head of a text or Markdown document are read as such, and a labelled year
+  may be any year — the four-digit scrape stops at 1980 because an
+  unlabelled "1859" on a page is a citation, but "Year: 1859" is nothing
+  else. A short level-1 heading at the top is a title ("Meno", "Walden");
+  the twelve-character floor exists for stray lines, and a heading is not one.
+- **The Lab toggle is the only place the numbers live.** Frame times, run
+  ids, confidence bars, drift, tiers and similarity scores are shown when
+  `labMode` is on and replaced by plain sentences when it is off; the
+  preference persists per browser and `?lab=1` forces it for demos. CSS
+  class names and the "Measured values" heading are unchanged because the
+  demo recordings drive by them.
 - **`os.kill(pid, 0)` is not a liveness probe on Windows.** Every signal value
   but the two console-control ones reaches TerminateProcess, so the portable-
   looking probe kills what it asks about. `app/cli/stop.py` queries instead.
@@ -305,6 +353,9 @@ cd backend && uv run python ../scripts/check_portability.py  # models stay local
 cd backend && uv run python ../scripts/fix_abstracts.py  # re-derive bad abstracts
 cd backend && uv run python ../scripts/revive_jobs.py  # requeue env-killed jobs
 cd backend && uv run python ../scripts/extract_quantities.py --apply  # re-extract measured values
+cd backend && uv run python ../scripts/backfill_insights.py --apply  # plain-English readings for an existing library
+cd backend && uv run python ../scripts/build_sample_bundle.py  # rebuild the offline sample (developer, one-time)
+cd backend && uv run python ../scripts/fetch_demo_corpus.py --recipe ai-and-mind  # the second benchmark corpus
 cd backend && uv run python ../scripts/force_project.py --apply  # rebuild the map
 cd backend && uv run python ../scripts/prepare_export.py  # clean before zipping
 cd backend && SCINET_MAX_PARSE_PAGES=0 uv run python -m app.workers.runner  # no page cap

@@ -140,7 +140,29 @@ durable.
 
 ### A library to try it on
 
-No papers to hand? The repository ships the recipe for one: 85
+No papers to hand? The welcome screen a fresh install shows offers two.
+
+**History of Thought** ships inside the repository: forty-one chapter-length
+openings of public-domain works — Plato, Aristotle and the Stoics; Descartes,
+Hume and Kant; Machiavelli, Locke and Mill; Emerson, Douglass and Nietzsche;
+Lucretius, Newton and Darwin — as Markdown, about two megabytes in all. One
+click copies them into the library and queues them; no network is involved.
+Each file is named for its theme, so `scripts/eval_clustering.py` scores this
+library too. `demo/samples/history-of-thought/SOURCES.md` credits every
+edition.
+
+**Foundations of AI & Philosophy** is seventy-five open preprints on minds
+and machines — alignment, the ethics of automated decisions, the science of
+consciousness, the foundations of physics, cognitive architectures. Those
+files belong to their authors, so the repository carries only the recipe;
+the welcome screen shows the command, which you run:
+
+```bash
+cd backend
+uv run python ../scripts/fetch_demo_corpus.py --recipe ai-and-mind
+```
+
+The original benchmark is still there: 85
 documents across five aerospace subfields — radar imaging, machine learning
 on satellite imagery, trajectory optimisation, astronomical instrumentation,
 and satellite positioning — drawn from arXiv and from NASA's technical report
@@ -441,6 +463,55 @@ Searching dims the rest of the map rather than hiding it, so a result keeps the
 context that tells you where it sits.
 
 Tag filters combine with OR: picking two topics widens the view.
+
+### A work, in plain words
+
+Click a work and its card opens with **The idea, in plain words**: the
+question it takes up, what it argues or finds, and why that matters — two
+sentences each, written for a reader from another field by the local model,
+with the kind of work it is (an essay, a survey, an empirical study) as a
+chip. Beneath are the **key claims** the text makes and the **people, works
+and ideas** it turns on. A physics paper shows its measured values as well;
+a philosophical essay, which has none, shows its claims and names in their
+place — nothing on the card is ever an empty table. The **academic abstract**
+sits folded under the plain reading, one click away.
+
+The reading is written after tagging, by one more call to the local model
+(five to ten seconds a work), and says so when the text it was given was too
+thin to stand on. `SCINET_INSIGHT_ENABLED=0` turns the stage off;
+`scripts/backfill_insights.py` writes it for a library ingested before it
+existed.
+
+### Where to start
+
+Open a region and the card names **where to start**: the work closest to the
+region's centre, nudged toward anything that calls itself an introduction or
+a survey, toward the earlier years, and away from the four-hundred-page book
+— each reason stated in a phrase. **Reading order** walks the region from
+there, each step the nearest unread work to the last, drawn as a numbered
+trail on the map. With a filter active, **Where do I start?** in the filter
+bar answers the same question for whatever the filter left.
+
+### Trails
+
+**✧ Trail** takes two ends — a paper each, or a phrase each: *Ethics* to
+*Autonomous Systems* — and finds the chain of works that leads from one to
+the other, each a small step from the last, through the library's own
+neighbour graph in the embedding space. The stops are numbered on the map;
+click one to fly to it, or press **Tour** and be walked through them. A
+phrase is first anchored to its nearest work, and the card says which.
+When the library holds no continuous chain between two ideas the trail says
+so and shows the jump rather than hiding it.
+
+### The Lab
+
+The map is for reading; the numbers behind it are one toggle away. **⚗ Lab**
+in the top bar brings back the frame timing, the projection run, cluster
+confidences and drift, parse tiers, similarity scores, per-kind job counts,
+the **Provisional** colouring and the **Models** and **Review** tabs, plus a
+drawer that gathers them. Off, the same facts appear as sentences — "sits
+between Stoic Ethics and its neighbours" for a confidence of 0.37. The
+choice is remembered per browser; `?lab=1` on the URL forces it on.
 
 ---
 
