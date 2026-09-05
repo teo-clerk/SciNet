@@ -27,6 +27,32 @@ class PaperSummary(BaseModel):
     arxiv_id: str | None = None
 
 
+class InsightEntity(BaseModel):
+    name: str
+    #: person | work | concept | event | place | organisation
+    kind: str
+
+
+class PaperInsightOut(BaseModel):
+    """The plain-English reading of a work, for a reader from another field.
+
+    Three answers — the question, the argument, why it matters — plus the
+    claims the text makes and the names it turns on. ``grounded`` is the
+    model's own verdict on whether the material supported its answers; the
+    interface says so when it is false rather than presenting the reading as
+    settled.
+    """
+
+    genre: str | None
+    question: str | None
+    argument: str | None
+    significance: str | None
+    claims: list[str] = []
+    entities: list[InsightEntity] = []
+    grounded: bool = True
+    model_id: str
+
+
 class PaperDetail(PaperSummary):
     authors: list[str] = []
     abstract: str | None = None
@@ -35,6 +61,8 @@ class PaperDetail(PaperSummary):
     #: that from something its author wrote.
     abstract_source: str | None = None
     summary: str | None = None
+    #: Absent until the INSIGHT stage has run for this work.
+    insight: PaperInsightOut | None = None
     venue: str | None = None
     tags: list[str] = []
     page_count: int | None = None

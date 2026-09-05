@@ -30,6 +30,7 @@ from app.models import (
     JobKind,
     MarkdownDoc,
     Paper,
+    PaperInsight,
     PaperMeta,
     PaperStatus,
     PaperTag,
@@ -38,7 +39,9 @@ from app.models import (
     Tag,
 )
 from app.schemas.paper import (
+    InsightEntity,
     PaperDetail,
+    PaperInsightOut,
     PaperPage,
     PaperSummary,
     ParseInfo,
@@ -78,6 +81,33 @@ def _field_source(meta: PaperMeta | None, field: str) -> str | None:
         return json.loads(meta.field_sources_json).get(field)
     except json.JSONDecodeError:
         return None
+
+
+def _json_list(raw: str | None) -> list:
+    try:
+        value = json.loads(raw or "[]")
+    except json.JSONDecodeError:
+        return []
+    return value if isinstance(value, list) else []
+
+
+def _insight(row: PaperInsight | None) -> PaperInsightOut | None:
+    if row is None:
+        return None
+    return PaperInsightOut(
+        genre=row.genre,
+        question=row.question,
+        argument=row.argument,
+        significance=row.significance,
+        claims=[str(c) for c in _json_list(row.claims_json)],
+        entities=[
+            InsightEntity(name=str(e.get("name", "")), kind=str(e.get("kind", "")))
+            for e in _json_list(row.entities_json)
+            if isinstance(e, dict) and e.get("name")
+        ],
+        grounded=bool(row.grounded),
+        model_id=row.model_id,
+    )
 
 
 def _summary(paper: Paper) -> PaperSummary:
@@ -426,6 +456,7 @@ def get_paper(paper_id: int, db: Session = Depends(get_db)) -> PaperDetail:
         abstract=meta.abstract if meta else None,
         abstract_source=_field_source(meta, "abstract"),
         summary=meta.summary if meta else None,
+        insight=_insight(db.get(PaperInsight, paper_id)),
         venue=meta.venue if meta else None,
         page_count=paper.page_count,
         pdf_bytes=paper.pdf_bytes,

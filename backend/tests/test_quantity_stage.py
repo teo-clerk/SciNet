@@ -56,6 +56,10 @@ def test_extract_sits_between_embed_and_project() -> None:
     assert order.index(JobKind.EMBED) < order.index(JobKind.EXTRACT)
     assert order.index(JobKind.EXTRACT) < order.index(JobKind.PROJECT)
     assert PRIORITY[JobKind.ADJUDICATE] < PRIORITY[JobKind.TAG]
+    # The plain-English reading comes last of all: the map and the tags are
+    # usable before it lands, and it shares the LLM-resident era with TAG.
+    assert order[-1] is JobKind.INSIGHT
+    assert PRIORITY[JobKind.INSIGHT] > PRIORITY[JobKind.TAG]
 
 
 def test_a_paper_yields_rows_with_their_sentences(db, tmp_path) -> None:

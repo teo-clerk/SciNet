@@ -142,6 +142,11 @@ def handle_embed(session: Session, job: Job, settings: Settings) -> None:
     enqueue(session, JobKind.PROJECT, paper_id=None)
     enqueue(session, JobKind.EXTRACT, paper_id=paper.id)
     enqueue(session, JobKind.TAG, paper_id=paper.id)
+    # Queued here rather than from the tag stage so a dead TAG job — a model
+    # missing, a malformed answer — does not also lose the plain-English
+    # reading. Priority puts it after TAG in the same LLM-resident era anyway.
+    if settings.insight_enabled:
+        enqueue(session, JobKind.INSIGHT, paper_id=paper.id)
 
     BROKER.publish(
         "embed.done",

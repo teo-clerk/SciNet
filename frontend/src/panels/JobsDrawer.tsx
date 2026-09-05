@@ -44,6 +44,8 @@ function describe(event: PipelineEvent): string {
         : `placed ${d.placed} new paper(s)`
     case 'tag.done':
       return `tagged #${d.paper_id}: ${(d.tags as string[] | undefined)?.join(', ') || 'none'}`
+    case 'insight.done':
+      return `core idea for #${d.paper_id}${d.grounded === false ? ' (thin evidence)' : ''}`
     case 'paper.duplicate':
       return `duplicate work key on #${d.paper_id}`
     case 'job.failed':

@@ -35,6 +35,7 @@ from app.models import (
     JobKind,
     JobState,
     Paper,
+    PaperInsight,
     PaperMeta,
     PaperTag,
     Projection,
@@ -332,7 +333,10 @@ class PathStop(BaseModel):
     #: Cosine to the following stop, so the reader sees which step is the
     #: leap. Null on the last stop.
     similarity_to_next: float | None
-    # `core_question` joins here once `paper_insights` lands.
+    #: The work's central question in plain English, when the INSIGHT stage
+    #: has written it — a trail of titles alone asks the reader to guess what
+    #: each step is about.
+    core_question: str | None = None
 
 
 class PathOut(BaseModel):
@@ -424,6 +428,7 @@ def _describe_stops(db: Session, graph: KnnGraph, stops: list[int]) -> list[Path
             PaperMeta.year,
             Projection.cluster_id,
             Cluster.llm_label,
+            PaperInsight.question,
         )
         .outerjoin(PaperMeta, PaperMeta.paper_id == Paper.id)
         .outerjoin(
@@ -431,6 +436,7 @@ def _describe_stops(db: Session, graph: KnnGraph, stops: list[int]) -> list[Path
             and_(Projection.paper_id == Paper.id, Projection.run_id == run_id),
         )
         .outerjoin(Cluster, Cluster.id == Projection.cluster_id)
+        .outerjoin(PaperInsight, PaperInsight.paper_id == Paper.id)
         .where(Paper.id.in_(stops))
     ).all()
     by_id = {row.id: row for row in rows}
@@ -456,6 +462,7 @@ def _describe_stops(db: Session, graph: KnnGraph, stops: list[int]) -> list[Path
                 similarity_to_next=round(similarity, 4)
                 if similarity is not None
                 else None,
+                core_question=row.question if row else None,
             )
         )
     return described
