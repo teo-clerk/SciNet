@@ -15,6 +15,8 @@ export interface SystemInfo {
   search_warmup: string
   /** Seconds until warm, when the warmer can estimate it. */
   search_warmup_remaining: number | null
+  /** How many placed works the clusterer needs before it names any regions. */
+  regions_min_papers: number
 }
 
 async function getJson<T>(path: string): Promise<T> {

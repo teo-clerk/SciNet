@@ -67,3 +67,71 @@ export function deriveWelcome(input: WelcomeInput): WelcomeState {
   // word is "building" and there is no meaningful fraction to put beside it.
   return { kind: 'building', progress: null }
 }
+
+/** The stall counter after one more poll: up by one while jobs sit queued with
+ *  nothing running, back to zero the moment anything moves. */
+export function nextIdlePolls(previous: number, queued: number, running: number): number {
+  return queued > 0 && running === 0 ? previous + 1 : 0
+}
+
+export interface WelcomeCopy {
+  heading: string
+  /** Prose; `backticks` mark the parts to set as code. */
+  body: string
+}
+
+/** What the welcome says in each state. `waiting` is the queued job count,
+ *  which is the only number the worker-down heading needs. */
+export function welcomeCopy(state: WelcomeState, waiting: number): WelcomeCopy {
+  switch (state.kind) {
+    case 'api-down':
+      return {
+        heading: 'SciNet is not running yet',
+        body:
+          "The map's engine is not reachable. From the `backend` folder run " +
+          '`uv run scinet-up`, then reload.',
+      }
+    case 'empty':
+      return {
+        heading: 'A map of what you read',
+        body:
+          'Drop papers, books, essays or notes here — PDF, EPUB, DOCX, Markdown ' +
+          'or text. Everything stays on this machine.',
+      }
+    case 'building':
+      return {
+        heading: 'Reading your library…',
+        body: state.progress
+          ? `${state.progress.done} of ${state.progress.total} works read. The map ` +
+            'appears once enough are placed; regions are named a little after that.'
+          : 'The map is being built.',
+      }
+    case 'worker-down':
+      return {
+        heading: `${waiting} ${waiting === 1 ? 'work is' : 'works are'} waiting`,
+        body:
+          'Nothing is processing them. Start the worker from the `backend` folder: ' +
+          '`uv run scinet-up`.',
+      }
+  }
+}
+
+/** Prose split at its backticks, so a renderer can set the code parts as code
+ *  without a Markdown library for two words. Odd segments are code. */
+export function splitCode(text: string): Array<{ code: boolean; text: string }> {
+  return text
+    .split('`')
+    .map((part, i) => ({ code: i % 2 === 1, text: part }))
+    .filter((part) => part.text !== '')
+}
+
+/** A map with no regions is not broken when the library is simply small; the
+ *  clusterer needs a floor of works before it will name anything. Below that
+ *  floor the honest message is "add more", not silence. */
+export function needsMoreForRegions(
+  clusterCount: number,
+  paperCount: number,
+  minPapers: number | null,
+): boolean {
+  return minPapers !== null && clusterCount === 0 && paperCount < minPapers
+}

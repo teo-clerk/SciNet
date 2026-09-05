@@ -69,6 +69,33 @@ export const KIND_LABELS: Record<string, string> = {
  *  reader would introduce a book in, not the order the extractor found them. */
 const KIND_ORDER = ['person', 'work', 'concept', 'event', 'place', 'organisation']
 
+/** The three lines of the plain-English reading, in the order a reader asks
+ *  them: what is the question, what is the answer, why should I care. A line
+ *  the model left empty is left out rather than shown as a blank. */
+export function ideaLines(insight: {
+  question: string | null
+  argument: string | null
+  significance: string | null
+}): Array<[label: string, text: string]> {
+  const lines: Array<[string, string | null]> = [
+    ['The question', insight.question],
+    ['The argument', insight.argument],
+    ['Why it matters', insight.significance],
+  ]
+  return lines.filter(
+    (line): line is [string, string] => line[1] !== null && line[1].trim() !== '',
+  )
+}
+
+/** Why there is no plain-English reading yet. Two different answers: the work
+ *  is still moving through the pipeline, or it finished and the stage that
+ *  writes the reading is switched off. */
+export function missingInsightNote(status: string): string {
+  return status === 'ready'
+    ? 'No plain-English reading yet — it is written after tagging (SCINET_INSIGHT_ENABLED).'
+    : 'The plain-English reading is written after tagging; this work is still in the queue.'
+}
+
 export function entityGroups(
   entities: Array<{ name: string; kind: string }>,
 ): Array<[kind: string, names: string[]]> {

@@ -8,6 +8,21 @@ export interface ClusterMember {
   confidence: number | null
 }
 
+/**
+ * A work to start with, and why.
+ *
+ * The reasons arrive as plain phrases from the server ("cited by most of the
+ * region", "written first") — the UI shows them as chips and does not try to
+ * be cleverer than the sentence it was handed.
+ */
+export interface EntryPoint {
+  paper_id: number
+  title: string | null
+  year: number | null
+  score: number
+  reasons: string[]
+}
+
 export interface ClusterDetail {
   id: number
   label: string | null
@@ -15,6 +30,11 @@ export interface ClusterDetail {
   size: number
   terms: string[]
   members: ClusterMember[]
+  /** Null while the region is too small or too even to have an obvious door. */
+  entry_point: EntryPoint | null
+  alternatives: EntryPoint[]
+  /** Paper ids, in the order the region is best read. */
+  reading_order: number[]
 }
 
 export interface ClusterLink {

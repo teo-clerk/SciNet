@@ -45,6 +45,12 @@ export const isReadable = (file: { name: string }): boolean => {
   return match === null || ACCEPTED.includes(match[0])
 }
 
+/** Whether a drag carries files at all. Text or a link dragged across the map
+ *  must not light the drop overlay, or every selection made in another window
+ *  flashes "drop to add" on the way past. */
+export const dragCarriesFiles = (types: Iterable<string> | null | undefined): boolean =>
+  types !== null && types !== undefined && Array.from(types).includes('Files')
+
 export const BATCH_SIZE = 20
 
 export interface BatchResult {

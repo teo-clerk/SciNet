@@ -10,9 +10,106 @@ import { describe, expect, test } from 'bun:test'
 import {
   countParseDone,
   deriveWelcome,
+  needsMoreForRegions,
+  nextIdlePolls,
+  splitCode,
   STALL_POLLS,
+  welcomeCopy,
   type WelcomeInput,
 } from '../lib/welcome'
+
+describe('nextIdlePolls', () => {
+  test('counts up while the queue sits untouched', () => {
+    expect(nextIdlePolls(0, 5, 0)).toBe(1)
+    expect(nextIdlePolls(1, 5, 0)).toBe(2)
+  })
+
+  test('resets the moment something runs, or the queue empties', () => {
+    expect(nextIdlePolls(3, 5, 1)).toBe(0)
+    expect(nextIdlePolls(3, 0, 0)).toBe(0)
+  })
+})
+
+describe('welcomeCopy', () => {
+  test('each state has its own heading', () => {
+    expect(welcomeCopy({ kind: 'api-down', progress: null }, 0).heading).toBe(
+      'SciNet is not running yet',
+    )
+    expect(welcomeCopy({ kind: 'empty', progress: null }, 0).heading).toBe(
+      'A map of what you read',
+    )
+    expect(welcomeCopy({ kind: 'building', progress: null }, 0).heading).toBe(
+      'Reading your library…',
+    )
+  })
+
+  test('a build with a tally says how far it is', () => {
+    const copy = welcomeCopy({ kind: 'building', progress: { done: 9, total: 40 } }, 0)
+    expect(copy.body).toStartWith('9 of 40 works read.')
+  })
+
+  test('a build with no tally does not invent one', () => {
+    expect(welcomeCopy({ kind: 'building', progress: null }, 0).body).toBe(
+      'The map is being built.',
+    )
+  })
+
+  test('the stalled heading counts the queue, and knows one from many', () => {
+    expect(welcomeCopy({ kind: 'worker-down', progress: null }, 12).heading).toBe(
+      '12 works are waiting',
+    )
+    expect(welcomeCopy({ kind: 'worker-down', progress: null }, 1).heading).toBe(
+      '1 work is waiting',
+    )
+  })
+
+  test('the commands are marked as code', () => {
+    expect(welcomeCopy({ kind: 'api-down', progress: null }, 0).body).toContain(
+      '`uv run scinet-up`',
+    )
+  })
+})
+
+describe('splitCode', () => {
+  test('odd segments are code', () => {
+    expect(splitCode('run `uv run x` in `backend`.')).toEqual([
+      { code: false, text: 'run ' },
+      { code: true, text: 'uv run x' },
+      { code: false, text: ' in ' },
+      { code: true, text: 'backend' },
+      { code: false, text: '.' },
+    ])
+  })
+
+  test('plain prose is one segment', () => {
+    expect(splitCode('nothing to see')).toEqual([{ code: false, text: 'nothing to see' }])
+  })
+
+  test('a leading code span does not produce an empty prose segment', () => {
+    expect(splitCode('`x` first')).toEqual([
+      { code: true, text: 'x' },
+      { code: false, text: ' first' },
+    ])
+  })
+})
+
+describe('needsMoreForRegions', () => {
+  test('no regions and a small library is the case the banner is for', () => {
+    expect(needsMoreForRegions(0, 12, 30)).toBe(true)
+  })
+
+  test('regions exist: nothing to say', () => {
+    expect(needsMoreForRegions(3, 12, 30)).toBe(false)
+  })
+
+  test('a library past the floor with no regions is not a size problem', () => {
+    expect(needsMoreForRegions(0, 30, 30)).toBe(false)
+  })
+
+  test('an unknown floor says nothing', () => {
+    expect(needsMoreForRegions(0, 12, null)).toBe(false)
+  })
+})
 
 const input = (overrides: Partial<WelcomeInput> = {}): WelcomeInput => ({
   apiReachable: true,

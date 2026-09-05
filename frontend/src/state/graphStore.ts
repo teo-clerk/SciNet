@@ -12,13 +12,23 @@
  */
 import { create } from 'zustand'
 
+import type { EntryPoint } from '@/api/clusters'
 import type { DecodedGraph, GraphCluster, GraphNode } from '@/api/graph'
 import { LAB_KEY, readLabPref, writePref } from '@/lib/prefs'
 import type { SearchMode } from '@/lib/search'
+import { stopsToIndices, type TrailMode, type TrailStop } from '@/lib/trail'
 
 export type ColorMode = 'cluster' | 'year' | 'provisional'
 export type ViewMode = 'map' | 'list' | 'quarantine' | 'models' | 'review'
 export type SortKey = 'title' | 'year' | 'cluster' | 'confidence'
+
+/** "Where do I start?" answered for the papers the filters currently show. */
+export interface EntryCard {
+  entry: EntryPoint
+  alternatives: EntryPoint[]
+  /** Paper ids. */
+  readingOrder: number[]
+}
 
 export interface GraphBuffers {
   positions: Float32Array
@@ -84,8 +94,22 @@ interface GraphState {
   librarianOpen: boolean
   /** Node indices the librarian is pointing at; null = none. */
   highlightSet: Set<number> | null
-  /** Node indices, in order, forming the librarian's trail. Empty = none. */
+  /** Node indices, in order, forming the trail on the map. Empty = none. Drawn
+   *  by the librarian's citations and by an idea trail alike. */
   trail: number[]
+  /** The trail panel's visibility. It and the librarian share the bottom
+   *  centre, so opening one closes the other. */
+  trailOpen: boolean
+  /** The stops behind `trail`, as the server described them; null when the
+   *  trail was drawn by the librarian, which names no stops. */
+  trailStops: TrailStop[] | null
+  /** False when the last hop of the trail is a leap, not a neighbour. */
+  trailComplete: boolean
+  /** Which stop the reader (or the tour) is on; null = none yet. */
+  trailCursor: number | null
+  trailMode: TrailMode | null
+  /** The floating "where to start" card, from the filter bar. */
+  entryCard: EntryCard | null
   /** Pending camera flight; the nonce lets the same target fire twice. */
   cameraRequest: {
     target: [number, number, number]
@@ -119,9 +143,26 @@ interface GraphState {
   toggleLibrarian: () => void
   setHighlight: (indices: Set<number> | null) => void
   setTrail: (indices: number[]) => void
+  toggleTrailPanel: () => void
+  /** A trail with named stops: draws it, lights it, and opens the panel. */
+  setTrailResult: (stops: TrailStop[], complete: boolean, mode: TrailMode) => void
+  setTrailCursor: (cursor: number | null) => void
+  /** Takes the trail off the map and empties the panel; leaves it open. */
+  clearTrail: () => void
+  setEntryCard: (card: EntryCard | null) => void
   flyToPoint: (target: [number, number, number], distance: number) => void
   clearFilters: () => void
 }
+
+/** Every trail slice at rest — used wherever the map is replaced or cleared,
+ *  because node indices from one graph mean nothing in the next. */
+const NO_TRAIL = {
+  trail: [] as number[],
+  trailStops: null,
+  trailComplete: true,
+  trailCursor: null,
+  trailMode: null,
+} as const
 
 /** Distinct hues that stay legible against a near-black ground. */
 export const CLUSTER_PALETTE: [number, number, number][] = [
@@ -212,7 +253,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   morphRunId: null,
   librarianOpen: false,
   highlightSet: null,
-  trail: [],
+  ...NO_TRAIL,
+  trailOpen: false,
+  entryCard: null,
   cameraRequest: null,
 
   setLoading: () => set({ status: 'loading', error: null }),
@@ -242,7 +285,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       morphT: 0,
       morphRunId: null,
       highlightSet: null,
-      trail: [],
+      ...NO_TRAIL,
+      entryCard: null,
       cameraRequest: null,
     }),
 
@@ -302,9 +346,37 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   setMorphT: (morphT) => set({ morphT }),
   clearMorph: () =>
     set({ morphTarget: null, morphRunId: null, morphT: 0 }),
-  toggleLibrarian: () => set((state) => ({ librarianOpen: !state.librarianOpen })),
+  // The librarian and the trail panel share the bottom centre of the screen;
+  // two drawers stacked there would cover the map both exist to point at.
+  toggleLibrarian: () =>
+    set((state) => ({
+      librarianOpen: !state.librarianOpen,
+      trailOpen: state.librarianOpen ? state.trailOpen : false,
+    })),
   setHighlight: (highlightSet) => set({ highlightSet }),
   setTrail: (trail) => set({ trail }),
+  toggleTrailPanel: () =>
+    set((state) => ({
+      trailOpen: !state.trailOpen,
+      librarianOpen: state.trailOpen ? state.librarianOpen : false,
+    })),
+  setTrailResult: (trailStops, trailComplete, trailMode) =>
+    set((state) => {
+      const trail = stopsToIndices(trailStops, state.nodes)
+      return {
+        trail,
+        trailStops,
+        trailComplete,
+        trailMode,
+        trailCursor: null,
+        highlightSet: new Set(trail),
+        trailOpen: true,
+        librarianOpen: false,
+      }
+    }),
+  setTrailCursor: (trailCursor) => set({ trailCursor }),
+  clearTrail: () => set({ ...NO_TRAIL, highlightSet: null }),
+  setEntryCard: (entryCard) => set({ entryCard }),
   flyToPoint: (target, distance) =>
     set((state) => ({
       cameraRequest: {
@@ -326,7 +398,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       morphT: 0,
       morphRunId: null,
       highlightSet: null,
-      trail: [],
+      ...NO_TRAIL,
+      entryCard: null,
       cameraRequest: null,
     }),
 }))

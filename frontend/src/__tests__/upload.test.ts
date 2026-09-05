@@ -10,6 +10,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   BATCH_SIZE,
   decodeBatch,
+  dragCarriesFiles,
   failedBatch,
   planBatches,
   summarise,
@@ -17,6 +18,23 @@ import {
   type BatchResult,
 } from '../lib/upload'
 import { ACCEPTED, isReadable } from '../panels/UploadButton'
+
+describe('dragCarriesFiles', () => {
+  test('a file drag says so in its types', () => {
+    expect(dragCarriesFiles(['Files'])).toBe(true)
+    expect(dragCarriesFiles(['text/plain', 'Files'])).toBe(true)
+  })
+
+  test('dragged text or a link is not a drop', () => {
+    expect(dragCarriesFiles(['text/plain', 'text/uri-list'])).toBe(false)
+    expect(dragCarriesFiles([])).toBe(false)
+  })
+
+  test('no dataTransfer at all is not a drop', () => {
+    expect(dragCarriesFiles(null)).toBe(false)
+    expect(dragCarriesFiles(undefined)).toBe(false)
+  })
+})
 
 describe('upload filter', () => {
   test('accepts every format the backend reads', () => {

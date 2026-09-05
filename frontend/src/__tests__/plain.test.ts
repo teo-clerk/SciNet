@@ -10,10 +10,45 @@ import { describe, expect, test } from 'bun:test'
 import {
   entityGroups,
   genreLabel,
+  ideaLines,
   KIND_LABELS,
+  missingInsightNote,
   pagesLabel,
   placementSentence,
 } from '../lib/plain'
+
+describe('ideaLines', () => {
+  test('question, argument, significance — in that order, labelled', () => {
+    expect(
+      ideaLines({ question: 'Why?', argument: 'Because.', significance: 'It matters.' }),
+    ).toEqual([
+      ['The question', 'Why?'],
+      ['The argument', 'Because.'],
+      ['Why it matters', 'It matters.'],
+    ])
+  })
+
+  test('a line the model left empty is left out, not shown blank', () => {
+    expect(ideaLines({ question: 'Why?', argument: null, significance: '  ' })).toEqual([
+      ['The question', 'Why?'],
+    ])
+  })
+
+  test('nothing written is no lines', () => {
+    expect(ideaLines({ question: null, argument: null, significance: null })).toEqual([])
+  })
+})
+
+describe('missingInsightNote', () => {
+  test('a finished work with no reading names the switch', () => {
+    expect(missingInsightNote('ready')).toContain('SCINET_INSIGHT_ENABLED')
+  })
+
+  test('a work still in the pipeline is told to wait', () => {
+    expect(missingInsightNote('tagging')).toContain('still in the queue')
+    expect(missingInsightNote('parsed')).not.toContain('SCINET_INSIGHT_ENABLED')
+  })
+})
 
 describe('placementSentence', () => {
   test('a confident paper sits firmly', () => {

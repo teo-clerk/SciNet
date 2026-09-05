@@ -5,6 +5,7 @@
  * 4,000 nodes against roughly 20 MB of equivalent JSON, and the decoded buffer
  * is handed straight to a BufferAttribute with no per-node parsing.
  */
+import type { EntryPoint } from '@/api/clusters'
 
 export interface GraphNode {
   id: number
@@ -201,6 +202,24 @@ export async function fetchRunPositions(
   return byId
 }
 
+/**
+ * The work in plain words: what it asks, what it answers, why anyone cares.
+ *
+ * Written by the INSIGHT stage after tagging, so it is null for a while after
+ * a paper lands. `grounded` is the model's own verdict on whether the text
+ * supported what it wrote; false is shown to the reader, not hidden.
+ */
+export interface PaperInsight {
+  genre: string | null
+  question: string | null
+  argument: string | null
+  significance: string | null
+  claims: string[]
+  entities: Array<{ name: string; kind: string }>
+  grounded: boolean
+  model_id: string
+}
+
 export interface PaperDetail {
   id: number
   title: string | null
@@ -223,6 +242,8 @@ export interface PaperDetail {
   /** Distance from the fitted manifold; ~1 is typical. */
   manifold_drift: number | null
   provisional: boolean
+  /** Null until the INSIGHT stage has run for this work. */
+  insight: PaperInsight | null
 }
 
 /** Fetched per node on click — never for the whole corpus. */
@@ -251,6 +272,39 @@ export async function fetchNeighbours(id: number, k = 5): Promise<Neighbour[]> {
   return (await res.json()) as Neighbour[]
 }
 
+
+export interface Curriculum {
+  entry_point: EntryPoint | null
+  alternatives: EntryPoint[]
+  /** Paper ids in reading order. */
+  reading_order: number[]
+  /** How many of the ids sent had an embedding to be judged by. */
+  considered: number
+}
+
+/**
+ * Where to start among an arbitrary set of papers — whatever the filters
+ * currently show. Ranked in embedding space on the server; the client only
+ * knows which nodes are lit.
+ */
+export async function fetchEntryPoint(
+  paperIds: number[],
+  limit?: number,
+): Promise<Curriculum> {
+  const res = await fetch('/api/graph/entry-point', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(limit === undefined ? { paper_ids: paperIds } : { paper_ids: paperIds, limit }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    const detail = body?.detail
+    throw new Error(
+      typeof detail === 'string' ? detail : `could not rank a starting point (${res.status})`,
+    )
+  }
+  return (await res.json()) as Curriculum
+}
 
 /** A document the pipeline could not read, and why. */
 export interface QuarantinedPaper {
