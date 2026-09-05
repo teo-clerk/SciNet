@@ -28,17 +28,20 @@ due in six weeks. Copy the folder into `data/library/` and the map draws
 itself: regions named in plain words, not keywords. Open a region and it says
 **where to start** — the work nearest its centre, nudged toward anything that
 calls itself an introduction, and away from the four-hundred-page book — and
-lays a numbered **reading order** on the map. Press play on the year scrubber
-and watch the field arrive. Then ask something that lives *between* two fields
-and see which papers light up:
+lays a numbered **reading order** on the map:
 
-![Semantic search for "ionospheric delay correction for interferometry" lighting up 18 of 85 papers between the ionosphere and radar regions](docs/media/aerospace-search.gif)
+![Where to start: a title search narrows the map, the card names the entry point with its reasons, and Reading order lays a numbered trail across the map](docs/media/where-to-start.gif)
+
+Press play on the year scrubber and watch the field arrive:
 
 ![The time scrubber replaying a 506-document library year by year — press play and fields fade up as their years arrive](docs/media/time-scrubber.gif)
 
-The **Trail** takes two ends — a paper each, or a phrase each — and finds the
-chain of works that leads from one to the other through your own library.
-When no chain exists it says so and shows the jump, rather than hiding it.
+And the library can be *asked*. The librarian is a local agent whose tool
+calls are map actions: it plans its searches, streams an answer whose
+citations are checked *while they stream* — a citation the retrieval never
+saw is stripped mid-flight, visibly — and the camera flies to the evidence:
+
+![The librarian answering from a 506-document library — planned searches, a streamed cited answer, and the map flying to the evidence](docs/media/librarian.gif)
 
 ### You hunt parameters, not paragraphs
 
@@ -67,15 +70,16 @@ involved. Every work gets **the idea, in plain words** before its abstract:
 the question it takes up, the argument, why it matters, the claims and the
 people it turns on — written for a reader from another field, with the
 specialist's vocabulary kept alongside rather than replaced. EPUB, DOCX,
-Markdown and plain text ingest beside the PDFs. And the library can be
-*asked*:
+Markdown and plain text ingest beside the PDFs.
 
-![The librarian answering from a 506-document library — planned searches, a streamed cited answer, and the map flying to the evidence](docs/media/librarian.gif)
+![A work in plain words: the question, the argument and why it matters, then the claims and the people named, with the academic abstract folded beneath](docs/media/insight-card.gif)
 
-The librarian is a local agent whose tool calls are map actions: it plans its
-searches, streams an answer whose citations are checked *while they stream* —
-a citation the retrieval never saw is stripped mid-flight, visibly — and the
-camera flies to the evidence.
+The **Trail** takes two ends — a paper each, or a phrase each — and finds the
+chain of works that leads from one to the other through your own library,
+each a small step from the last. When no chain exists it says so and shows
+the jump, rather than hiding it.
+
+![An idea trail from "embodied cognition" to "nonlinear dynamics and chaos" — four works, numbered on the map, and the tour flying between them](docs/media/idea-trail.gif)
 
 ### Your AI assistant should know what you have read
 

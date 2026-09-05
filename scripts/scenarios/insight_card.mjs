@@ -6,6 +6,9 @@
  * the question, the argument, why it matters, then the claims and the people
  * the text turns on. The academic abstract is folded when a reading exists;
  * the last beat unfolds it, so the contrast is the point of the shot.
+ *
+ * The list itself is off camera: five hundred rows of text churn a GIF's
+ * palette into megabytes, and the shot is the card, not the table.
  */
 const pressTab = (label) =>
   `[...document.querySelectorAll('.view-toggle button')]` +
@@ -31,6 +34,8 @@ export default {
     { sleep: 1200 },
     { evaluate: openRow('Active Inference: A Process Theory') },
     { wait: '.detail-panel .core-idea', timeout: 10_000 },
+    { sleep: 400 }, // the map returns behind the card
+    { startRecording: true },
     { sleep: 3400 }, // the idea, in plain words
     { evaluate: scrollTo('Key claims') },
     { sleep: 2800 }, // the claims, and the people and works named

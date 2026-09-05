@@ -150,6 +150,14 @@ one — on arXiv, radar imaging *is* machine learning on satellite imagery now
 — and the other three come out pure: adjusted Rand index **0.725**, nothing
 left unclustered.
 
+Ask it something that lives between two fields. *Ionospheric delay
+correction for interferometry* is a satellite-positioning problem the radar
+literature has to solve, and in Meaning mode its nearest papers light up in
+the ionosphere region with a spill into radar imaging — the one image that
+explains an embedding space to someone who has never seen one:
+
+![Semantic search for "ionospheric delay correction for interferometry" lighting up 18 of 85 papers between the ionosphere and radar regions](media/aerospace-search.gif)
+
 The corpus found things, which is what a benchmark is for. The two genuine
 scans went through the vision model as intended. One 13-page born-digital
 paper held the parser for five and a half hours: a scatter plot drawn point
