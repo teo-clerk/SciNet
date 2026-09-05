@@ -35,7 +35,7 @@ bun install
 > bun install
 > ```
 >
-> See [§7](#7-windows-notes) for the couple of places behaviour genuinely
+> See [§8](#8-windows-notes) for the couple of places behaviour genuinely
 > differs.
 
 Then fetch the models — about 11 GB, into `data/models/`:
@@ -563,6 +563,18 @@ anything the model is unsure about lands in the **Review** tab, where the
 sentence, the raw text, and the model's reading sit side by side. Confirm
 moves the row into the filterable set; reject removes it for good. Nothing
 enters your filters on a guess.
+
+### Use it from your AI tools
+
+**⚡ AI tools** in the top bar opens a dialog that hands the library to
+Claude Code, Claude Desktop, Cursor or Zed over the Model Context Protocol.
+Pick your client, press **Copy**, paste — the snippet already carries this
+checkout's path. From then on the assistant can survey the library, search
+it by meaning or exact words, read a work in windows, ask for the nearest
+neighbours of one, and walk the map's regions, all from your machine and
+all read-only. The API must be running (`uv run scinet-up`); when it is not,
+the server tells the assistant how to start it instead of answering with
+nothing. The full tool table is in [docs/MCP.md](docs/MCP.md).
 
 ## 5. Privacy
 

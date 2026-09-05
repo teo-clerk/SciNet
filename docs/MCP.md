@@ -21,13 +21,24 @@ not answering.
 
 ## Wiring
 
+The **⚡ AI tools** button in the app's top bar shows every snippet below with
+this checkout's path already filled in, and a Copy button beside each. They
+come from `GET /api/mcp`, which also lists the tools by asking the server
+itself — so the app, this page and the code cannot disagree about them (a
+test holds the table below to that list).
+
 **Claude Code:**
 
 ```bash
 claude mcp add scinet -- uv --directory /path/to/SciNet/backend run scinet-mcp
 ```
 
-**Claude Desktop** (`claude_desktop_config.json`):
+Add `-s user` to make it available in every project rather than the current
+one.
+
+**Claude Desktop** — `claude_desktop_config.json`, at
+`~/Library/Application Support/Claude/` on macOS and `%APPDATA%\Claude\` on
+Windows; merge under an existing `mcpServers` key and restart the app:
 
 ```json
 {
@@ -40,8 +51,28 @@ claude mcp add scinet -- uv --directory /path/to/SciNet/backend run scinet-mcp
 }
 ```
 
-If the API listens somewhere other than the configured port, set
-`SCINET_API_URL` (e.g. `http://127.0.0.1:8000`) in the server's environment.
+**Cursor** — the same JSON, in `~/.cursor/mcp.json` for every project or
+`.cursor/mcp.json` inside one project.
+
+**Zed** — `settings.json` (Zed › Settings › Open Settings), or
+Settings › AI › MCP Servers › Add Local Server:
+
+```json
+{
+  "context_servers": {
+    "scinet": {
+      "command": "uv",
+      "args": ["--directory", "/path/to/SciNet/backend", "run", "scinet-mcp"],
+      "env": {}
+    }
+  }
+}
+```
+
+If the API listens somewhere other than port 8000, the spawned server needs
+`SCINET_API_URL` (e.g. `http://127.0.0.1:8123`) in its environment — the
+dialog adds it to every snippet for you when that is the case, and leaves it
+out otherwise, so the default snippet is exactly what you see here.
 
 ## Tools
 
@@ -58,7 +89,8 @@ If the API listens somewhere other than the configured port, set
 ## Properties worth knowing
 
 - **Read-only.** Nothing an agent does through these tools can change the
-  library; ingestion stays with the watcher, the upload button, and backfill.
+  library; ingestion stays with the folder watcher, the upload button, and
+  backfill.
 - **Local-only.** The server talks to `127.0.0.1` and nothing else; the
   privacy story is exactly the app's.
 - **Warming is an answer, not an error.** While the embedding model loads
