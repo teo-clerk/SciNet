@@ -198,6 +198,32 @@ def test_answers_are_trimmed_to_whole_sentences():
     assert out["argument"].endswith(".")
 
 
+def test_an_echo_of_the_instructions_is_not_an_answer():
+    """On the first live run a third of the readings came back with the
+    instruction copied into the field while the claims beneath were real."""
+    echoed = normalise(
+        _reading(
+            question="What is the central question or problem the work takes up?",
+            argument="What is its core argument, finding, or discovery?",
+            significance="Why does it matter — what changes if the reader believes it?",
+        )
+    )
+    assert echoed["question"] == ""
+    assert echoed["argument"] == ""
+    assert echoed["significance"] == ""
+    assert echoed["grounded"] is False
+    assert len(echoed["claims"]) == 2, "the claims were real and are kept"
+
+
+def test_the_prompt_does_not_hand_the_model_answers_to_copy():
+    prompt = build_prompt(
+        title="T", authors=None, year=None, abstract=None, headings=[], excerpt=None
+    )
+    assert "do not copy these instructions" in prompt.lower()
+    # The field name followed by a colon and a question is what got echoed.
+    assert "question: What is" not in prompt
+
+
 def test_a_reading_with_a_hole_in_it_is_not_grounded():
     assert normalise(_reading(significance=""))["grounded"] is False
     assert normalise(_reading(question=None))["grounded"] is False

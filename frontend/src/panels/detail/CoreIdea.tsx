@@ -7,7 +7,7 @@
  * only while there is nothing plainer to show.
  */
 import type { PaperDetail } from '@/api/graph'
-import { genreLabel, ideaLines, missingInsightNote } from '@/lib/plain'
+import { genreLabel, ideaLines, missingInsightNote, UNREADABLE_NOTE } from '@/lib/plain'
 
 export function CoreIdea({ paper }: { paper: PaperDetail }) {
   const insight = paper.insight
@@ -32,7 +32,7 @@ export function CoreIdea({ paper }: { paper: PaperDetail }) {
           <span className="chip">{genre}</span>
         </div>
       )}
-      {lines.length > 0 && (
+      {lines.length > 0 ? (
         <dl className="core-idea prose">
           {lines.map(([label, text]) => (
             <div key={label}>
@@ -41,8 +41,10 @@ export function CoreIdea({ paper }: { paper: PaperDetail }) {
             </div>
           ))}
         </dl>
+      ) : (
+        <p className="dim">{UNREADABLE_NOTE}</p>
       )}
-      {!insight.grounded && (
+      {lines.length > 0 && !insight.grounded && (
         /* The model's own verdict on itself. Shown, because a confident
            sentence with thin evidence behind it reads exactly like one with
            good evidence, and the reader has no other way to tell. */

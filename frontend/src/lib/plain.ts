@@ -87,6 +87,13 @@ export function ideaLines(insight: {
   )
 }
 
+/** A reading exists but every answer came back blank — the text the model was
+ *  given was too thin, or it answered nothing about the work. Said outright,
+ *  because an empty section reads as a bug and a missing one as a feature
+ *  that does not exist. */
+export const UNREADABLE_NOTE =
+  'The model could not say what this work is about from the text it was given.'
+
 /** Why there is no plain-English reading yet. Two different answers: the work
  *  is still moving through the pipeline, or it finished and the stage that
  *  writes the reading is switched off. */

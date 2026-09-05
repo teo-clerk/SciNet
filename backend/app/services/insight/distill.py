@@ -115,6 +115,29 @@ INSIGHT_SCHEMA = {
 }
 
 
+#: Fragments of the instructions themselves. On the first live run a third of
+#: the readings came back with the instruction copied into the field — "What is
+#: the central question or problem the work takes up?" as the question — while
+#: the claims beneath were real. An answer that quotes the instruction has not
+#: said anything about the work, whatever the model's own verdict.
+ECHO_FRAGMENTS: tuple[str, ...] = (
+    "central question or problem",
+    "this particular work takes up",
+    "the work takes up",
+    "core argument, finding",
+    "argues, finds or discovers",
+    "what changes if the reader believes",
+    "copy these instructions",
+    # The prompt's own example, which a model that echoes will echo too.
+    "flood damage be mapped",
+)
+
+
+def is_echo(answer: str) -> bool:
+    lowered = answer.lower()
+    return any(fragment in lowered for fragment in ECHO_FRAGMENTS)
+
+
 class InsightUnavailable(RuntimeError):
     """The model is not reachable in the project's model store.
 
@@ -152,12 +175,17 @@ def build_prompt(
         "Section headings: " + ("; ".join(headings[:MAX_HEADINGS]) or "(none)"),
         "",
         "First decide genre: what kind of work this is.",
-        "Then answer three questions in plain English, one or two sentences "
-        "each, for someone with no training in the field. Avoid jargon; if a "
-        "technical term is unavoidable, say what it means in the same sentence.",
-        "  question: What is the central question or problem the work takes up?",
-        "  argument: What is its core argument, finding, or discovery?",
-        "  significance: Why does it matter — what changes if the reader believes it?",
+        "Then write three short answers about THIS work in plain English, one "
+        "or two sentences each, for someone with no training in the field. "
+        "Avoid jargon; if a technical term is unavoidable, say what it means "
+        "in the same sentence.",
+        "  - question: the problem or question this particular work takes up, "
+        "in your own words (for example: how can flood damage be mapped from "
+        "space within a day?).",
+        "  - argument: what this work argues, finds or discovers.",
+        "  - significance: why that matters — what changes if the reader believes it.",
+        "Do not copy these instructions into the answers; every answer must "
+        "name something from the work itself.",
         f"Then list up to {MAX_CLAIMS} claims: specific statements the text "
         "itself makes, one sentence each, in your own words, as claims (not "
         "questions).",
@@ -252,20 +280,24 @@ def distill_paper(
 def normalise(parsed: dict) -> dict:
     """Defend against a schema-constrained model still going slightly off-piste.
 
-    Answers are trimmed to whole sentences, claims that are keywords rather
-    than statements are dropped, entities are deduplicated by name and kinds
-    outside the list are dropped rather than guessed at. ``grounded`` is
-    forced to False when any of the three answers is empty: a reading with a
-    hole in it is by definition not one the material supported.
+    Answers are trimmed to whole sentences and blanked when they merely echo
+    the instructions; claims that are keywords rather than statements are
+    dropped; entities are deduplicated by name and kinds outside the list are
+    dropped rather than guessed at. ``grounded`` is forced to False when any
+    of the three answers is empty: a reading with a hole in it is by
+    definition not one the material supported.
     """
     genre = collapse(parsed.get("genre"))
     if genre not in GENRES:
         genre = "other"
 
-    answers = {
-        key: trim_to_sentence(collapse(parsed.get(key)), MAX_ANSWER_CHARS)
-        for key in ("question", "argument", "significance")
-    }
+    answers = {}
+    for key in ("question", "argument", "significance"):
+        answer = trim_to_sentence(collapse(parsed.get(key)), MAX_ANSWER_CHARS)
+        # An echo of the instruction is blanked rather than shown: a hole in
+        # the reading is visible, a question about "the work" in general is
+        # not, and blanking it is what turns ``grounded`` off below.
+        answers[key] = "" if is_echo(answer) else answer
 
     raw_claims = parsed.get("claims")
     raw_entities = parsed.get("entities")
