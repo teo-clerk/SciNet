@@ -1,321 +1,220 @@
 # SciNet
 
 [![ci](https://github.com/teo-clerk/SciNet/actions/workflows/ci.yml/badge.svg)](https://github.com/teo-clerk/SciNet/actions/workflows/ci.yml)
+[![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![python 3.12](https://img.shields.io/badge/python-3.12-3776ab.svg)](backend/pyproject.toml)
+[![runs on your machine](https://img.shields.io/badge/runs-on%20your%20machine-6ee7a8.svg)](#privacy)
+[![MCP server built in](https://img.shields.io/badge/MCP-server%20built%20in-5cb8ff.svg)](#your-library-as-context-for-your-ai-tools)
 
-A local, privacy-first map of your scientific paper library.
+> **A private 3D map of everything you've read.** Drop in a folder of PDFs and
+> books; local models parse, embed, cluster and name your library. Nothing
+> leaves your machine, the map never forgets its shape, and your AI tools can
+> read it over MCP.
 
-SciNet watches a folder of PDFs, parses them to Markdown with local models,
-embeds and tags them with local LLMs, and renders the whole corpus as an
-interactive 3D semantic map. Nothing leaves the machine unless you explicitly
-turn enrichment on.
+![The aerospace benchmark corpus settling into its regions — 85 documents, four named regions, a slow half-orbit](docs/media/aerospace-hero.gif)
 
-## Status
+A library past a hundred documents stops being a list you can hold in your
+head. Folders answer *where did I put it*; search answers *which one said X*;
+neither answers *what do I actually have, where is it thin, and where should I
+begin*. The tools that do answer those questions want your PDFs uploaded first.
+SciNet answers them on your own machine, with models that fit one laptop.
 
-Working end to end on a real 500-paper library, and on a benchmark anyone
-can rebuild. `demo/manifest.jsonl` pins 85 open documents across five
-aerospace subfields — radar imaging, machine learning on satellite imagery,
-trajectory optimisation, astronomical instrumentation, satellite positioning
-— seventeen arXiv preprints and two public-domain NASA technical reports in
-each, 1963 to 2026, filed as `Domain_identifier.pdf` so the map can be scored
-against the truth:
+## Who it is for
 
-![The aerospace benchmark corpus settling into its regions — 85 documents,
-four named regions, a slow half-orbit](docs/media/aerospace-hero.gif)
+### You are starting a thesis, and the folder has 200 PDFs in it
 
-Five fields, four regions. Radar imaging and optical Earth observation share
-one — on arXiv, radar imaging *is* machine learning on satellite imagery now
-— and the other three come out pure: adjusted Rand index **0.725**, nothing
-left unclustered. Nothing is redistributed; one command fetches the corpus
-from its sources and checks every hash, and the score is reproducible on
-your machine:
+A supervisor's shared drive, a directory called `to_read`, a literature review
+due in six weeks. Copy the folder into `data/library/` and the map draws
+itself: regions named in plain words, not keywords. Open a region and it says
+**where to start** — the work nearest its centre, nudged toward anything that
+calls itself an introduction, and away from the four-hundred-page book — and
+lays a numbered **reading order** on the map. Press play on the year scrubber
+and watch the field arrive. Then ask something that lives *between* two fields
+and see which papers light up:
+
+![Semantic search for "ionospheric delay correction for interferometry" lighting up 18 of 85 papers between the ionosphere and radar regions](docs/media/aerospace-search.gif)
+
+![The time scrubber replaying a 506-document library year by year — press play and fields fade up as their years arrive](docs/media/time-scrubber.gif)
+
+The **Trail** takes two ends — a paper each, or a phrase each — and finds the
+chain of works that leads from one to the other through your own library.
+When no chain exists it says so and shows the jump, rather than hiding it.
+
+### You hunt parameters, not paragraphs
+
+Forty papers on SAR interferometry, and the question is not *what is this
+about* but *who reported below 5 mm at C-band*. Every number a paper states
+next to a unit the extractor recognises becomes a row with the sentence it
+came from — 18 kinds, SI-normalised — and the filter bar turns a range into
+geometry. Extraction is allowlist-strict, because on a biology corpus a bare
+"A" matched matrix indices a thousand times and amperes never; a token that
+only *looks* like a unit goes to a local model, and its doubt lands in a
+review queue. Nothing enters your filters on a guess.
+
+![Filtering 506 papers to those reporting 1–100 Hz — the oscillation literature lights up, a paper's card lists its measured values, and the review queue holds what the adjudicator was unsure about](docs/media/quantities.gif)
+
+**Full text** mode finds the exact phrase; the **List** view sorts what you
+have by year, venue or title; the same queries are one tool call away from
+your editor (below).
+
+### You read across disciplines
+
+Kant, Mill and a stack of cognitive-science preprints in one folder, and the
+suspicion that they are talking about the same thing. Nothing to hand? The
+welcome screen installs **History of Thought** — forty-one public-domain
+openings from Plato to Darwin, shipped inside the repository, no network
+involved. Every work gets **the idea, in plain words** before its abstract:
+the question it takes up, the argument, why it matters, the claims and the
+people it turns on — written for a reader from another field, with the
+specialist's vocabulary kept alongside rather than replaced. EPUB, DOCX,
+Markdown and plain text ingest beside the PDFs. And the library can be
+*asked*:
+
+![The librarian answering from a 506-document library — planned searches, a streamed cited answer, and the map flying to the evidence](docs/media/librarian.gif)
+
+The librarian is a local agent whose tool calls are map actions: it plans its
+searches, streams an answer whose citations are checked *while they stream* —
+a citation the retrieval never saw is stripped mid-flight, visibly — and the
+camera flies to the evidence.
+
+### Your AI assistant should know what you have read
+
+Claude Code or Cursor open all day, a 500-work library on disk, and no
+intention of uploading it anywhere. One line connects them:
 
 ```bash
-cd backend
-uv run python ../scripts/fetch_demo_corpus.py   # 85 documents, ~5 minutes
-uv run alembic upgrade head
-uv run python ../scripts/backfill.py
-uv run scinet-up                                # then, once the map exists:
-uv run python ../scripts/eval_clustering.py
+claude mcp add scinet -- uv --directory /path/to/SciNet/backend run scinet-mcp
 ```
 
-Ask it something that lives between two fields. *Ionospheric delay
-correction for interferometry* is a satellite-positioning problem the radar
-literature has to solve, and in Meaning mode its nearest papers light up in
-the ionosphere region with a spill into radar imaging — the one image that
-explains an embedding space to someone who has never seen one:
+Or press **⚡ AI tools** in the app, which shows that line with your path
+already filled in, beside the equivalent for Claude Desktop, Cursor and Zed:
 
-![Semantic search for "ionospheric delay correction for interferometry"
-lighting up 18 of 85 papers between the ionosphere and radar
-regions](docs/media/aerospace-search.gif)
+![The AI-tools dialog: the connection recipe for four MCP clients, and the seven tools the server reports about itself](docs/media/mcp-modal.gif)
 
-The corpus found things, which is what a benchmark is for. The two genuine
-scans went through the vision model as intended. One 13-page born-digital
-paper held the parser for five and a half hours: a scatter plot drawn point
-by point, 1.3 million vector paths, which the layout engine walks one by one
-— tier 0 now counts paths first and reads such a page as plain text in
-seconds. And nine of the 85 titles were wrong (Word templates left in the
-PDF's Title field, author bylines the converter set as headings); fixing
-them was worth 0.05 of ARI and an entire region — the trajectory papers,
-unclustered noise before, are a pure region after.
+Then, from the assistant: *"What does my library cover?"* — *"Have I read
+anything on active inference? Give me the three closest works and what each
+argues."* — *"Which of my works is closest to 'On Liberty', and where do the
+two disagree?"* Read-only, localhost-only, and the server tells the assistant
+how to start the API if it is not running.
 
-The full suite — 780+ backend tests and 112 frontend tests — runs in CI on
-every push, on a runner with no GPU, no model weights, and no network access
-to models: the pipeline's seams are designed to be testable without the
-hardware they orchestrate.
-
-![The time scrubber replaying a 506-document library year by year — press
-play and fields fade up as their years arrive](docs/media/time-scrubber.gif)
-
-Because every refit is Procrustes-aligned and old runs are kept, the map can
-hold **two embedding models' opinions of the same library** and morph between
-them — the nodes that travel farthest are the papers the models disagree
-about:
-
-![Morphing 506 papers between SciNCL's and SPECTER2's layouts — the chrome
-steps aside and the disagreement moves](docs/media/embedding-morph.gif)
+## Sixty seconds to a map
 
 ```bash
-cd backend && uv run python ../scripts/build_alt_projection.py allenai/specter2_base --apply
+git clone https://github.com/teo-clerk/SciNet && cd SciNet && cp .env.example .env
+cd backend && uv sync --group dev && uv run alembic upgrade head
+cd ../frontend && bun install
+cd ../backend && uv run scinet-up          # API + worker + UI, one terminal
 ```
 
-And the library can be *asked*. The librarian is a local agent whose tool
-calls are map actions: it plans with constrained decoding, searches the
-library, then streams an answer whose citations are validated in flight
-against the evidence its tools actually returned — a citation the retrieval
-never saw is stripped mid-stream, visibly. The camera flies to the evidence,
-cited papers pulse, and a trail walks them in order. All of it local.
+Open <http://localhost:5173>. Drop files on it, copy them into
+`data/library/`, or click **History of Thought**. Models (~11 GB) download on
+first use, or ahead of time with `scripts/download_models.py`; the
+[USAGE guide](USAGE.md) covers setup in full, Windows included.
 
-![The librarian answering from a 506-document library — planned searches,
-a streamed cited answer, and the map flying to the evidence](docs/media/librarian.gif)
+Requirements: Python **3.12** (pinned — `umap-learn` is not tested above it),
+bun, the [Ollama](https://ollama.com) binary (SciNet runs its own instance),
+and an NVIDIA GPU with 8 GB for the comfortable path — models load one at a
+time, and the pipeline runs on CPU without one.
 
-Every measured value in the library is a queryable row: numbers next to
-units the extractor *recognises* become SI-normalised quantities carrying
-the sentence they came from, and the filter bar turns a physical range —
-1–100 Hz, say — into geometry. Extraction is allowlist-strict because the
-first live run proved why: on a biology corpus, bare "A" matched matrix
-indices a thousand times and amperes never. Tokens that only look like
-units go to a local model, and its doubt lands in a review queue — nothing
-enters the filters on a guess.
+## Your library, as context for your AI tools
 
-![Filtering 506 papers to those reporting 1–100 Hz — the oscillation
-literature lights up, a paper's card lists its measured values, and the
-review queue holds what the adjudicator was unsure about](docs/media/quantities.gif)
+SciNet is an MCP server. Any Model Context Protocol client — Claude Code,
+Claude Desktop, Cursor, Zed — can search your library, read your works and walk
+the map's regions while you work. It proxies the running API over stdio and
+opens no socket of its own.
 
-**[USAGE.md](USAGE.md) is the guide** — setup, the three commands to run it,
-how to get papers in, and how to read the map.
+| tool | what it answers |
+|---|---|
+| `library_overview()` | counts, regions, tags — the survey to start with |
+| `search_library(query, mode, limit)` | `semantic` finds meaning, `fulltext` exact words with snippets, `title` a substring |
+| `get_paper(paper_id)` | metadata, abstract, map placement — trimmed for a model's context |
+| `read_paper(paper_id, offset, window)` | the parsed text in capped windows; a book is read in passes |
+| `similar_papers(paper_id, k)` | nearest neighbours in embedding space, never the 3D coordinates |
+| `list_regions()` · `region_details(cluster_id)` | the map's named regions, and one region's overview and members |
 
-Measured on the 85-document aerospace benchmark (`demo/manifest.jsonl`):
+<details>
+<summary>Claude Desktop, Cursor and Zed</summary>
+
+Claude Desktop (`claude_desktop_config.json`) and Cursor (`~/.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "scinet": {
+      "command": "uv",
+      "args": ["--directory", "/path/to/SciNet/backend", "run", "scinet-mcp"]
+    }
+  }
+}
+```
+
+Zed (`settings.json`):
+
+```json
+{
+  "context_servers": {
+    "scinet": {
+      "command": "uv",
+      "args": ["--directory", "/path/to/SciNet/backend", "run", "scinet-mcp"],
+      "env": {}
+    }
+  }
+}
+```
+
+</details>
+
+Everything is read-only and localhost-only, and the API must be running
+(`uv run scinet-up`). Details: [docs/MCP.md](docs/MCP.md).
+
+## Why not Zotero, NotebookLM or ChatPDF?
+
+| | **SciNet** | Zotero | NotebookLM | ChatPDF |
+|---|---|---|---|---|
+| Where your documents live | your disk, never uploaded | your disk (optional cloud sync) | Google's servers | the vendor's servers |
+| The whole library at once | a 3D map whose positions persist across sessions and refits | folders and tags | one notebook's source list | one document at a time |
+| Papers *and* books | PDF, EPUB, DOCX, MOBI, DjVu, Markdown, text | PDF + metadata | PDF, Docs, web | PDF |
+| Find by meaning · exact phrase · **measured value** | ✓ · ✓ · ✓ (18 kinds) | – · ✓ · – | ✓ · partial · – | ✓ · partial · – |
+| A plain-English reading of each work | ✓, local model, genre-aware | – | ✓, cloud model | ✓, cloud model |
+| Where to start · trails between two ideas | ✓ · ✓ | – | – | – |
+| Your AI tools can read it | MCP, built in, read-only, localhost | community plugins | – | – |
+| Privacy you can query | `SELECT count(*) FROM egress_log` → 0 | n/a | vendor policy | vendor policy |
+| Price · licence | free · MIT | free · AGPL | free tier | freemium |
+
+Zotero is a shelf; SciNet is a map of the shelf. It is not a replacement —
+reading a Zotero library directly is the first item on the
+[roadmap](docs/ROADMAP.md).
+
+## What is under the hood
+
+An 85-document aerospace benchmark anyone can rebuild — five subfields, filed
+by truth so the map can be scored — comes out at adjusted Rand index
+**0.725** with nothing unclustered, and zero outbound requests across the
+whole pipeline. Measured, not estimated:
 
 | | |
 |---|---|
-| clustering vs the five true fields | ARI 0.725 · homogeneity 0.781 · completeness 0.946 · 4 regions, 0 unclustered |
-| the same corpus before nine titles were fixed | ARI 0.675 · 3 regions, 18% unclustered |
-| tier-0 parse, 85 documents, 1,877 pages | median 15 s per document; 73 of 85 under a minute |
-| tier-2 OCR, the two scans (18 and 20 pages) | 785 s and 882 s, three page timeouts each |
-| the paper with 1.3 million vector paths | 19,825 s before the path gate, 20 s after |
-| embedding, 85 documents | 18 s |
-| refit + cluster + name + bridges | 47 s |
-| quantity extraction + adjudication | 2,572 automatic rows over 84 of 85 papers; 18 left for review |
+| clustering vs the five true fields | ARI 0.725 · 4 regions · 0 unclustered |
 | outbound requests, whole pipeline | `SELECT count(*) FROM egress_log` → 0 |
-
-Measured on 300 arXiv papers across 10 fields:
-
-| | |
-|---|---|
-| tier-0 parse (99.7% of papers) | ~390 ms/page |
-| whole-corpus ingest | ~50 min, tagging-dominated |
-| map render, 293 nodes | 60 fps, p95 17.3 ms |
-| semantic query | 0.25 s warm |
-| clustering vs known fields | ARI 0.697, 10 regions, 1 unclustered |
-| embedder A/B, 506 papers (SciNCL vs SPECTER2) | mean node shift 1.90 of radius 40 |
+| documents the cheap CPU tier reads whole | 99.7% of a 300-paper corpus |
+| map render | 60 fps, p95 ~17 ms, one draw call, 4,000 nodes tested |
+| semantic query, warm | 0.25 s |
 | quantity extraction, 506 papers | 16,275 rows in 6 s, CPU only |
-| extraction precision, labelled fixture | 25/25 auto emissions correct (CI floor 0.90) |
-| abstract coverage | 287 of 293 |
+| embedder A/B, 506 papers (SciNCL vs SPECTER2) | mean node shift 1.90 of radius 40 |
+| test suite, on a runner with no GPU and no network | 900+ backend · 230+ frontend |
 
-## How the map stays fast
-
-Once computed, the map is *kept*. Nothing is recomputed on open:
-
-| what | where |
-|---|---|
-| document vectors | `data/vectors/doc_vectors.f32` (growable memmap) |
-| fitted reducer + its fit matrix | `data/models/projections/run_NNNNN.*` |
-| coordinates, clusters, tags | SQLite |
-
-Opening the app issues one `GET /api/graph`, which returns a 304 when the map
-has not changed. Positions travel as a raw `Float32Array` — 48 KB for 4,000
-nodes, against roughly 20 MB of equivalent JSON.
-
-Dropping new PDFs into the library does **not** rebuild anything. Each is
-embedded and placed with `reducer.transform()` against the stored fit, in
-milliseconds, and marked *provisional* so the UI can show it was positioned
-without a refit. A full refit happens only when either:
-
-- more than 20% of the corpus was placed incrementally, or
-- 25 or more papers sit measurably off the fitted manifold (you started reading
-  a new field).
-
-When a refit does happen it is **Procrustes-aligned** onto the previous layout
-before anyone sees it. UMAP's orientation is arbitrary — two fits of nearly the
-same data come out rotated, reflected and rescaled — so without alignment every
-refit teleports every node and destroys the spatial memory you have built of
-your own library. Alignment reduces mean node movement by more than tenfold, so
-the map *settles* instead of scrambling.
-
-The swap is atomic: a refit is computed into a new `projection_runs` row and
-becomes visible only when `is_active` moves. A crashed refit leaves the old map
-untouched, and the previous run stays on disk for rollback or for A/B-ing two
-embedding models.
-
-## Requirements
-
-- Python **3.12** (pinned — `umap-learn` is not tested above it)
-- Node 20+ / bun
-- The [Ollama](https://ollama.com) **binary** (SciNet runs its own instance;
-  it does not use your system-wide models)
-- NVIDIA GPU recommended (8 GB is enough; models load one at a time)
-- ~11 GB of disk for models
-
-## Models
-
-SciNet ships its own models. It does **not** use whatever happens to be
-installed in your system-wide Ollama — a global model may be absent, a
-different quantization, or silently updated, and none of that should decide
-whether this project works.
-
-Everything lives under `data/models/` (configurable via `SCINET_MODELS_DIR`):
-
-```
-data/models/
-  ollama/   private model store; served by SciNet's own Ollama on port 11500
-  hf/       HF_HOME for torch/transformers weights (Marker, embeddings)
-```
-
-Provision them once:
-
-```bash
-cd backend
-uv run python ../scripts/download_models.py            # download what is missing
-uv run python ../scripts/download_models.py --measure  # download, then measure VRAM
-uv run python ../scripts/download_models.py --check    # report only
-```
-
-### Why footprints are measured, not estimated
-
-Download size does not predict resident footprint, and being wrong is
-expensive:
-
-| model | disk | measured resident | on GPU |
-|---|---|---|---|
-| `qwen2.5vl:7b` | 5.56 GiB | **13.3 GiB** | 0% → 181 s/page |
-| `qwen2.5vl:3b` | 2.98 GiB | **10.05 GiB** | 0% |
-| `granite3.2-vision:2b` | 2.27 GiB | **3.52 GiB** | 100% → 8.9 s/page |
-
-Ollama does not refuse to load an oversized model. It silently serves it from
-system RAM, roughly twenty times slower, and the first symptom is a backfill
-that looks hung. Note the 3B: a 2.98 GiB download with a 10 GiB footprint —
-the Qwen2.5-VL dynamic-resolution vision tower carries a ~3.4x activation
-budget, so neither parameter count nor download size predicts anything.
-
-So `app/core/models_registry.py` records a *measured* `vram_mib` per model, an
-unmeasured model is treated as **unproven** rather than assumed to fit, and
-`scripts/doctor.py` reports the situation before you start a long job.
-Full detail in [docs/MODELS.md](docs/MODELS.md).
-
-### Before a long run
-
-```bash
-cd backend
-uv run python ../scripts/doctor.py             # will anything run on CPU?
-uv run python ../scripts/survey_corpus.py ~/Papers   # how much will escalate?
-uv run python ../scripts/bench_parse.py --tiers 0,1  # what does a page cost?
-```
-
-`survey_corpus.py` probes the text layer of every PDF at ~6 ms each without
-touching the GPU, and reports what fraction would escalate past tier 0 and why.
-That turns "is tier 1 worth it for my library?" into a number.
-
-## Setup
-
-```bash
-cp .env.example .env          # review the paths and the privacy switch
-
-cd backend
-uv sync --group dev           # core stack
-uv run alembic upgrade head   # create data/scinet.db
-
-cd ../frontend
-bun install
-```
-
-The heavy GPU stack (torch, sentence-transformers, marker-pdf) is a separate
-extra so the first install stays small:
-
-```bash
-cd backend && uv sync --group dev
-```
-
-## Running
-
-Three processes:
-
-```bash
-# terminal 1 — API (127.0.0.1 only)
-cd backend && uv run uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
-
-# terminal 2 — worker (parsing, and later embedding and tagging)
-cd backend && uv run python -m app.workers.runner
-
-# terminal 3 — UI
-cd frontend && bun run dev
-```
-
-Open <http://localhost:5173>.
-
-## Importing a library
-
-Drop files onto the map — or onto the welcome screen a fresh install shows —
-and they are copied into the library and queued: PDF, EPUB, DOCX, Markdown
-or plain text, papers or books or a folder of notes. Nothing to hand? The
-welcome screen installs **History of Thought**, forty-one public-domain
-openings from Plato to Darwin that ship inside the repository and need no
-network at all, and names the command that fetches the second benchmark,
-**Foundations of AI & Philosophy** — a script you run, never something the
-app does.
-
-The watcher also picks up anything dropped into `data/library/`. To import
-an existing collection in bulk:
-
-```bash
-cd backend && uv run python ../scripts/backfill.py ~/Papers
-```
-
-Backfill is resumable: registration is idempotent on the content hash and the
-job queue is durable, so interrupting it and re-running picks up where it left
-off.
-
-## How parsing decides what to spend
-
-Probing a PDF's text layer costs ~2 ms/page. Converting it to Markdown costs
-~225 ms/page (measured, single-threaded, on an Intel Ultra 9 185H). The gate in
-`services/parse/quality.py` uses the cheap probe to decide the tier, so the
-expensive conversion only runs on output that will actually be kept.
-
-| Tier | Engine | Cost | Handles |
-|---|---|---|---|
-| 0 | PyMuPDF text layer | ~225 ms/page, CPU | most publisher and arXiv PDFs |
-| 1 | Marker + Surya | ~1-3 s/page, GPU | broken layouts, scans |
-| 2 | `qwen2.5vl:7b` | ~10 s/page, GPU | what neither of the above can read |
-
-Tier 1 needs `uv sync --extra tier1`. Without it the router falls through to
-tier 2 rather than stranding the paper.
+How the map keeps its shape across refits, how parsing decides what a page is
+worth, which models fit in 8 GB and how that was found out, and the full
+benchmark tables: **[docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md)** and
+[docs/MODELS.md](docs/MODELS.md).
 
 ## Privacy
 
-All parsing, embedding, and tagging run locally, always. `SCINET_ENRICHMENT_ENABLED`
-is the single switch that permits outbound calls to Crossref / OpenAlex / arXiv
-for bibliographic cleanup. It defaults to `false`, and every call made while it
-is on is recorded in the `egress_log` table:
+All parsing, embedding, reading and tagging run locally, always.
+`SCINET_ENRICHMENT_ENABLED` is the single switch that permits outbound calls
+to Crossref / OpenAlex / arXiv for bibliographic cleanup. It defaults to
+`false`, and every call made while it is on is recorded in the `egress_log`
+table:
 
 ```bash
 sqlite3 data/scinet.db "SELECT ts, service, url FROM egress_log ORDER BY ts DESC LIMIT 20"
@@ -330,35 +229,36 @@ $ sqlite3 data/demo/scinet.db "SELECT count(*) FROM egress_log;"
 0
 ```
 
-The corpus fetcher does reach arXiv and NASA — it is a tool you run, like
-the model downloader, not something the app does, and it writes nothing to
-that table. The sample library the welcome screen offers is committed to the
-repository and installed by copying; a sample the repository cannot carry
-answers with the command that fetches it, not with a download.
+The corpus fetcher does reach arXiv and NASA — it is a tool you run, like the
+model downloader, not something the app does, and it writes nothing to that
+table. The sample library is committed to the repository and installed by
+copying; a sample the repository cannot carry answers with the command that
+fetches it, not with a download. The MCP server talks to `127.0.0.1` and
+nothing else.
 
-## Use it from your AI tools
+## Roadmap
 
-SciNet is an MCP server: any Model Context Protocol client — Claude Code,
-Claude Desktop, an IDE — can search your library, read your papers, and walk
-the map's regions while you work.
+Five features, ordered by the daily loop each one closes — details and the
+reasoning in [docs/ROADMAP.md](docs/ROADMAP.md):
 
-```bash
-claude mcp add scinet -- uv --directory /path/to/SciNet/backend run scinet-mcp
-```
+1. **Watch roots** — several watched folders, one of them your Zotero storage.
+2. **Zotero import + BibTeX** — the decade of PDFs already in Zotero, as a map.
+3. **Export to Obsidian / Markdown** — one note per work with backlinks to its
+   nearest neighbours and its region.
+4. **Inbox and a weekly digest** — what arrived, where it landed, written
+   locally as Markdown.
+5. **Capture from anywhere** — the terminal, the browser, and an
+   `add_to_library` tool so the assistant can file what it just fetched.
 
-Read-only, localhost-only, and the API must be running (`uv run scinet-up`).
-Details and the full tool table: [docs/MCP.md](docs/MCP.md).
+## Documentation
 
-## Health checks
+- [USAGE.md](USAGE.md) — setup, running it, getting works in, reading the map,
+  Windows notes
+- [docs/MCP.md](docs/MCP.md) — the MCP server, client by client
+- [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) — the engineering, with the numbers
+- [docs/MODELS.md](docs/MODELS.md) — the model manifest and the 8 GB budget
+- [docs/ROADMAP.md](docs/ROADMAP.md) — what comes next, and why in that order
 
-```bash
-sqlite3 data/scinet.db "SELECT status, count(*) FROM papers GROUP BY status"
-sqlite3 data/scinet.db "SELECT kind, state, count(*) FROM jobs GROUP BY 1,2"
-```
-
-## Architecture
-
-Two processes, one SQLite file. The worker is the sole writer of paper data;
-the API reads and enqueues. See `docs/` and the design plan for the full
-rationale, including why the job queue is not Celery and why the map uses UMAP
-coordinates rather than a force-directed layout.
+MIT licence. This is v2, rebuilt from a working prototype; the module
+docstrings are the design document, and every non-obvious decision in them
+was paid for on a real library.
