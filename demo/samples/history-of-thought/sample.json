@@ -1,0 +1,13 @@
+{
+  "name": "history-of-thought",
+  "title": "History of Thought",
+  "blurb": "41 short public-domain texts, from Plato to Darwin — the ancient good life, what can be known, how to live together, conscience, and the natural world. Installs offline in seconds; the map takes a few minutes to build.",
+  "kind": "bundled",
+  "themes": {
+    "AncientEthics": "the ancient good life — Socrates, Aristotle and the Stoics",
+    "Knowledge": "what can be known — from Descartes to James",
+    "Politics": "how to live together — Aristotle to Mill",
+    "Conscience": "conscience and the individual — duty, liberty and character",
+    "NaturalWorld": "the natural world — natural philosophy and the sciences"
+  }
+}

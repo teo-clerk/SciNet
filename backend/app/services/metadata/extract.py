@@ -63,7 +63,10 @@ FURNITURE_RE = re.compile(
     r"|insert\s+(?:title|your)|type\s+your|\[?title\s+here"
     # Elsevier stamps "Journal Pre-proof" as a level-1 heading above the
     # real title; Word templates leave their own name in the Title field.
-    r"|journal\s+pre-?proofs?|author\s+template)",
+    r"|journal\s+pre-?proofs?|author\s+template"
+    # Labelled front matter — a reader's own notes, a converted book — sits
+    # right under the title and is not the title.
+    r"|(?:authors?|by|year|published|date|source)\s*:)",
     re.IGNORECASE,
 )
 
@@ -147,6 +150,12 @@ CITATION_HEADER_RE = re.compile(
 
 MIN_TITLE_LENGTH = 12
 MAX_TITLE_LENGTH = 300
+#: A level-1 heading at the top of a document is the strongest statement of a
+#: title the text can make, and books have short ones: "Meno", "Crito",
+#: "Walden", "Ethics". The twelve-character floor exists to keep a stray
+#: line — a page number, a journal's initials — from becoming a title, and a
+#: line the converter marked as the top heading is not stray.
+MIN_HEADING_TITLE_LENGTH = 4
 
 
 @dataclass
@@ -263,13 +272,13 @@ SECTION_HEADING_RE = re.compile(
 )
 
 
-def _title_candidate(line: str) -> str | None:
+def _title_candidate(line: str, *, min_length: int = MIN_TITLE_LENGTH) -> str | None:
     """A line reduced to a usable title, or None if it is page furniture."""
     # Tolerate Markdown: the rescued text arrives with heading markers and
     # emphasis around the title, both of which end up rendered literally on
     # the map ("**Ultraviolet Spectra of Local Galaxies").
     candidate = LEADING_MARKER_RE.sub("", strip_markdown(line)).strip()
-    if len(candidate) < MIN_TITLE_LENGTH or len(candidate) > MAX_TITLE_LENGTH:
+    if len(candidate) < min_length or len(candidate) > MAX_TITLE_LENGTH:
         return None
     if FURNITURE_RE.match(candidate) or TEMPLATE_RE.search(candidate):
         return None
@@ -306,7 +315,12 @@ def guess_title(text: str) -> str | None:
             match = HEADING_RE.match(line)
             if match is None or len(match.group(1)) != level:
                 continue
-            candidate = _title_candidate(line)
+            candidate = _title_candidate(
+                line,
+                min_length=(
+                    MIN_HEADING_TITLE_LENGTH if level == 1 else MIN_TITLE_LENGTH
+                ),
+            )
             if candidate is None or _is_byline(candidate, head, index):
                 continue
             return candidate
@@ -451,6 +465,41 @@ def extract_year(text: str, head_chars: int = HEAD_CHARS) -> int | None:
     return max(years) if years else None
 
 
+#: A labelled line near the top of a text or Markdown document — the front
+#: matter a reader's own notes carry, and the form the bundled sample library
+#: uses. Explicit, so it may name any year: the four-digit scrape above stops
+#: at 1980 because an unlabelled "1859" on a page is a citation far more often
+#: than a date, but "Year: 1859" is nothing else.
+FRONT_MATTER_CHARS = 1200
+FRONT_MATTER_AUTHOR_RE = re.compile(
+    r"^\s*\**(?:author|authors|by)\**\s*:\s*\**(.+?)\**\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+#: One to four digits: a labelled year is trusted as written, and the Stoics
+#: wrote in the second century. Nothing later than the scrape's own ceiling.
+FRONT_MATTER_YEAR_RE = re.compile(
+    r"^\s*\**(?:year|published|date)\**\s*:\s*\**\D*?(\d{1,4})\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+LATEST_PLAUSIBLE_YEAR = 2049
+
+
+def front_matter(text: str | None) -> tuple[list[str], int | None]:
+    """Authors and year stated as labelled lines at the head of a document."""
+    if not text:
+        return [], None
+    head = text[:FRONT_MATTER_CHARS]
+    authors: list[str] = []
+    if (match := FRONT_MATTER_AUTHOR_RE.search(head)) is not None:
+        authors = split_authors(match.group(1))
+    year = None
+    if (match := FRONT_MATTER_YEAR_RE.search(head)) is not None:
+        stated = int(match.group(1))
+        if 0 < stated <= LATEST_PLAUSIBLE_YEAR:
+            year = stated
+    return authors, year
+
+
 @dataclass(frozen=True)
 class _Embedded:
     """Metadata a file carries about itself, if its format has any."""
@@ -564,10 +613,15 @@ def extract_from_document(
         meta.title = guessed
         meta.field_sources["title"] = MetaSource.HEURISTIC
 
+    stated_authors, stated_year = front_matter(parsed_text)
+
     if embedded_author := (embedded.get("author") or "").strip():
         if names := split_authors(embedded_author):
             meta.authors = names
             meta.field_sources["authors"] = container.source
+    if not meta.authors and stated_authors:
+        meta.authors = stated_authors
+        meta.field_sources["authors"] = MetaSource.HEURISTIC
 
     if (doi := extract_doi(identifier_text)) is not None:
         meta.doi = doi
@@ -581,6 +635,9 @@ def extract_from_document(
         # A stated publication date beats scraping four digits off the page.
         meta.year = container.year
         meta.field_sources["year"] = container.source
+    elif stated_year is not None:
+        meta.year = stated_year
+        meta.field_sources["year"] = MetaSource.HEURISTIC
     elif (year := extract_year(identifier_text)) is not None:
         meta.year = year
         meta.field_sources["year"] = MetaSource.REGEX

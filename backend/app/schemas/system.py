@@ -46,4 +46,7 @@ class SystemInfo(BaseModel):
     #: cold | warming | ready | failed — whether semantic search can answer yet.
     search_warmup: str = "cold"
     search_warmup_remaining: float | None = None
+    #: How many works the clustering needs before it draws regions at all, so
+    #: the first-run screen can say "regions appear at about thirty".
+    regions_min_papers: int = 30
     models: list[ModelHealth] = []

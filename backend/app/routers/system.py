@@ -17,6 +17,7 @@ from app.schemas.system import (
     PathsInfo,
     SystemInfo,
 )
+from app.services.project.scaling import MIN_ROWS_TO_CLUSTER
 
 router = APIRouter(prefix="/api", tags=["system"])
 
@@ -64,6 +65,7 @@ def system_info(
         ready_count=ready,
         search_warmup=warmup.state.value,
         search_warmup_remaining=warmup.estimated_remaining,
+        regions_min_papers=MIN_ROWS_TO_CLUSTER,
         models=[
             ModelHealth(
                 role=m.entry.role.value,
