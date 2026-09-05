@@ -10,12 +10,33 @@ no lifespan, and no model warm-up thread.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
+if TYPE_CHECKING:
+    from app.core.config import Settings
+
 DEFAULT_TIMEOUT_SECONDS = 30.0
+
+
+def default_base_url(settings: Settings | None = None) -> str:
+    """SCINET_API_URL wins; otherwise the configured API port.
+
+    Importing settings lazily keeps `--help` and tests from touching the
+    repository's .env before they mean to. The API's own recipe endpoint
+    passes its settings in, so a test can inject a port.
+    """
+    env = os.environ.get("SCINET_API_URL")
+    if env:
+        return env
+    if settings is None:
+        from app.core.config import get_settings
+
+        settings = get_settings()
+    return f"http://127.0.0.1:{settings.port}"
 
 
 class ApiDown(RuntimeError):

@@ -22,6 +22,7 @@ from app.routers import (
     graph,
     jobs,
     librarian,
+    mcp,
     models,
     papers,
     quantities,
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
         events,
         models,
         librarian,
+        mcp,
         quantities,
         samples,
     ):

@@ -13,14 +13,13 @@ MCP client itself.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from typing import Any
 
 import httpx
 from mcp.server.fastmcp import FastMCP
 
-from app.mcp.client import ApiClient
+from app.mcp.client import ApiClient, default_base_url
 
 SEARCH_MODES = ("semantic", "fulltext", "title")
 DEFAULT_SEARCH_LIMIT = 10
@@ -41,20 +40,6 @@ INSTRUCTIONS = (
     "exact words, title for names you already know), then get_paper for "
     "metadata and the abstract. Paper ids are stable integers."
 )
-
-
-def default_base_url() -> str:
-    """SCINET_API_URL wins; otherwise the configured API port.
-
-    Importing settings lazily keeps `--help` and tests from touching the
-    repository's .env before they mean to.
-    """
-    env = os.environ.get("SCINET_API_URL")
-    if env:
-        return env
-    from app.core.config import get_settings
-
-    return f"http://127.0.0.1:{get_settings().port}"
 
 
 #: PaperDetail fields worth an agent's context. Everything else — work keys,

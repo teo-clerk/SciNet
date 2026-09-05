@@ -264,6 +264,13 @@ Target scale 3–4k papers on a single laptop.
   never writes paper data; the startup pass exists because inotify cannot
   report what arrived while the process was down, and it filters by path
   before hashing so a 500-file library costs a query, not a gigabyte of reads.
+- **`/api/mcp` describes the MCP server by asking it.** The tool list is
+  `build_server().list_tools()`, never a hand-kept table, and
+  `test_mcp_recipe.py` asserts the table in `docs/MCP.md` names exactly that
+  set. The `mcp` import is lazy and the server object is built once and only
+  introspected — it opens nothing. `SCINET_API_URL` enters the client snippets
+  only when the API is off its default port, so the default snippet matches
+  the docs word for word.
 
 ## Layout
 
