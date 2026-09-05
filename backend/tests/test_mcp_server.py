@@ -26,7 +26,15 @@ from app.mcp.server import build_server
 from app.models.enums import PaperStatus
 from app.models.paper import MarkdownDoc, Paper, PaperMeta
 from app.models.projection import Cluster, Projection, ProjectionRun
+from app.services.project import paths
 from app.workers.embed_handlers import open_store
+
+
+@pytest.fixture(autouse=True)
+def _fresh_cache(monkeypatch):
+    """The trail router's kNN graph is cached per process, keyed on the store;
+    every fixture here builds a new store, so no test may see another's."""
+    monkeypatch.setattr(paths, "_CACHE", None)
 
 
 @pytest.fixture
@@ -358,6 +366,90 @@ async def test_library_overview_surveys_the_map(mcp_server) -> None:
     assert isinstance(body["tags"], list)
 
 
+# --- trails, where to start, measured values ---------------------------------
+
+
+async def test_a_trail_between_two_ids_walks_the_map(mcp_server) -> None:
+    """Digits are ids, with or without a leading #; the two seeded works are
+    neighbours, so the trail is one hop and names both regions in order."""
+    async with create_connected_server_and_client_session(
+        mcp_server._mcp_server
+    ) as session:
+        result = await session.call_tool(
+            "find_semantic_path", {"from_concept": "#1", "to_concept": "2"}
+        )
+    body = _payload(result)
+    assert [s["paper_id"] for s in body["stops"]] == [1, 2]
+    assert body["stops"][0]["position"] == 1
+    assert body["complete"] is True and body["hops"] == 1
+    assert body["regions_crossed"] == ["Gravitational Astronomy", "SAR Learning"]
+    assert "note" not in body
+
+
+async def test_a_phrase_end_waits_for_the_encoder(mcp_server) -> None:
+    async with create_connected_server_and_client_session(
+        mcp_server._mcp_server
+    ) as session:
+        result = await session.call_tool(
+            "find_semantic_path", {"from_concept": "waves", "to_concept": "radar"}
+        )
+    body = _payload(result)
+    assert body["status"] == "warming"
+    assert "stops" not in body
+
+
+async def test_a_one_character_end_is_refused_with_the_rule(mcp_server) -> None:
+    async with create_connected_server_and_client_session(
+        mcp_server._mcp_server
+    ) as session:
+        result = await session.call_tool(
+            "find_semantic_path", {"from_concept": "x", "to_concept": "2"}
+        )
+    assert result.isError
+    assert "two or more characters" in result.content[0].text
+
+
+async def test_curriculum_resolves_a_region_and_says_when_it_cannot_rank(
+    mcp_server,
+) -> None:
+    """One work is not a reading order; the answer names the region it found
+    and says why there is no entry point, instead of inventing one."""
+    async with create_connected_server_and_client_session(
+        mcp_server._mcp_server
+    ) as session:
+        result = await session.call_tool(
+            "get_curriculum", {"topic_or_cluster": "gravitational astronomy"}
+        )
+    body = _payload(result)
+    assert body["resolved_as"] == "region"
+    assert body["region"]["name"] == "Gravitational Astronomy"
+    assert body["considered"] == 1
+    assert body["entry_point"] is None and body["reading_order"] == []
+    assert "at least two" in body["note"]
+
+
+async def test_curriculum_on_a_topic_waits_for_the_encoder(mcp_server) -> None:
+    async with create_connected_server_and_client_session(
+        mcp_server._mcp_server
+    ) as session:
+        result = await session.call_tool(
+            "get_curriculum", {"topic_or_cluster": "black hole ringdown"}
+        )
+    body = _payload(result)
+    assert body["status"] == "warming"
+    assert "entry_point" not in body
+
+
+async def test_quantities_with_no_criterion_list_the_kinds(mcp_server) -> None:
+    async with create_connected_server_and_client_session(
+        mcp_server._mcp_server
+    ) as session:
+        result = await session.call_tool("query_quantities", {})
+    body = _payload(result)
+    assert body["kinds"] == []
+    assert "kind, a unit or a phrase" in body["note"]
+
+
 # --- the api being down ------------------------------------------------------
 
 
@@ -384,6 +476,9 @@ def down_server():
         ("list_regions", {}),
         ("region_details", {"cluster_id": 1}),
         ("library_overview", {}),
+        ("find_semantic_path", {"from_concept": "1", "to_concept": "2"}),
+        ("query_quantities", {"quantity_kind": "length"}),
+        ("get_curriculum", {"topic_or_cluster": "anything at all"}),
     ],
 )
 async def test_every_tool_says_how_to_start_the_api(down_server, tool, args) -> None:

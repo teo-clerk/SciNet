@@ -63,9 +63,20 @@ class ApiClient:
         search is a *warming* answer with an ETA, not a failure, and only the
         tool knows that.
         """
+        return await self._request("GET", path, params=params)
+
+    async def post_json(self, path: str, body: Any) -> tuple[int, Any]:
+        """POST a JSON body; the same contract as get_json.
+
+        One endpoint needs it: ranking an arbitrary set of paper ids for a
+        starting point, where the set is the request and does not fit a URL.
+        """
+        return await self._request("POST", path, json=body)
+
+    async def _request(self, method: str, path: str, **kwargs: Any) -> tuple[int, Any]:
         try:
             async with self._factory() as http:
-                res = await http.get(f"{self.base_url}{path}", params=params)
+                res = await http.request(method, f"{self.base_url}{path}", **kwargs)
         except httpx.ConnectError as exc:
             raise ApiDown(
                 f"the SciNet API is not answering at {self.base_url} — "

@@ -271,6 +271,15 @@ Target scale 3–4k papers on a single laptop.
   introspected — it opens nothing. `SCINET_API_URL` enters the client snippets
   only when the API is off its default port, so the default snippet matches
   the docs word for word.
+- **The research tools ride on the API, never on the database.**
+  `find_semantic_path` proxies `/api/graph/path`; `get_curriculum` matches a
+  region by whole words (so "ai" cannot hit "Brain") and falls back to a
+  semantic search ranked through `POST /api/graph/entry-point`, the one call
+  that needed `post_json`; `query_quantities` proxies `/api/quantities/rows`,
+  which exists because quantity sentences had no server-side search and an
+  agent cannot fetch five hundred papers to find one. The tool set is pinned
+  in three places that fail together: `test_mcp_recipe.TOOLS`, the table in
+  `docs/MCP.md`, and the API-down parametrize in `test_mcp_server.py`.
 
 ## Layout
 

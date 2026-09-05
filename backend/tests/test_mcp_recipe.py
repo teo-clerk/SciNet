@@ -26,6 +26,9 @@ TOOLS = {
     "list_regions",
     "region_details",
     "library_overview",
+    "find_semantic_path",
+    "query_quantities",
+    "get_curriculum",
 }
 
 

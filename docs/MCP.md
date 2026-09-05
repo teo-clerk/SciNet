@@ -85,6 +85,9 @@ out otherwise, so the default snippet is exactly what you see here.
 | `similar_papers(paper_id, k)` | Nearest neighbours in embedding space (never the 3D coordinates) |
 | `list_regions()` | The map's named clusters with sizes and top terms |
 | `region_details(cluster_id)` | One region's overview and most representative members |
+| `find_semantic_path(from_concept, to_concept)` | The chain of works from one idea to another — phrases or paper ids; each stop carries the work's central question and its region, and a jump the library cannot bridge is reported, never hidden |
+| `get_curriculum(topic_or_cluster)` | Where to start reading a region or a topic, with the reasons, and the order to read the rest |
+| `query_quantities(quantity_kind, unit, min_val, max_val, query, limit)` | Measured values across the library with the sentence each came from — by kind, unit, SI range or phrase; trusted rows only |
 
 ## Properties worth knowing
 
