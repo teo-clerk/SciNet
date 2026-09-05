@@ -113,6 +113,11 @@ class Settings(BaseSettings):
     #: inspector legible outside the reader's own field; off for someone who
     #: only wants the map.
     insight_enabled: bool = True
+    #: The worker watches ``library_dir`` and registers whatever appears there
+    #: once the file stops changing, and rescans the folder once at startup,
+    #: because inotify cannot report what happened while it was down. Off for
+    #: a library only ever fed by the upload button or backfill.
+    watch_enabled: bool = True
     tier0_workers: int = 4
     umap_min_papers: int = Field(default=20, ge=10)
 

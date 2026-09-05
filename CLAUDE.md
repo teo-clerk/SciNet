@@ -258,6 +258,12 @@ Target scale 3–4k papers on a single laptop.
 - **`os.kill(pid, 0)` is not a liveness probe on Windows.** Every signal value
   but the two console-control ones reaches TerminateProcess, so the portable-
   looking probe kills what it asks about. `app/cli/stop.py` queries instead.
+- **The library watcher lives in the worker, and rescans once at startup.**
+  `services/ingest/watcher.py` existed, was tested, and was started by nothing
+  while three documents promised it. It belongs in the worker because the API
+  never writes paper data; the startup pass exists because inotify cannot
+  report what arrived while the process was down, and it filters by path
+  before hashing so a 500-file library costs a query, not a gigabyte of reads.
 
 ## Layout
 

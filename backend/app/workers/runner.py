@@ -15,8 +15,10 @@ from __future__ import annotations
 import logging
 import signal
 import sys
+import threading
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
@@ -28,10 +30,14 @@ from app.core.model_store import configure_environment
 from app.core.models_registry import Runtime
 from app.models import PRIORITY, Job, JobKind, JobState, Paper, PaperStatus
 from app.services.ingest.quarantine import quarantine_document
+from app.services.ingest.watcher import rescan, watch
 from app.services.parse.errors import is_fatal
 from app.workers import lease
 from app.workers.handlers import HANDLERS
 from app.workers.queue import claim_next, complete, fail, requeue_stale
+
+if TYPE_CHECKING:
+    from watchdog.observers.api import BaseObserver
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +55,9 @@ class Worker:
         # The nonce of the pause lease already yielded to, so the card is
         # freed and the ack written once per lease, not once per 2 s poll.
         self._pause_seen: str | None = None
+        # The library watcher, while the worker runs. It lives here and not in
+        # the API because the worker is the sole writer of paper data.
+        self._observer: BaseObserver | None = None
 
     def request_stop(self, *_: object) -> None:
         if self._stopping:
@@ -71,13 +80,38 @@ class Worker:
         if recovered:
             logger.info("requeued %d job(s) stranded by a previous worker", recovered)
 
+        self._start_watching()
+
         logger.info("worker ready; stages: %s", [k.value for k in STAGE_ORDER])
         while not self._stopping:
             if self.drain_one_pass() == 0:
                 time.sleep(IDLE_SLEEP_SECONDS)
 
+        self._stop_watching()
         free_all_models()
         logger.info("worker stopped")
+
+    def _start_watching(self) -> None:
+        """Watch the library folder, and catch up on what arrived while down.
+
+        The rescan runs on its own thread so the job loop starts at once; a
+        large library is hundreds of path checks and only new files are hashed.
+        """
+        if not self.settings.watch_enabled:
+            logger.info("library watcher off (SCINET_WATCH_ENABLED=false)")
+            return
+        root = self.settings.library_dir
+        self._observer = watch(root)
+        threading.Thread(
+            target=rescan, args=(root,), name="library-rescan", daemon=True
+        ).start()
+
+    def _stop_watching(self) -> None:
+        if self._observer is None:
+            return
+        self._observer.stop()
+        self._observer.join(timeout=5)
+        self._observer = None
 
     def drain_one_pass(self) -> int:
         """Work each stage to exhaustion, in order. Returns jobs completed."""

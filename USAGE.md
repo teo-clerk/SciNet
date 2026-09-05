@@ -123,10 +123,13 @@ Three ways, all equivalent:
 multi-file selection and copies them into the library. Progress appears in the
 drawer at the bottom left.
 
-**Drop files into `data/library/`.** The watcher notices them within a couple of
-seconds. It waits for the file to stop changing before reading it, so copying a
-large PDF in is safe. **Subfolders work** — organise the library by year, topic
-or reading list however you like; the scan is recursive.
+**Drop files into `data/library/`.** The worker watches the folder and notices
+them within a couple of seconds. It waits for the file to stop changing before
+reading it, so copying a large PDF in is safe. **Subfolders work** — organise
+the library by year, topic or reading list however you like; the scan is
+recursive. Files copied in while the worker was not running are picked up by
+a rescan when it starts. `SCINET_WATCH_ENABLED=false` turns the watcher off for
+a library only ever fed by the upload button or backfill.
 
 **Import an existing collection:**
 

@@ -129,3 +129,67 @@ def test_a_file_deleted_before_admission_is_skipped(tmp_path):
 
 def test_debounce_window_is_long_enough_to_be_useful():
     assert DEBOUNCE_SECONDS >= 1.0, "a sub-second debounce defeats the purpose"
+
+
+# --- the startup rescan ---
+
+
+def _no_session(monkeypatch):
+    """rescan opens a session only to list what is pending; stub both."""
+    from contextlib import contextmanager
+
+    from app.services.ingest import watcher
+
+    @contextmanager
+    def fake_scope():
+        yield None
+
+    monkeypatch.setattr(watcher, "session_scope", fake_scope)
+    return watcher
+
+
+def test_rescan_admits_what_the_database_does_not_know(tmp_path, monkeypatch):
+    watcher = _no_session(monkeypatch)
+    new = [tmp_path / "a.pdf", tmp_path / "nested" / "b.md"]
+    monkeypatch.setattr(watcher, "pending_documents", lambda root, session: list(new))
+    admitted: list = []
+
+    count = watcher.rescan(tmp_path, on_ready=admitted.append)
+
+    assert count == 2
+    assert admitted == new
+
+
+def test_rescan_with_nothing_new_admits_nothing(tmp_path, monkeypatch):
+    watcher = _no_session(monkeypatch)
+    monkeypatch.setattr(watcher, "pending_documents", lambda root, session: [])
+    admitted: list = []
+
+    assert watcher.rescan(tmp_path, on_ready=admitted.append) == 0
+    assert admitted == []
+
+
+def test_one_bad_file_does_not_stop_the_rescan(tmp_path, monkeypatch):
+    watcher = _no_session(monkeypatch)
+    paths = [tmp_path / "broken.pdf", tmp_path / "fine.pdf"]
+    monkeypatch.setattr(watcher, "pending_documents", lambda root, session: paths)
+    seen: list = []
+
+    def admit(path):
+        seen.append(path)
+        if path.name == "broken.pdf":
+            raise OSError("unreadable")
+
+    assert watcher.rescan(tmp_path, on_ready=admit) == 2
+    assert seen == paths
+
+
+def test_rescan_creates_the_library_folder(tmp_path, monkeypatch):
+    """A fresh install has no data/library yet; the rescan must not fail on it."""
+    watcher = _no_session(monkeypatch)
+    monkeypatch.setattr(watcher, "pending_documents", lambda root, session: [])
+    root = tmp_path / "library"
+
+    watcher.rescan(root, on_ready=lambda p: None)
+
+    assert root.is_dir()

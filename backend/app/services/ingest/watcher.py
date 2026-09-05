@@ -22,7 +22,11 @@ from app.core.db import session_scope
 from app.core.events import BROKER
 from app.core.paths import classify_document
 from app.services.ingest.hashing import is_stable
-from app.services.ingest.registrar import Registration, register_document
+from app.services.ingest.registrar import (
+    Registration,
+    pending_documents,
+    register_document,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +108,28 @@ def admit_path(path: Path) -> None:
         BROKER.publish("paper.added", paper_id=result.paper.id, name=path.name)
     else:
         logger.debug("%s: %s", path.name, result.outcome.value)
+
+
+def rescan(root: Path, on_ready: Callable[[Path], None] = admit_path) -> int:
+    """Admit every document under ``root`` the database does not know by path.
+
+    inotify cannot report what happened while the worker was down, so the
+    watcher starts with one pass over the folder. The filter is path-level —
+    hashing every file on every start would dominate a large library — and
+    ``register_document`` is idempotent on content, so a file that merely moved
+    is recognised rather than duplicated.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    with session_scope() as session:
+        pending = pending_documents(root, session)
+    for path in pending:
+        try:
+            on_ready(path)
+        except Exception:  # noqa: BLE001 - one bad file must not stop the pass
+            logger.exception("failed to admit %s during rescan", path)
+    if pending:
+        logger.info("rescan admitted %d new document(s) under %s", len(pending), root)
+    return len(pending)
 
 
 def watch(root: Path, on_ready: Callable[[Path], None] = admit_path) -> Observer:
