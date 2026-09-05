@@ -100,6 +100,8 @@ interface GraphState {
   /** The trail panel's visibility. It and the librarian share the bottom
    *  centre, so opening one closes the other. */
   trailOpen: boolean
+  /** The AI-tools dialog. A dialog, not a preference: never persisted. */
+  mcpOpen: boolean
   /** The stops behind `trail`, as the server described them; null when the
    *  trail was drawn by the librarian, which names no stops. */
   trailStops: TrailStop[] | null
@@ -123,6 +125,7 @@ interface GraphState {
   setColorMode: (mode: ColorMode) => void
   setView: (view: ViewMode) => void
   setLabMode: (on: boolean) => void
+  setMcpOpen: (on: boolean) => void
   toggleAutoRotate: () => void
   setSort: (key: SortKey) => void
   setHovered: (index: number | null) => void
@@ -255,6 +258,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   highlightSet: null,
   ...NO_TRAIL,
   trailOpen: false,
+  mcpOpen: false,
   entryCard: null,
   cameraRequest: null,
 
@@ -377,6 +381,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   setTrailCursor: (trailCursor) => set({ trailCursor }),
   clearTrail: () => set({ ...NO_TRAIL, highlightSet: null }),
   setEntryCard: (entryCard) => set({ entryCard }),
+  setMcpOpen: (mcpOpen) => set({ mcpOpen }),
   flyToPoint: (target, distance) =>
     set((state) => ({
       cameraRequest: {

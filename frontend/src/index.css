@@ -43,14 +43,15 @@ body {
 .status-bar .spacer, .filter-bar .spacer { flex: 1; }
 .ok { color: var(--ok); } .warn { color: var(--warn); } .dim { color: var(--dim); }
 
-/* The numbers behind the map, opt-in. A chip so it reads as a mode, not a link. */
-.lab-toggle {
+/* The numbers behind the map, opt-in, and the AI-tools dialog. Chips, so they
+   read as modes, not links. */
+.lab-toggle, .mcp-toggle {
   background: rgba(255,255,255,0.05); border: 1px solid var(--border);
   color: var(--dim); border-radius: 9px; padding: 2px 9px;
   font: inherit; font-size: 11px; cursor: pointer; white-space: nowrap;
 }
-.lab-toggle:hover { color: var(--fg); }
-.lab-toggle[aria-pressed="true"] {
+.lab-toggle:hover, .mcp-toggle:hover { color: var(--fg); }
+.lab-toggle[aria-pressed="true"], .mcp-toggle[aria-expanded="true"] {
   background: var(--accent); color: #06121f; border-color: var(--accent);
 }
 
@@ -179,6 +180,7 @@ body {
   background: rgba(255,255,255,0.07); color: var(--fg);
 }
 .chip.warn { background: rgba(255,180,84,0.16); color: var(--warn); }
+.chip.ok { background: rgba(110,231,168,0.14); color: var(--ok); }
 .chip.dim { color: var(--dim); }
 .neighbours { list-style: none; margin: 0; padding: 0; }
 .neighbours button {
@@ -256,6 +258,80 @@ body {
   font: inherit; cursor: pointer;
 }
 .lab-drawer .open-models:hover { background: rgba(92,184,255,0.24); }
+
+/* --- the AI-tools dialog ---
+   The first real dialog: a backdrop above every panel (the canvas host's
+   stack tops out at 22), one column of chrome-sized text, prose only where a
+   sentence is read. */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 30;
+  background: rgba(5, 5, 16, 0.72);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.mcp-modal {
+  width: 640px; max-width: 100%; max-height: 85vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 16px 18px 18px; font-size: 12px; outline: none;
+  backdrop-filter: blur(8px);
+}
+.mcp-modal header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.mcp-modal h2 { margin: 0; font-size: 15px; line-height: 1.3; }
+.mcp-modal .close {
+  background: none; border: none; color: var(--dim); font-size: 22px;
+  cursor: pointer; line-height: 1; padding: 0 2px;
+}
+.mcp-modal .close:hover { color: var(--fg); }
+.mcp-modal .lede { margin: 8px 0 12px; color: var(--muted); }
+.mcp-modal .facts { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; }
+.mcp-modal .tabs {
+  display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 14px 0 10px;
+}
+.mcp-modal .tabs button {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--dim); padding: 6px 10px; margin-bottom: -1px;
+  font: inherit; cursor: pointer;
+}
+.mcp-modal .tabs button:hover { color: var(--fg); }
+.mcp-modal .tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.mcp-modal .snippet { position: relative; }
+.mcp-modal pre {
+  margin: 0; background: rgba(0,0,0,0.35); border-radius: 5px;
+  padding: 10px 64px 10px 12px; overflow-x: auto;
+}
+/* A one-line shell command wraps rather than scrolls: the Copy button sits
+   over the block's right edge, and text under it is text nobody can read.
+   Wrapping adds no characters to what is copied or selected. */
+.mcp-modal pre code {
+  font-size: 11.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.mcp-modal .copy {
+  position: absolute; top: 8px; right: 8px;
+  background: rgba(92,184,255,0.14); border: 1px solid rgba(92,184,255,0.4);
+  color: var(--accent); border-radius: 5px; padding: 3px 9px;
+  font: inherit; font-size: 11px; cursor: pointer;
+}
+.mcp-modal .copy:hover { background: rgba(92,184,255,0.24); }
+.mcp-modal .hint { font-size: 11px; line-height: 1.45; margin: 6px 0 0; }
+.mcp-modal h3 {
+  margin: 16px 0 6px; font-size: 11px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--dim);
+}
+.mcp-modal .tools, .mcp-modal .prompts { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.mcp-modal .tools code { color: var(--accent); }
+.mcp-modal .prompts li { font-family: var(--font-prose); font-size: 13px; line-height: 1.5; }
+.mcp-modal footer { margin-top: 16px; font-size: 11px; line-height: 1.5; }
+.mcp-modal footer a { color: var(--accent); }
+.mcp-modal .warn code, .mcp-modal footer code { color: var(--fg); }
+@media (prefers-reduced-motion: no-preference) {
+  .mcp-modal { animation: modal-in 160ms ease-out; }
+}
+@keyframes modal-in { from { opacity: 0; transform: translateY(6px); } }
+
+/* The welcome screen's pointer to the dialog: a sentence, not a chip. */
+.welcome .mcp-link {
+  background: none; border: none; color: var(--accent); font: inherit;
+  cursor: pointer; text-decoration: underline; padding: 0; width: auto;
+}
 
 /* --- search --- */
 .search-box { display: flex; align-items: center; gap: 8px; }

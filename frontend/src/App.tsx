@@ -14,6 +14,7 @@ import { QuantityReview } from '@/panels/QuantityReview'
 import { QuarantineView } from '@/panels/QuarantineView'
 import { JobsDrawer } from '@/panels/JobsDrawer'
 import { LabDrawer } from '@/panels/LabDrawer'
+import { McpModal } from '@/panels/McpModal'
 import { RegionsBanner } from '@/panels/RegionsBanner'
 import { StatusBar } from '@/panels/StatusBar'
 import { TrailPanel } from '@/panels/TrailPanel'
@@ -75,6 +76,9 @@ export default function App() {
       </main>
       <JobsDrawer />
       <LabDrawer />
+      {/* Outside the canvas host on purpose: a dialog covers everything,
+          including the welcome screen a fresh install shows. */}
+      <McpModal />
     </div>
   )
 }

@@ -3,8 +3,10 @@
  * anything leaves this machine.
  *
  * The privacy badge is always shown — it is a fact about the software, not a
- * diagnostic. The frame timing, the run id and the API version are the numbers
- * behind the map and belong to the Lab, which the last button turns on.
+ * diagnostic, and so is the AI-tools button beside it: the library is
+ * readable over MCP whether or not anyone has noticed. The frame timing, the
+ * run id and the API version are the numbers behind the map and belong to
+ * the Lab, which the last button turns on.
  */
 import { useEffect, useState } from 'react'
 
@@ -18,6 +20,8 @@ export function StatusBar() {
   const runId = useGraphStore((s) => s.runId)
   const labMode = useGraphStore((s) => s.labMode)
   const setLabMode = useGraphStore((s) => s.setLabMode)
+  const mcpOpen = useGraphStore((s) => s.mcpOpen)
+  const setMcpOpen = useGraphStore((s) => s.setMcpOpen)
   const [info, setInfo] = useState<SystemInfo | null>(null)
   const [apiError, setApiError] = useState<string | null>(null)
 
@@ -50,6 +54,15 @@ export function StatusBar() {
       ) : (
         <span className="warn">api unreachable{apiError ? ` — ${apiError}` : ''}</span>
       )}
+      <button
+        className="mcp-toggle"
+        aria-haspopup="dialog"
+        aria-expanded={mcpOpen}
+        title="Connect Claude Code, Claude Desktop, Cursor or Zed to this library"
+        onClick={() => setMcpOpen(true)}
+      >
+        ⚡ AI tools
+      </button>
       <button
         className="lab-toggle"
         aria-pressed={labMode}

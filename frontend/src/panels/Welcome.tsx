@@ -43,6 +43,7 @@ interface Props {
 export function Welcome({ reload, loading }: Props) {
   const labMode = useGraphStore((s) => s.labMode)
   const loadError = useGraphStore((s) => s.error)
+  const setMcpOpen = useGraphStore((s) => s.setMcpOpen)
   const [state, setState] = useState<WelcomeState | null>(null)
   const [queued, setQueued] = useState(0)
   const idlePolls = useRef(0)
@@ -145,6 +146,12 @@ export function Welcome({ reload, loading }: Props) {
           </div>
           <SampleCards />
         </>
+      )}
+
+      {state.kind !== 'api-down' && (
+        <button type="button" className="mcp-link" onClick={() => setMcpOpen(true)}>
+          Already use Claude Code or Cursor? Connect it →
+        </button>
       )}
 
       {progress && (
