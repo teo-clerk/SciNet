@@ -16,6 +16,10 @@ const COLUMNS: Array<[SortKey, string, string]> = [
   ['title', 'Paper', 'title'],
   ['year', 'Year', 'year'],
   ['cluster', 'Region', 'region'],
+]
+
+/** A decimal in a table is for whoever is tuning the clustering; the lab owns it. */
+const LAB_COLUMNS: Array<[SortKey, string, string]> = [
   ['confidence', 'Confidence', 'how firmly it belongs there'],
 ]
 
@@ -37,8 +41,10 @@ export function ListView() {
   const sortKey = useGraphStore((s) => s.sortKey)
   const sortAscending = useGraphStore((s) => s.sortAscending)
   const setSort = useGraphStore((s) => s.setSort)
+  const labMode = useGraphStore((s) => s.labMode)
 
   const visible = useVisibleSet()
+  const columns = labMode ? [...COLUMNS, ...LAB_COLUMNS] : COLUMNS
 
   const rows = useMemo(
     () => sortRows(buildRows(nodes, clusters, visible), sortKey, sortAscending),
@@ -74,7 +80,7 @@ export function ListView() {
       <table>
         <thead>
           <tr>
-            {COLUMNS.map(([key, label, hint]) => (
+            {columns.map(([key, label, hint]) => (
               <th
                 key={key}
                 onClick={() => setSort(key)}
@@ -108,24 +114,26 @@ export function ListView() {
               </td>
               <td className="numeric">{node.year ?? <span className="dim">—</span>}</td>
               <td>{clusterName ?? <span className="dim">unclustered</span>}</td>
-              <td className="numeric">
-                {node.confidence === null ? (
-                  <span className="dim">—</span>
-                ) : (
-                  <span className="confidence">
-                    <span className="bar">
-                      <span
-                        className="fill"
-                        style={{ width: `${Math.round(node.confidence * 100)}%` }}
-                      />
+              {labMode && (
+                <td className="numeric">
+                  {node.confidence === null ? (
+                    <span className="dim">—</span>
+                  ) : (
+                    <span className="confidence">
+                      <span className="bar">
+                        <span
+                          className="fill"
+                          style={{ width: `${Math.round(node.confidence * 100)}%` }}
+                        />
+                      </span>
+                      {node.confidence.toFixed(2)}
                     </span>
-                    {node.confidence.toFixed(2)}
-                  </span>
-                )}
-                {confidenceLabel(node.confidence) && (
-                  <span className="dim"> {confidenceLabel(node.confidence)}</span>
-                )}
-              </td>
+                  )}
+                  {confidenceLabel(node.confidence) && (
+                    <span className="dim"> {confidenceLabel(node.confidence)}</span>
+                  )}
+                </td>
+              )}
               <td className="tags-column">
                 {node.tags.map((tagId) => (
                   <button

@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 
 import { fetchNeighbours, fetchPaper, type Neighbour, type PaperDetail } from '@/api/graph'
 import { fetchPaperQuantities, type QuantityRow } from '@/api/quantities'
+import { pagesLabel, placementSentence } from '@/lib/plain'
 import { formatQuantity } from '@/lib/quantities'
 import { useGraphStore } from '@/state/graphStore'
 
@@ -15,6 +16,7 @@ export function DetailPanel() {
   const selectedIndex = useGraphStore((s) => s.selectedIndex)
   const nodes = useGraphStore((s) => s.nodes)
   const setSelected = useGraphStore((s) => s.setSelected)
+  const labMode = useGraphStore((s) => s.labMode)
 
   const [paper, setPaper] = useState<PaperDetail | null>(null)
   const [neighbours, setNeighbours] = useState<Neighbour[]>([])
@@ -59,6 +61,10 @@ export function DetailPanel() {
     if (index >= 0) setSelected(index)
   }
 
+  const placement = paper
+    ? placementSentence(paper.cluster_name, paper.cluster_confidence, paper.manifold_drift)
+    : null
+
   return (
     <aside className="detail-panel">
       <button className="close" onClick={() => setSelected(null)} aria-label="Close">
@@ -69,13 +75,15 @@ export function DetailPanel() {
 
       <div className="meta-row">
         {paper?.year && <span className="chip">{paper.year}</span>}
-        {node.provisional && (
+        {labMode && node.provisional && (
           <span className="chip warn" title="Placed without a full refit">
             provisional · drift {node.drift}
           </span>
         )}
-        {paper?.parse && <span className="chip dim">tier {paper.parse.tier}</span>}
-        {paper?.page_count && <span className="chip dim">{paper.page_count} pp</span>}
+        {labMode && paper?.parse && <span className="chip dim">tier {paper.parse.tier}</span>}
+        {paper && pagesLabel(paper.page_count) && (
+          <span className="chip dim">{pagesLabel(paper.page_count)}</span>
+        )}
       </div>
 
       {paper?.authors?.length ? (
@@ -94,21 +102,21 @@ export function DetailPanel() {
 
       {paper?.summary && (
         <section>
-          <h3>Summary</h3>
-          <p>{paper.summary}</p>
+          <h3>In two sentences</h3>
+          <p className="prose">{paper.summary}</p>
         </section>
       )}
 
       {paper?.abstract && (
         <section>
-          <h3>Abstract</h3>
+          <h3>Academic abstract</h3>
           {paper.abstract_source === 'extracted_digest' && (
             /* A book has no abstract, so this one was assembled from the
                book's own paragraphs. Saying so matters: presented plainly it
                reads as the author's summary of their work, and it is not. */
             <p className="assembled">Assembled from the text — this document has no abstract of its own.</p>
           )}
-          <p className="abstract">{paper.abstract}</p>
+          <p className="abstract prose">{paper.abstract}</p>
         </section>
       )}
 
@@ -122,7 +130,9 @@ export function DetailPanel() {
                 <dd>{paper.cluster_name}</dd>
               </>
             )}
-            {paper.cluster_confidence !== null && (
+            {/* The bars and decimals are for whoever is tuning the projection;
+                everyone else gets the same fact as a sentence, below. */}
+            {labMode && paper.cluster_confidence !== null && (
               <>
                 <dt title="How strongly this paper belongs to its cluster">
                   Cluster confidence
@@ -141,7 +151,7 @@ export function DetailPanel() {
                 </dd>
               </>
             )}
-            {paper.manifold_drift !== null && (
+            {labMode && paper.manifold_drift !== null && (
               <>
                 <dt title="Distance from the region the map was fitted on; ~1 is typical">
                   Embedding drift
@@ -155,6 +165,7 @@ export function DetailPanel() {
               </>
             )}
           </dl>
+          {!labMode && placement && <p className="prose">{placement}</p>}
         </section>
       )}
 
@@ -183,12 +194,12 @@ export function DetailPanel() {
 
       {neighbours.length > 0 && (
         <section>
-          <h3>Nearest in embedding space</h3>
+          <h3>Closest in meaning</h3>
           <ul className="neighbours">
             {neighbours.map((hit) => (
               <li key={hit.id}>
                 <button onClick={() => focusNeighbour(hit.id)}>
-                  <span className="score">{hit.similarity.toFixed(3)}</span>
+                  {labMode && <span className="score">{hit.similarity.toFixed(3)}</span>}
                   {hit.title ?? `#${hit.id}`}
                 </button>
               </li>

@@ -10,6 +10,11 @@ export default {
   steps: [
     { wait: 'canvas', timeout: 20_000 },
     { sleep: 1200 },
+    // The Models button is lab furniture and hidden by default; the store
+    // reads the preference once, at load, so turning it on means reloading.
+    { evaluate: "localStorage.setItem('scinet.lab','1'); location.reload()" },
+    { wait: 'canvas', timeout: 20_000 },
+    { sleep: 800 },
     {
       evaluate:
         "[...document.querySelectorAll('.view-toggle button')]" +

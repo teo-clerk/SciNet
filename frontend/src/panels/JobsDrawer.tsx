@@ -17,6 +17,7 @@ import {
   type PauseState,
   type PipelineEvent,
 } from '@/api/sse'
+import { useGraphStore } from '@/state/graphStore'
 
 const MAX_LOG = 40
 const POLL_INTERVAL_MS = 4000
@@ -60,6 +61,7 @@ export function JobsDrawer() {
   const [log, setLog] = useState<PipelineEvent[]>([])
   const [counts, setCounts] = useState<JobCounts | null>(null)
   const [pause, setPause] = useState<PauseState | null>(null)
+  const labMode = useGraphStore((s) => s.labMode)
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -139,7 +141,9 @@ export function JobsDrawer() {
 
       {open && (
         <div className="jobs-body" ref={listRef}>
-          {counts && (
+          {/* "12 of 40 papers" in the header is the sentence a reader needs;
+              the per-kind breakdown is for whoever is watching the pipeline. */}
+          {labMode && counts && (
             <div className="jobs-counts">
               {Object.entries(counts.counts)
                 .filter(([key]) => !key.endsWith(':done'))

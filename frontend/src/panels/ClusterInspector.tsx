@@ -18,6 +18,7 @@ export function ClusterInspector() {
   const nodes = useGraphStore((s) => s.nodes)
   const setSelected = useGraphStore((s) => s.setSelected)
   const setView = useGraphStore((s) => s.setView)
+  const labMode = useGraphStore((s) => s.labMode)
 
   const [detail, setDetail] = useState<ClusterDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -70,13 +71,13 @@ export function ClusterInspector() {
           {detail.overview && (
             <section>
               <h3>What this region is</h3>
-              <p>{detail.overview}</p>
+              <p className="prose">{detail.overview}</p>
             </section>
           )}
 
           {detail.terms.length > 0 && (
             <section>
-              <h3>Shared vocabulary</h3>
+              <h3>Recurring words</h3>
               <div className="tag-list">
                 {detail.terms.slice(0, 14).map((term) => (
                   <span key={term} className="chip">
@@ -88,7 +89,7 @@ export function ClusterInspector() {
           )}
 
           <section>
-            <h3>Papers ({detail.members.length})</h3>
+            <h3>Works ({detail.members.length})</h3>
             <ul className="member-list">
               {detail.members.map((member) => (
                 <li key={member.paper_id}>
@@ -99,7 +100,7 @@ export function ClusterInspector() {
                     <span className="member-meta">
                       {member.first_author && <span>{member.first_author}</span>}
                       {member.year && <span>{member.year}</span>}
-                      {member.confidence !== null && (
+                      {labMode && member.confidence !== null && (
                         <span
                           className={member.confidence < 0.5 ? 'warn' : 'dim'}
                           title="How firmly this paper belongs to the region"

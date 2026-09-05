@@ -18,8 +18,10 @@ import { useQuarantineCount } from '@/lib/useQuarantineCount'
 const MODES: Array<[ColorMode, string]> = [
   ['cluster', 'Cluster'],
   ['year', 'Year'],
-  ['provisional', 'Provisional'],
 ]
+
+/** Colouring by "placed without a refit" is a pipeline question; the lab owns it. */
+const LAB_MODES: Array<[ColorMode, string]> = [['provisional', 'Provisional']]
 
 export function FilterBar() {
   const colorMode = useGraphStore((s) => s.colorMode)
@@ -33,11 +35,13 @@ export function FilterBar() {
   const setView = useGraphStore((s) => s.setView)
   const librarianOpen = useGraphStore((s) => s.librarianOpen)
   const toggleLibrarian = useGraphStore((s) => s.toggleLibrarian)
+  const labMode = useGraphStore((s) => s.labMode)
   const quarantined = useQuarantineCount()
 
   const visible = useVisibleSet()
   const shown = visible === null ? count : visible.size
   const filtering = visible !== null
+  const modes = labMode ? [...MODES, ...LAB_MODES] : MODES
 
   return (
     <div className="filter-bar">
@@ -68,20 +72,26 @@ export function FilterBar() {
             Quarantine <span className="badge count">{quarantined}</span>
           </button>
         )}
-        <button
-          className={view === 'models' ? 'active' : ''}
-          onClick={() => setView('models')}
-          title="Hardware, the model catalog, and task routing"
-        >
-          Models
-        </button>
-        <button
-          className={view === 'review' ? 'active' : ''}
-          onClick={() => setView('review')}
-          title="Quantities the adjudicator was unsure about"
-        >
-          Review
-        </button>
+        {/* The Model Lab and the quantity review are for whoever runs the
+            pipeline, not whoever reads the library; they come with the lab. */}
+        {labMode && (
+          <>
+            <button
+              className={view === 'models' ? 'active' : ''}
+              onClick={() => setView('models')}
+              title="Hardware, the model catalog, and task routing"
+            >
+              Models
+            </button>
+            <button
+              className={view === 'review' ? 'active' : ''}
+              onClick={() => setView('review')}
+              title="Quantities the adjudicator was unsure about"
+            >
+              Review
+            </button>
+          </>
+        )}
         <button
           className={librarianOpen ? 'active' : ''}
           onClick={toggleLibrarian}
@@ -95,7 +105,7 @@ export function FilterBar() {
 
       {view === 'map' && (
       <div className="modes">
-        {MODES.map(([mode, label]) => (
+        {modes.map(([mode, label]) => (
           <button
             key={mode}
             className={colorMode === mode ? 'active' : ''}

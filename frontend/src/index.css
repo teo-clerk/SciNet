@@ -7,6 +7,11 @@
   --ok: #6ee7a8;
   --warn: #ffb454;
   --accent: #5cb8ff;
+  --muted: #8b94ab;
+  --line: rgba(255, 255, 255, 0.12);
+  /* Serif for the sentences — abstract, summary, region overview — so prose
+     reads as prose against the monospace chrome around it. */
+  --font-prose: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   color-scheme: dark;
 }
 
@@ -37,6 +42,26 @@ body {
 .status-bar .brand { font-weight: 700; letter-spacing: 0.08em; }
 .status-bar .spacer, .filter-bar .spacer { flex: 1; }
 .ok { color: var(--ok); } .warn { color: var(--warn); } .dim { color: var(--dim); }
+
+/* The numbers behind the map, opt-in. A chip so it reads as a mode, not a link. */
+.lab-toggle {
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+  color: var(--dim); border-radius: 9px; padding: 2px 9px;
+  font: inherit; font-size: 11px; cursor: pointer; white-space: nowrap;
+}
+.lab-toggle:hover { color: var(--fg); }
+.lab-toggle[aria-pressed="true"] {
+  background: var(--accent); color: #06121f; border-color: var(--accent);
+}
+
+/* --- prose ---
+   Specific enough to beat `.detail-panel p` and `.cluster-inspector p`, which
+   set their own 12px; a sentence is read, and gets a reading size. */
+.prose, .detail-panel .prose, .cluster-inspector .prose {
+  font-family: var(--font-prose); font-size: 14px; line-height: 1.6;
+}
+/* The bridge card is a 300px tooltip: the serif, at a size it has room for. */
+.bridge-card p { font-family: var(--font-prose); font-size: 12.5px; }
 
 /* --- filter bar --- */
 .filter-bar {
@@ -199,6 +224,38 @@ body {
 .jobs-body .row { display: flex; gap: 10px; font-size: 11.5px; padding: 2px 0; }
 .jobs-body .row.warn { color: var(--warn); }
 .jobs-body .row .dim { flex: none; font-variant-numeric: tabular-nums; }
+
+/* --- lab drawer ---
+   Mirrors the jobs drawer's geometry on the opposite corner: the two are the
+   same kind of thing, a running commentary that must not cover the map. */
+.lab-drawer {
+  position: absolute; right: 14px; bottom: 14px; z-index: 20;
+  width: 360px; max-width: calc(100vw - 28px); max-height: 46vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px; font-size: 12px;
+  backdrop-filter: blur(8px);
+}
+.lab-drawer header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.lab-drawer h3 { margin: 0; font-size: 12px; letter-spacing: 0.06em; }
+.lab-drawer .close {
+  background: none; border: none; color: var(--dim); font-size: 20px;
+  cursor: pointer; line-height: 1; padding: 0 2px;
+}
+.lab-drawer .close:hover { color: var(--fg); }
+.lab-drawer dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; }
+.lab-drawer dt { color: var(--dim); font-size: 11px; white-space: nowrap; }
+.lab-drawer dd {
+  margin: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+.lab-drawer dd.jobs-counts { margin-bottom: 0; gap: 5px; }
+.lab-drawer .open-models {
+  margin-top: 10px; width: 100%;
+  background: rgba(92,184,255,0.14); border: 1px solid rgba(92,184,255,0.4);
+  color: var(--accent); border-radius: 5px; padding: 5px 11px;
+  font: inherit; cursor: pointer;
+}
+.lab-drawer .open-models:hover { background: rgba(92,184,255,0.24); }
 
 /* --- search --- */
 .search-box { display: flex; align-items: center; gap: 8px; }
@@ -527,4 +584,17 @@ body {
   font-size: 0.7rem;
   max-width: 26ch;
   line-height: 1.3;
+}
+
+/* --- motion and focus ---------------------------------------------------- */
+
+/* The map itself is the reader's choice to move; the chrome should not be. */
+@media (prefers-reduced-motion: reduce) {
+  .pulse.busy, .spinner { animation: none; }
+  .lab-drawer, .jobs-drawer, .detail-panel, .cluster-inspector { transition: none; }
+}
+
+/* Keyboard focus is visible everywhere; mouse focus stays quiet. */
+button:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
 }

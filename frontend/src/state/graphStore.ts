@@ -13,6 +13,7 @@
 import { create } from 'zustand'
 
 import type { DecodedGraph, GraphCluster, GraphNode } from '@/api/graph'
+import { LAB_KEY, readLabPref, writePref } from '@/lib/prefs'
 import type { SearchMode } from '@/lib/search'
 
 export type ColorMode = 'cluster' | 'year' | 'provisional'
@@ -48,6 +49,10 @@ interface GraphState {
 
   colorMode: ColorMode
   view: ViewMode
+  /** Show the numbers behind the map — run ids, confidences, frame times.
+   *  Off for a reader; on for whoever is tuning the pipeline. Remembered per
+   *  browser, and forced either way by `?lab=1` / `?lab=0`. */
+  labMode: boolean
   autoRotate: boolean
   sortKey: SortKey
   sortAscending: boolean
@@ -93,6 +98,7 @@ interface GraphState {
   setGraph: (graph: DecodedGraph) => void
   setColorMode: (mode: ColorMode) => void
   setView: (view: ViewMode) => void
+  setLabMode: (on: boolean) => void
   toggleAutoRotate: () => void
   setSort: (key: SortKey) => void
   setHovered: (index: number | null) => void
@@ -184,6 +190,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   clusterCentroids: new Map(),
   colorMode: 'cluster',
   view: 'map',
+  labMode: readLabPref(),
   autoRotate: false,
   sortKey: 'title',
   sortAscending: true,
@@ -241,6 +248,20 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   setColorMode: (colorMode) => set({ colorMode }),
   setView: (view) => set({ view }),
+  setLabMode: (on) => {
+    writePref(LAB_KEY, on ? '1' : '0')
+    set((state) => {
+      // The Models and Review views, and the Provisional colouring, are lab
+      // furniture: their buttons go with the lab. Turning it off while
+      // standing in one would leave the reader in a room with no door.
+      const inLabView = state.view === 'models' || state.view === 'review'
+      return {
+        labMode: on,
+        view: !on && inLabView ? 'map' : state.view,
+        colorMode: !on && state.colorMode === 'provisional' ? 'cluster' : state.colorMode,
+      }
+    })
+  },
   toggleAutoRotate: () => set((state) => ({ autoRotate: !state.autoRotate })),
   setSort: (key) =>
     set((state) =>

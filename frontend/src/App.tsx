@@ -11,6 +11,7 @@ import { ModelLab } from '@/panels/ModelLab'
 import { QuantityReview } from '@/panels/QuantityReview'
 import { QuarantineView } from '@/panels/QuarantineView'
 import { JobsDrawer } from '@/panels/JobsDrawer'
+import { LabDrawer } from '@/panels/LabDrawer'
 import { StatusBar } from '@/panels/StatusBar'
 import { useGraphStore } from '@/state/graphStore'
 
@@ -68,6 +69,7 @@ export default function App() {
         <LibrarianPanel />
       </main>
       <JobsDrawer />
+      <LabDrawer />
     </div>
   )
 }
