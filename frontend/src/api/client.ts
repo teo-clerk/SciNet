@@ -11,6 +11,10 @@ export interface SystemInfo {
   enrichment_enabled: boolean
   paper_count: number
   ready_count: number
+  /** The search embedder's state: cold, warming, ready or failed. */
+  search_warmup: string
+  /** Seconds until warm, when the warmer can estimate it. */
+  search_warmup_remaining: number | null
 }
 
 async function getJson<T>(path: string): Promise<T> {

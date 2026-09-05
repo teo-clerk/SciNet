@@ -11,6 +11,9 @@ export interface FpsSample {
   worstFrameMs: number
 }
 
+/** One frame at 60 fps. A window whose worst frame blew through it dropped one. */
+export const FRAME_BUDGET_MS = 16.7
+
 export function useFps(): FpsSample {
   const [sample, setSample] = useState<FpsSample>({ fps: 0, worstFrameMs: 0 })
 
