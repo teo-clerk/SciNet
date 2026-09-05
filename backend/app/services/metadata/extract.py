@@ -77,7 +77,13 @@ FURNITURE_RE = re.compile(
 # is a title.
 TEMPLATE_RE = re.compile(
     r"\b(?:pre-?proofs?|template\s+for\s+(?:journal|conference|papers?|articles?)"
-    r"|(?:manuscript|paper|article)\s+template|proceedings\s+format)\b",
+    r"|(?:manuscript|paper|article)\s+template|proceedings\s+format"
+    # The IEEE and AAS templates' own placeholder titles, found in the Title
+    # field of four benchmark PDFs: "Paper Title (use style: paper title)",
+    # "Sample manuscript showing specifications and style".
+    # "paper title" alone is a phrase a real title can contain; the template's
+    # parenthesis is what gives it away.
+    r"|use\s+style\s*:|sample\s+manuscript|showing\s+specifications)",
     re.IGNORECASE,
 )
 

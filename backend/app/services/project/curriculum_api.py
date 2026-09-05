@@ -19,6 +19,7 @@ from app.services.project.curriculum import (
     MAX_READING_ORDER,
     Candidate,
     Scored,
+    presentable,
     rank_entry_points,
     reading_order,
 )
@@ -109,7 +110,15 @@ def curriculum_for(
     if len(ids) < 2:
         return _empty(len(ids))
 
-    candidates = _candidates(db, ids)
+    # Works without a usable title are dropped before ranking, not merely
+    # kept off the top: a recommendation is followed by name, and a reading
+    # order through untitled stops is a list of numbers.
+    all_candidates = _candidates(db, ids)
+    keep = [i for i, c in enumerate(all_candidates) if presentable(c)]
+    if len(keep) < 2:
+        return _empty(len(keep))
+    candidates = [all_candidates[i] for i in keep]
+    matrix = matrix[keep]
     by_id = {c.paper_id: c for c in candidates}
     scored = rank_entry_points(candidates, matrix)
     order = reading_order(candidates, matrix, limit=limit)
@@ -120,5 +129,5 @@ def curriculum_for(
             _entry_point(s, by_id[s.paper_id]) for s in scored[1 : 1 + ALTERNATIVES]
         ],
         reading_order=order,
-        considered=len(ids),
+        considered=len(candidates),
     )

@@ -9,8 +9,14 @@ only way an older work gets its year, and it must beat the scrape.
 
 from __future__ import annotations
 
+import pytest
+
 from app.models import MetaSource
-from app.services.metadata.extract import extract_from_document, front_matter
+from app.services.metadata.extract import (
+    extract_from_document,
+    front_matter,
+    usable_embedded_title,
+)
 
 ESSAY = """# On Liberty
 
@@ -57,6 +63,25 @@ def test_a_year_in_the_body_is_not_front_matter():
 def test_nothing_labelled_means_nothing_found():
     assert front_matter(None) == ([], None)
     assert front_matter("# Title\n\nJust prose from 1859 about things.") == ([], None)
+
+
+@pytest.mark.parametrize(
+    "placeholder",
+    [
+        "Paper Title (use style: paper title)",
+        "Sample manuscript showing specifications and style",
+    ],
+)
+def test_a_template_placeholder_in_the_title_field_is_not_a_title(placeholder):
+    """Four benchmark PDFs shipped with their template's own placeholder in the
+    Title field, and one of them was the recommended entry point of the
+    largest region: a work the pipeline cannot name must not be recommended."""
+    assert usable_embedded_title(placeholder) is None
+
+
+def test_a_real_title_mentioning_style_or_a_sample_survives():
+    kept = "A Sample-Efficient Style Transfer Method for Satellite Imagery"
+    assert usable_embedded_title(kept) == kept
 
 
 def test_the_metadata_stage_files_an_old_essay_under_its_own_year(tmp_path):

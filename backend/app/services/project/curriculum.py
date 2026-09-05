@@ -95,6 +95,21 @@ class Candidate:
     pages: int | None
 
 
+def presentable(candidate: Candidate) -> bool:
+    """Can this work be recommended by name?
+
+    An entry point is a suggestion the reader follows by its title. A work
+    whose title the pipeline never recovered, or recovered as a template's own
+    placeholder ("Paper Title (use style: paper title)" was the recommended
+    start of the largest region on the benchmark), is still a point in the set
+    and still a stop on a trail — it is simply not something to recommend.
+    """
+    from app.services.metadata.extract import TEMPLATE_RE
+
+    title = (candidate.title or "").strip()
+    return bool(title) and TEMPLATE_RE.search(title) is None
+
+
 @dataclass(frozen=True)
 class Scored:
     paper_id: int
