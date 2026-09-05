@@ -5,6 +5,10 @@
  * tells you what matched but not where it sits, which is the whole point of
  * having a map.
  */
+import { useState } from 'react'
+
+import { fetchEntryPoint } from '@/api/graph'
+import { canAskWhereToStart } from '@/lib/entryPoint'
 import { MapControls } from '@/panels/MapControls'
 import { MorphSlider } from '@/panels/MorphSlider'
 import { QuantityFilter } from '@/panels/QuantityFilter'
@@ -31,17 +35,51 @@ export function FilterBar() {
   const toggleTag = useGraphStore((s) => s.toggleTag)
   const clearFilters = useGraphStore((s) => s.clearFilters)
   const count = useGraphStore((s) => s.count)
+  const nodes = useGraphStore((s) => s.nodes)
   const view = useGraphStore((s) => s.view)
   const setView = useGraphStore((s) => s.setView)
   const librarianOpen = useGraphStore((s) => s.librarianOpen)
   const toggleLibrarian = useGraphStore((s) => s.toggleLibrarian)
+  const trailOpen = useGraphStore((s) => s.trailOpen)
+  const toggleTrailPanel = useGraphStore((s) => s.toggleTrailPanel)
+  const setEntryCard = useGraphStore((s) => s.setEntryCard)
   const labMode = useGraphStore((s) => s.labMode)
   const quarantined = useQuarantineCount()
+
+  const [asking, setAsking] = useState(false)
+  const [startNote, setStartNote] = useState<string | null>(null)
 
   const visible = useVisibleSet()
   const shown = visible === null ? count : visible.size
   const filtering = visible !== null
   const modes = labMode ? [...MODES, ...LAB_MODES] : MODES
+
+  // The visible set is node indices; the server ranks paper ids.
+  const askWhereToStart = async () => {
+    if (!visible) return
+    setAsking(true)
+    setStartNote(null)
+    try {
+      const ids = [...visible].flatMap((i) => {
+        const node = nodes[i]
+        return node ? [node.id] : []
+      })
+      const result = await fetchEntryPoint(ids)
+      if (result.entry_point) {
+        setEntryCard({
+          entry: result.entry_point,
+          alternatives: result.alternatives,
+          readingOrder: result.reading_order,
+        })
+      } else {
+        setStartNote('No clear place to start among these.')
+      }
+    } catch (error: unknown) {
+      setStartNote(error instanceof Error ? error.message : String(error))
+    } finally {
+      setAsking(false)
+    }
+  }
 
   return (
     <div className="filter-bar">
@@ -99,6 +137,13 @@ export function FilterBar() {
         >
           ✦ Librarian
         </button>
+        <button
+          className={trailOpen ? 'active' : ''}
+          onClick={toggleTrailPanel}
+          title="Walk the library from one idea to another"
+        >
+          ✧ Trail
+        </button>
       </div>
 
       {view === 'map' && <MapControls />}
@@ -146,6 +191,19 @@ export function FilterBar() {
           <span className={filtering ? 'count active' : 'count'}>
             {shown.toLocaleString()} / {count.toLocaleString()}
           </span>
+          {/* A filtered set is a reading list without an order; this asks for
+              its first page. Not offered for one paper, or for thousands. */}
+          {filtering && canAskWhereToStart(shown) && (
+            <button
+              className="start"
+              onClick={askWhereToStart}
+              disabled={asking}
+              title="Rank the papers shown by where a newcomer should begin"
+            >
+              {asking ? 'Asking…' : 'Where do I start?'}
+            </button>
+          )}
+          {startNote && <span className="dim start-note">{startNote}</span>}
           {filtering && (
             <button className="clear" onClick={clearFilters}>
               clear
