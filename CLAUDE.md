@@ -385,7 +385,7 @@ cd backend && uv run scinet-up                   # API + worker + UI, one termin
 cd backend && uv run scinet-mcp                  # MCP server (stdio; needs the API up)
 cd backend && uv run scinet-stop                 # stop API, worker, Vite
 ./scripts/stop.sh                                # the same, from anywhere
-bun scripts/record_demo.mjs scripts/scenarios/smoke.mjs  # record a scripted demo
+bun scripts/record_demo.mjs scripts/scenarios/smoke.mjs --gif docs/media/smoke.gif  # record a scripted demo straight to a GIF
 cd frontend && bun test                          # frontend unit tests
 bun scripts/verify_render.mjs http://localhost:5173  # 3D render gate
 cd backend && uv run python ../scripts/eval_clustering.py  # cluster quality

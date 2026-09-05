@@ -9,7 +9,11 @@
  * with one command.
  *
  *   bun scripts/record_demo.mjs scripts/scenarios/smoke.mjs [--url URL]
- *       [--out DIR] [--headful]
+ *       [--out DIR] [--gif PATH] [--headful]
+ *
+ * --gif writes the README-sized GIF (15 fps, 1200 px wide) straight to PATH
+ * after the mp4 is assembled, instead of printing the ffmpeg line for a
+ * human to paste.
  *
  * Frames arrive via Page.startScreencast with real timestamps; assembly uses
  * ffmpeg's concat demuxer with per-frame durations, so the recording keeps the
@@ -39,6 +43,7 @@ const flag = (name, fallback) => {
 }
 const HEADFUL = args.includes('--headful')
 const URL_ARG = flag('--url', 'http://localhost:5173')
+const GIF_PATH = flag('--gif', null)
 // 9225: the verify_* gates already claim 9222-9224, and sharing a debugging
 // port with a gate that may be running is a confusing way to record it.
 const PORT = 9225
@@ -297,7 +302,18 @@ async function assemble(frames) {
   )
   if ((await proc.exited) !== 0) throw new Error('ffmpeg failed to assemble the recording')
   console.log(`→ ${out}`)
-  console.log(`  gif: ffmpeg -i ${out} -vf "fps=15,scale=1200:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" ${OUT_DIR}/${scenario.name}.gif`)
+  const gifFilter = 'fps=15,scale=1200:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse'
+  if (GIF_PATH) {
+    const gif = Bun.spawn(
+      ['ffmpeg', '-y', '-i', out, '-vf', gifFilter, resolve(GIF_PATH)],
+      { stdout: 'ignore', stderr: 'ignore' },
+    )
+    if ((await gif.exited) !== 0) throw new Error('ffmpeg failed to write the gif')
+    const size = (Bun.file(resolve(GIF_PATH)).size / 1024).toFixed(0)
+    console.log(`→ ${resolve(GIF_PATH)} (${size} KB)`)
+  } else {
+    console.log(`  gif: ffmpeg -i ${out} -vf "${gifFilter}" ${OUT_DIR}/${scenario.name}.gif`)
+  }
   return out
 }
 
