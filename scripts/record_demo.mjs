@@ -11,7 +11,7 @@
  *   bun scripts/record_demo.mjs scripts/scenarios/smoke.mjs [--url URL]
  *       [--out DIR] [--gif PATH] [--headful]
  *
- * --gif writes the README-sized GIF (15 fps, 1200 px wide) straight to PATH
+ * --gif writes the README-sized GIF (12 fps, 1100 px wide) straight to PATH
  * after the mp4 is assembled, instead of printing the ffmpeg line for a
  * human to paste.
  *
@@ -302,7 +302,15 @@ async function assemble(frames) {
   )
   if ((await proc.exited) !== 0) throw new Error('ffmpeg failed to assemble the recording')
   console.log(`→ ${out}`)
-  const gifFilter = 'fps=15,scale=1200:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse'
+  // 12 fps at 1100 px is what a README needs. The palette is built from the
+  // frame-to-frame *differences* and applied without dither, and only the
+  // changed rectangle is re-encoded per frame: on this dark UI, dither noise
+  // over a still background and a crawling trail line were most of the bytes
+  // — a nine-megabyte trail became three and a half with nothing lost to the eye.
+  const gifFilter =
+    'fps=12,scale=1100:-1:flags=lanczos,split[a][b];' +
+    '[a]palettegen=max_colors=128:stats_mode=diff[p];' +
+    '[b][p]paletteuse=dither=none:diff_mode=rectangle'
   if (GIF_PATH) {
     const gif = Bun.spawn(
       ['ffmpeg', '-y', '-i', out, '-vf', gifFilter, resolve(GIF_PATH)],
