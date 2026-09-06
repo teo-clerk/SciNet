@@ -46,3 +46,7 @@ backend/tests/fixtures/real/
 
 # build caches
 *.tsbuildinfo
+
+# launch media (rendered locally, not shipped)
+launch/
+studio-output/

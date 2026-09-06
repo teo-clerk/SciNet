@@ -135,6 +135,9 @@ opens no socket of its own.
 | `read_paper(paper_id, offset, window)` | the parsed text in capped windows; a book is read in passes |
 | `similar_papers(paper_id, k)` | nearest neighbours in embedding space, never the 3D coordinates |
 | `list_regions()` · `region_details(cluster_id)` | the map's named regions, and one region's overview and members |
+| `find_semantic_path(from_concept, to_concept)` | the chain of works from one idea to another, each stop with its central question and region; a jump the library cannot bridge is reported, never hidden |
+| `query_quantities(quantity_kind, unit, min_val, max_val, query)` | measured values across the library, each with the sentence it came from and the paper it is in |
+| `get_curriculum(topic_or_cluster)` | where to start reading a region or a topic, with the reasons, and in what order |
 
 <details>
 <summary>Claude Desktop, Cursor and Zed</summary>
